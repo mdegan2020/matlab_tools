@@ -84,6 +84,24 @@ classdef ProjectionMeshBuilderTest < matlab.unittest.TestCase
             testCase.verifyGreaterThan(vertexDifference, 1e-3);
         end
 
+        function testTwistRotatesPlaneAboutWorldZ(testCase)
+            basePlane = PlanarProjection.definePlaneFromBasis( ...
+                [0; 0; 5], [1; 0; 0], [0; 1; 0]);
+
+            twistedPlane = ProjectionMeshBuilder.applyPlaneTipTilt( ...
+                basePlane, 0, 0, pi / 2);
+
+            testCase.verifyEqual(twistedPlane.P0, [0; 0; 5], ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
+            testCase.verifyEqual(twistedPlane.basis(:, 1), [0; 1; 0], ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
+            testCase.verifyEqual(twistedPlane.basis(:, 2), [-1; 0; 0], ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
+            testCase.verifyEqual(twistedPlane.VN, [0; 0; 1], ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
+            testCase.verifyTrue(PlanarProjection.validatePlane(twistedPlane));
+        end
+
         function testBehindSourceIntersectionsError(testCase)
             scene = ProjectionMeshBuilderTest.makeScene();
             layer = scene.layers;
