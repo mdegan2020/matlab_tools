@@ -60,7 +60,8 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
             testCase.verifyEqual(result.RenderOptions.Interpolation, "nearest");
             testCase.verifyEqual(result.Output.Formats, "png");
             testCase.verifyEqual(result.Scene.layers.Image, scene.layers.Image);
-            testCase.verifyEmpty(result.Readback);
+            testCase.verifySize(result.Readback.Image, [3 4]);
+            testCase.verifyEqual(result.Readback.OutputSize, [3 4]);
         end
 
         function testJsonJobWritesScenePayloadAndLoadsPathJob(testCase)

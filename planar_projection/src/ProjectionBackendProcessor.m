@@ -3,7 +3,8 @@ classdef ProjectionBackendProcessor
 
     methods (Static)
         function result = run(jobInput)
-            %run Resolve and validate a backend job without rendering yet.
+            %run Resolve, render, and optionally write a backend job.
+            totalTimer = tic;
             job = ProjectionBackendJob.resolvePayloads(jobInput);
             stateApplied = false;
             if isfield(job, "ViewerState")
@@ -13,6 +14,11 @@ classdef ProjectionBackendProcessor
             end
             outputGrid = ProjectionBackendOutputGrid.plan(job.Scene, ...
                 ProjectionBackendProcessor.viewerStateForGrid(job), job.RenderOptions);
+            renderOptions = ProjectionBackendProcessor.renderOptionsWithGrid( ...
+                job.RenderOptions, outputGrid);
+            renderTimer = tic;
+            readback = ProjectionReadbackRenderer.renderScene(job.Scene, renderOptions);
+            renderSeconds = toc(renderTimer);
 
             result = struct();
             if stateApplied
@@ -24,22 +30,38 @@ classdef ProjectionBackendProcessor
             result.Version = 1;
             result.Job = job;
             result.Scene = job.Scene;
-            result.RenderOptions = job.RenderOptions;
+            result.RenderOptions = renderOptions;
             result.Output = job.Output;
             result.Execution = job.Execution;
             result.OutputGrid = outputGrid;
-            result.Readback = [];
-            result.Message = "Backend job is resolved and ready for later rendering milestones.";
+            result.Readback = readback;
+            result.OutputFiles = [];
+            result.Timing = struct(RenderSeconds=renderSeconds, ...
+                WriteSeconds=0, TotalSeconds=0);
+            result.Message = "Backend job rendered successfully.";
 
             if isfield(job, "ViewerState")
                 result.ViewerState = job.ViewerState;
             else
                 result.ViewerState = [];
             end
+
+            if result.Output.WriteFiles
+                writeTimer = tic;
+                result.OutputFiles = ProjectionBackendOutputWriter.write(result);
+                result.Timing.WriteSeconds = toc(writeTimer);
+            end
+            result.Timing.TotalSeconds = toc(totalTimer);
         end
     end
 
     methods (Static, Access = private)
+        function renderOptions = renderOptionsWithGrid(renderOptions, outputGrid)
+            if isempty(renderOptions.OutputSize)
+                renderOptions.OutputSize = outputGrid.OutputSize;
+            end
+        end
+
         function viewerState = viewerStateForGrid(job)
             if isfield(job, "ViewerState")
                 viewerState = job.ViewerState;
