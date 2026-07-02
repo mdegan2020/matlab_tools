@@ -23,6 +23,27 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
     end
 
     methods (Test)
+        function testImageAxesDecorationsAreHidden(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+
+            testCase.verifyEqual(string(ax.Title.String), "");
+            testCase.verifyEqual(string(ax.XLabel.String), "");
+            testCase.verifyEqual(string(ax.YLabel.String), "");
+            testCase.verifyEqual(string(ax.ZLabel.String), "");
+            testCase.verifyEmpty(ax.XTick);
+            testCase.verifyEmpty(ax.YTick);
+            testCase.verifyEmpty(ax.ZTick);
+            testCase.verifyEqual(string(ax.Box), "off");
+            testCase.verifyEqual(string(ax.Visible), "off");
+        end
+
         function testControlScrollAdjustsTwistWithoutZoomOrMeshChange(testCase)
             scene = ProjectionViewerAppInteractionTest.makeScene();
             app = ProjectionViewerApp(scene);

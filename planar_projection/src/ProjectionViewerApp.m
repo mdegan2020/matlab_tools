@@ -92,13 +92,9 @@ classdef ProjectionViewerApp < handle
             app.Axes = uiaxes(app.GridLayout);
             app.Axes.Layout.Row = 1;
             app.Axes.Layout.Column = 1;
-            app.Axes.Box = "on";
             app.Axes.Toolbar.Visible = "off";
             app.Axes.Interactions = [];
-            title(app.Axes, "Projected preview");
-            xlabel(app.Axes, "X");
-            ylabel(app.Axes, "Y");
-            zlabel(app.Axes, "Z");
+            app.hideImageAxesDecorations();
 
             app.ControlGrid = uigridlayout(app.GridLayout, [2 9]);
             app.ControlGrid.Layout.Row = 2;
@@ -209,6 +205,20 @@ classdef ProjectionViewerApp < handle
             axis(app.Axes, "equal");
             axis(app.Axes, "tight");
             grid(app.Axes, "off");
+            app.hideImageAxesDecorations();
+        end
+
+        function hideImageAxesDecorations(app)
+            title(app.Axes, "");
+            xlabel(app.Axes, "");
+            ylabel(app.Axes, "");
+            zlabel(app.Axes, "");
+            app.Axes.XTick = [];
+            app.Axes.YTick = [];
+            app.Axes.ZTick = [];
+            app.Axes.Box = "off";
+            app.Axes.Visible = "off";
+            app.Axes.Toolbar.Visible = "off";
         end
 
         function configureFrameCamera(app)
