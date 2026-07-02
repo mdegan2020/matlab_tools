@@ -325,6 +325,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 "Name", "Projection Viewer Prototype");
             ax = findall(fig, "Type", "axes");
             opkLabel = ProjectionViewerAppInteractionTest.findOpkLabel(fig);
+            ifovDegrees = ProjectionViewerAppInteractionTest.layerIfovDegrees( ...
+                scene.layers(2));
             layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
                 ax, scene);
             layer1X = layerSurfaces(1).XData;
@@ -346,7 +348,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 layerSurfaces(1), layer1X, layer1Y, layer1Z), 0, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
             testCase.verifyGreaterThan(phiChange, 1e-3);
-            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.0/0.1/0.0 deg");
+            testCase.verifyEqual(string(opkLabel.Text), ...
+                ProjectionViewerAppInteractionTest.opkText([0; ifovDegrees; 0]));
 
             fig.WindowKeyPressFcn(fig, ...
                 ProjectionViewerAppInteractionTest.makeKeyEvent("k"));
@@ -357,7 +360,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(layerSurfaces(2).XData, layer2X, AbsTol=1e-9);
             testCase.verifyEqual(layerSurfaces(2).YData, layer2Y, AbsTol=1e-9);
             testCase.verifyEqual(layerSurfaces(2).ZData, layer2Z, AbsTol=1e-9);
-            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.0/0.0/0.0 deg");
+            testCase.verifyEqual(string(opkLabel.Text), ...
+                ProjectionViewerAppInteractionTest.opkText([0; 0; 0]));
 
             fig.WindowKeyPressFcn(fig, ...
                 ProjectionViewerAppInteractionTest.makeKeyEvent("l"));
@@ -368,7 +372,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 layerSurfaces(2), layer2X, layer2Y, layer2Z);
 
             testCase.verifyGreaterThan(omegaChange, 1e-3);
-            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.1/0.0/0.0 deg");
+            testCase.verifyEqual(string(opkLabel.Text), ...
+                ProjectionViewerAppInteractionTest.opkText([ifovDegrees; 0; 0]));
 
             fig.WindowKeyPressFcn(fig, ...
                 ProjectionViewerAppInteractionTest.makeKeyEvent("j"));
@@ -379,7 +384,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(layerSurfaces(2).XData, layer2X, AbsTol=1e-9);
             testCase.verifyEqual(layerSurfaces(2).YData, layer2Y, AbsTol=1e-9);
             testCase.verifyEqual(layerSurfaces(2).ZData, layer2Z, AbsTol=1e-9);
-            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.0/0.0/0.0 deg");
+            testCase.verifyEqual(string(opkLabel.Text), ...
+                ProjectionViewerAppInteractionTest.opkText([0; 0; 0]));
 
             fig.WindowKeyPressFcn(fig, ...
                 ProjectionViewerAppInteractionTest.makeKeyEvent("o"));
@@ -390,7 +396,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 layerSurfaces(2), layer2X, layer2Y, layer2Z);
 
             testCase.verifyGreaterThan(kappaChange, 1e-3);
-            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.0/0.0/0.1 deg");
+            testCase.verifyEqual(string(opkLabel.Text), ...
+                ProjectionViewerAppInteractionTest.opkText([0; 0; 0.1]));
 
             fig.WindowKeyPressFcn(fig, ...
                 ProjectionViewerAppInteractionTest.makeKeyEvent("u"));
@@ -401,7 +408,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(layerSurfaces(2).XData, layer2X, AbsTol=1e-9);
             testCase.verifyEqual(layerSurfaces(2).YData, layer2Y, AbsTol=1e-9);
             testCase.verifyEqual(layerSurfaces(2).ZData, layer2Z, AbsTol=1e-9);
-            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.0/0.0/0.0 deg");
+            testCase.verifyEqual(string(opkLabel.Text), ...
+                ProjectionViewerAppInteractionTest.opkText([0; 0; 0]));
         end
 
         function testTipTiltControlsSharedProjectionPlane(testCase)
@@ -545,6 +553,36 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 labelTexts(k) = string(labels(k).Text);
             end
             label = labels(startsWith(labelTexts, "OPK "));
+        end
+
+        function ifovDegrees = layerIfovDegrees(layer)
+            imageSize = layer.SourceGeometry.ImageSize;
+            rowIndices = ProjectionViewerAppInteractionTest.centerAdjacentIndices( ...
+                imageSize(1));
+            columnIndex = round((imageSize(2) + 1) / 2);
+            [~, V] = layer.SourceGeometry.SampleFcn(rowIndices, columnIndex);
+            v1 = V(:, 1, 1) / norm(V(:, 1, 1));
+            v2 = V(:, 2, 1) / norm(V(:, 2, 1));
+            ifovDegrees = rad2deg(acos(max(min(dot(v1, v2), 1), -1)));
+        end
+
+        function indices = centerAdjacentIndices(count)
+            if count <= 1
+                indices = 1;
+                return
+            end
+
+            firstIndex = max(1, floor((count + 1) / 2));
+            secondIndex = min(count, firstIndex + 1);
+            if secondIndex == firstIndex
+                firstIndex = firstIndex - 1;
+            end
+            indices = [firstIndex secondIndex];
+        end
+
+        function text = opkText(offsetsDegrees)
+            text = string(sprintf("OPK %.4f/%.4f/%.3f deg", ...
+                offsetsDegrees(1), offsetsDegrees(2), offsetsDegrees(3)));
         end
 
         function surfaces = findLayerSurfaces(ax, scene)

@@ -21,7 +21,9 @@ classdef ProjectionViewerApp < handle
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
         ModifierWheelStepDegrees double = 1
-        ViewVectorCorrectionStepDegrees double = 0.1
+        FallbackViewVectorCorrectionStepDegrees double = 0.1
+        KappaViewVectorCorrectionStepDegrees double = 0.1
+        MinViewVectorIfovRadians double = 1e-12
         PreviewLayerDepthStepFraction double = 1e-4
         PreviewLayerDepthMinimumStepMeters double = 0.5
         MinProjectedNudgeNorm double = 1e-9
@@ -374,7 +376,8 @@ classdef ProjectionViewerApp < handle
             layer = app.Scene.layers(layerIndex);
             offsetsDegrees = app.layerViewVectorAngularOffsetsDegrees(layer);
             offsetsDegrees(componentIndex) = offsetsDegrees(componentIndex) + ...
-                direction * app.ViewVectorCorrectionStepDegrees;
+                direction * app.layerViewVectorCorrectionStepDegrees( ...
+                layer, componentIndex);
             layer.ViewVectorAngularOffsetsDegrees = offsetsDegrees;
             app.Scene.layers(layerIndex) = layer;
             app.updateProjection(app.ProjectionTipDegrees, app.ProjectionTiltDegrees, ...
@@ -413,6 +416,113 @@ classdef ProjectionViewerApp < handle
             else
                 offsetsDegrees = [0; 0; 0];
             end
+        end
+
+        function stepDegrees = layerViewVectorCorrectionStepDegrees(app, layer, componentIndex)
+            configuredStep = app.configuredViewVectorCorrectionStepDegrees( ...
+                layer, componentIndex);
+            if ~isempty(configuredStep)
+                stepDegrees = configuredStep;
+                return
+            end
+
+            if componentIndex == 3
+                stepDegrees = app.KappaViewVectorCorrectionStepDegrees;
+            else
+                stepDegrees = app.layerViewVectorIfovDegrees(layer);
+            end
+        end
+
+        function stepDegrees = configuredViewVectorCorrectionStepDegrees(~, layer, componentIndex)
+            stepDegrees = [];
+            if ~isfield(layer, "ViewVectorCorrectionStepDegrees")
+                return
+            end
+
+            configuredSteps = double(layer.ViewVectorCorrectionStepDegrees(:));
+            if ~(isscalar(configuredSteps) || numel(configuredSteps) == 3) || ...
+                    any(~isfinite(configuredSteps)) || any(configuredSteps <= 0)
+                error("ProjectionViewerApp:invalidViewVectorCorrectionStep", ...
+                    "Layer ViewVectorCorrectionStepDegrees must be a positive finite scalar or 3-vector.");
+            end
+
+            if isscalar(configuredSteps)
+                stepDegrees = configuredSteps;
+            else
+                stepDegrees = configuredSteps(componentIndex);
+            end
+        end
+
+        function ifovDegrees = layerViewVectorIfovDegrees(app, layer)
+            sourceGeometry = layer.SourceGeometry;
+            explicitIfovDegrees = app.explicitViewVectorIfovDegrees(sourceGeometry);
+            if ~isempty(explicitIfovDegrees)
+                ifovDegrees = explicitIfovDegrees;
+                return
+            end
+
+            imageSize = double(sourceGeometry.ImageSize);
+            rowIndices = app.centerAdjacentIndices(imageSize(1));
+            columnIndices = app.centerAdjacentIndices(imageSize(2));
+            [~, V] = sourceGeometry.SampleFcn(rowIndices, columnIndices);
+            anglesRadians = app.sampledViewVectorNeighborAngles(V);
+            anglesRadians = anglesRadians(isfinite(anglesRadians) & ...
+                anglesRadians > app.MinViewVectorIfovRadians);
+
+            if isempty(anglesRadians)
+                ifovDegrees = app.FallbackViewVectorCorrectionStepDegrees;
+            else
+                ifovDegrees = rad2deg(median(anglesRadians));
+            end
+        end
+
+        function ifovDegrees = explicitViewVectorIfovDegrees(app, sourceGeometry)
+            ifovDegrees = [];
+            if isfield(sourceGeometry, "IFOVDegrees")
+                ifovDegrees = app.validatePositiveScalar( ...
+                    sourceGeometry.IFOVDegrees, "IFOVDegrees");
+            elseif isfield(sourceGeometry, "IFOVRadians")
+                ifovRadians = app.validatePositiveScalar( ...
+                    sourceGeometry.IFOVRadians, "IFOVRadians");
+                ifovDegrees = rad2deg(ifovRadians);
+            end
+        end
+
+        function indices = centerAdjacentIndices(~, count)
+            if count <= 1
+                indices = 1;
+                return
+            end
+
+            firstIndex = max(1, floor((count + 1) / 2));
+            secondIndex = min(count, firstIndex + 1);
+            if secondIndex == firstIndex
+                firstIndex = firstIndex - 1;
+            end
+            indices = [firstIndex secondIndex];
+        end
+
+        function anglesRadians = sampledViewVectorNeighborAngles(app, V)
+            V = app.normalizeSampledViewVectors(V);
+            anglesRadians = zeros(0, 1);
+            if size(V, 2) > 1
+                rowDots = squeeze(sum(V(:, 1:end-1, :) .* V(:, 2:end, :), 1));
+                anglesRadians = [anglesRadians; app.vectorAnglesFromDots(rowDots(:))];
+            end
+            if size(V, 3) > 1
+                columnDots = squeeze(sum(V(:, :, 1:end-1) .* V(:, :, 2:end), 1));
+                anglesRadians = [anglesRadians; app.vectorAnglesFromDots(columnDots(:))];
+            end
+        end
+
+        function V = normalizeSampledViewVectors(~, V)
+            vectorNorms = sqrt(sum(V.^2, 1));
+            V = V ./ vectorNorms;
+        end
+
+        function anglesRadians = vectorAnglesFromDots(~, dots)
+            dots = min(max(double(dots), -1), 1);
+            anglesRadians = acos(dots);
         end
 
         function keyPressed(app, event)
@@ -752,7 +862,7 @@ classdef ProjectionViewerApp < handle
         function updateViewVectorLabel(app)
             layer = app.Scene.layers(app.SelectedLayerIndex);
             offsetsDegrees = app.layerViewVectorAngularOffsetsDegrees(layer);
-            app.ViewVectorLabel.Text = sprintf("OPK %.1f/%.1f/%.1f deg", ...
+            app.ViewVectorLabel.Text = sprintf("OPK %.4f/%.4f/%.3f deg", ...
                 offsetsDegrees(1), offsetsDegrees(2), offsetsDegrees(3));
         end
 
@@ -765,6 +875,14 @@ classdef ProjectionViewerApp < handle
 
             limits = app.AlphaSlider.Limits;
             alpha = min(max(alpha, limits(1)), limits(2));
+        end
+
+        function value = validatePositiveScalar(~, value, name)
+            if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || value <= 0
+                error("ProjectionViewerApp:invalidViewVectorIFOV", ...
+                    "%s must be a positive finite scalar.", name);
+            end
+            value = double(value);
         end
 
         function resetView(app)
