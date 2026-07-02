@@ -198,6 +198,48 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(alphaSlider.Value, 0.4, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
+
+        function testTipTiltControlsSharedProjectionPlane(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
+            tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            layer1X0 = layerSurfaces(1).XData;
+            layer1Y0 = layerSurfaces(1).YData;
+            layer1Z0 = layerSurfaces(1).ZData;
+            layer2X0 = layerSurfaces(2).XData;
+            layer2Y0 = layerSurfaces(2).YData;
+            layer2Z0 = layerSurfaces(2).ZData;
+
+            layerDropDown.Value = 2;
+            layerDropDown.ValueChangedFcn(layerDropDown, struct("Value", 2));
+            tipSlider.Value = 6;
+            tipSlider.ValueChangedFcn(tipSlider, struct());
+            drawnow
+
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            layer1Change = ProjectionViewerAppInteractionTest.surfaceChange( ...
+                layerSurfaces(1), layer1X0, layer1Y0, layer1Z0);
+            layer2Change = ProjectionViewerAppInteractionTest.surfaceChange( ...
+                layerSurfaces(2), layer2X0, layer2Y0, layer2Z0);
+            layerDropDown.Value = 1;
+            layerDropDown.ValueChangedFcn(layerDropDown, struct("Value", 1));
+            drawnow
+
+            testCase.verifyGreaterThan(layer1Change, 1e-9);
+            testCase.verifyGreaterThan(layer2Change, 1e-9);
+            testCase.verifyEqual(tipSlider.Value, 6, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
     end
 
     methods (Static, Access = private)
@@ -235,6 +277,17 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             sliders = findall(fig, "-isa", "matlab.ui.control.Slider");
             sliderColumns = arrayfun(@(slider) slider.Layout.Column, sliders);
             slider = sliders(sliderColumns == column);
+        end
+
+        function surfaces = findLayerSurfaces(ax, scene)
+            surfaceHandles = findall(ax, "Type", "surface");
+            surfaces = gobjects(1, numel(scene.layers));
+            for layerIndex = 1:numel(scene.layers)
+                isLayerSurface = arrayfun( ...
+                    @(surfaceHandle) isequal(surfaceHandle.CData, ...
+                    scene.layers(layerIndex).DisplayTexture), surfaceHandles);
+                surfaces(layerIndex) = surfaceHandles(isLayerSurface);
+            end
         end
 
         function event = makeKeyEvent(key)
