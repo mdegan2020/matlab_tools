@@ -14,10 +14,12 @@ plane = PlanarProjection.definePlane(G0, V0, V1, R0);
 ```text
 src/PlanarProjection.m          Static class library
 src/ProjectionViewerHarness.m   Synthetic scene and source-geometry harness
+src/ProjectionSourceGeometry.m  Sparse source-geometry grid adapter
 src/ProjectionLayerManager.m    Multi-layer visibility and change-workflow helpers
 src/ProjectionMeshBuilder.m     Pure sampled projection mesh builder
 src/ProjectionReadbackRenderer.m Headless frame-camera readback prototype
 src/ProjectionViewerApp.m       Programmatic interactive preview app
+src/ProjectionViewerState.m     JSON-serializable viewer state helpers
 tests/PlanarProjectionTest.m    Class-based unit tests
 runProjectionViewerPrototype.m  Launcher for the local prototype TIFF
 runTests.m                      Simple test runner
@@ -148,11 +150,31 @@ The default launcher expects the local ignored prototype image at `test_data/10.
 To launch the prototype with two local dummy textures:
 
 ```matlab
-app = runProjectionViewerPrototype(["test_data/10.tif", "test_data/100.tif"]);
+app = runProjectionViewerPrototype(["test_data/10.tif", "test_data/102.tif"]);
 ```
 
-Use the mouse wheel over the view to zoom. Hold Shift while spinning the mouse
-wheel to adjust Tip, Alt/Option for Tilt, and Control for Twist camera roll.
+The viewer supports one or more image layers. Each layer has independent source
+geometry, alpha, visibility, blend mode, projection-plane offset, and omega/phi/
+kappa view-vector correction state. Multi-layer previews share one projection
+plane, with a small display-only depth bias so layers do not fight in the
+renderer. The default selected layer is the topmost layer.
+
+Core controls:
+
+- Mouse wheel zooms the view.
+- Shift + wheel adjusts Tip, Alt/Option + wheel adjusts Tilt, and Control +
+  wheel adjusts Twist camera roll.
+- Plain left-drag pans the camera.
+- Control + left-drag translates the selected layer on the projection plane,
+  using the same selected-layer projection offset as W/A/S/D.
+- Control + right-drag adjusts omega and phi for the selected layer so the
+  projected image tracks the mouse drag.
+- W/A/S/D translates the selected layer up/left/down/right on the projection
+  plane.
+- I/K adjust phi, J/L adjust omega, and U/O adjust kappa. Omega and phi default
+  to one estimated IFOV per key press; kappa defaults to 0.1 degrees.
+- Save and Load write/read a human-readable JSON viewer state containing camera,
+  layer, alpha, blend, projection offset, OPK, tip, tilt, and twist settings.
 
 Projection scenes can choose how the initial projection plane is built:
 
@@ -171,3 +193,9 @@ scene = ProjectionViewerHarness.createDefaultScene("test_data/10.tif", ...
     struct(ProjectionPlane=plane));
 app = ProjectionViewerApp(scene, plane);
 ```
+
+Sensor-specific geometry can be supplied through the `SampleFcn(rowIndices,
+columnIndices)` contract. For sparse camera-model posts, use
+`ProjectionSourceGeometry.fromGrid` to adapt uniformly spaced row/column geometry
+posts into the same sampled-origin and sampled-view-vector interface used by the
+mesh builder.

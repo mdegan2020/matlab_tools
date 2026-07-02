@@ -308,6 +308,55 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(layer2Delta, [0; 0; 0.5], AbsTol=1e-9);
         end
 
+        function testControlLeftDragTranslatesSelectedLayerOnly(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            initialCameraPosition = campos(ax);
+            initialCameraTarget = camtarget(ax);
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            layer1X0 = layerSurfaces(1).XData;
+            layer1Y0 = layerSurfaces(1).YData;
+            layer1Z0 = layerSurfaces(1).ZData;
+            layer2Center0 = ProjectionViewerAppInteractionTest.surfaceCenter( ...
+                layerSurfaces(2));
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("control"));
+            ProjectionViewerAppInteractionTest.dragFigurePointer( ...
+                fig, ax, "normal", [40 24]);
+            fig.WindowKeyReleaseFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("control"));
+            drawnow
+
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            layer2CenterDelta = ProjectionViewerAppInteractionTest.surfaceCenter( ...
+                layerSurfaces(2)) - layer2Center0;
+            screenDelta = ProjectionViewerAppInteractionTest.screenDeltaComponents( ...
+                ax, layer2CenterDelta);
+            state = app.exportState();
+
+            testCase.verifyEqual(campos(ax), initialCameraPosition, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(camtarget(ax), initialCameraTarget, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(ProjectionViewerAppInteractionTest.surfaceChange( ...
+                layerSurfaces(1), layer1X0, layer1Y0, layer1Z0), 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyGreaterThan(norm(state.Layers(2).ProjectionOffsetMeters), 0);
+            testCase.verifyEqual(state.Layers(1).ProjectionOffsetMeters, [0 0], ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyGreaterThan(screenDelta(1), 0);
+            testCase.verifyGreaterThan(screenDelta(2), 0);
+        end
+
         function testAlphaChangeDoesNotMoveNudgedLayer(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             app = ProjectionViewerApp(scene);
@@ -454,6 +503,63 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(layerSurfaces(2).ZData, layer2Z, AbsTol=1e-9);
             testCase.verifyEqual(string(opkLabel.Text), ...
                 ProjectionViewerAppInteractionTest.opkText([0; 0; 0]));
+        end
+
+        function testControlRightDragAdjustsOmegaPhiSelectedLayerOnly(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            opkLabel = ProjectionViewerAppInteractionTest.findOpkLabel(fig);
+            initialCameraPosition = campos(ax);
+            initialCameraTarget = camtarget(ax);
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            layer1X0 = layerSurfaces(1).XData;
+            layer1Y0 = layerSurfaces(1).YData;
+            layer1Z0 = layerSurfaces(1).ZData;
+            layer2Center0 = ProjectionViewerAppInteractionTest.surfaceCenter( ...
+                layerSurfaces(2));
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("control"));
+            ProjectionViewerAppInteractionTest.dragFigurePointer( ...
+                fig, ax, "alt", [60 36]);
+            fig.WindowKeyReleaseFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("control"));
+            drawnow
+
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            layer2CenterDelta = ProjectionViewerAppInteractionTest.surfaceCenter( ...
+                layerSurfaces(2)) - layer2Center0;
+            screenDelta = ProjectionViewerAppInteractionTest.screenDeltaComponents( ...
+                ax, layer2CenterDelta);
+            state = app.exportState();
+            offsets = state.Layers(2).ViewVectorAngularOffsetsDegrees;
+
+            testCase.verifyEqual(campos(ax), initialCameraPosition, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(camtarget(ax), initialCameraTarget, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(ProjectionViewerAppInteractionTest.surfaceChange( ...
+                layerSurfaces(1), layer1X0, layer1Y0, layer1Z0), 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(state.Layers(1).ViewVectorAngularOffsetsDegrees, ...
+                [0 0 0], AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyGreaterThan(norm(offsets(1:2)), 0);
+            testCase.verifyEqual(offsets(3), 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(state.Layers(2).ProjectionOffsetMeters, [0 0], ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyGreaterThan(screenDelta(1), 0);
+            testCase.verifyGreaterThan(screenDelta(2), 0);
+            testCase.verifyEqual(string(opkLabel.Text), ...
+                ProjectionViewerAppInteractionTest.opkText(offsets));
         end
 
         function testExportImportStateRestoresViewerConfiguration(testCase)
@@ -818,10 +924,43 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 mean(surfaceHandle.ZData, "all")];
         end
 
+        function dragFigurePointer(fig, ax, selectionType, pixelDelta)
+            startPoint = ProjectionViewerAppInteractionTest.axesCenterPoint(ax);
+            fig.SelectionType = selectionType;
+            fig.CurrentPoint = startPoint;
+            fig.WindowButtonDownFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeMouseEvent("control"));
+            fig.CurrentPoint = startPoint + pixelDelta;
+            fig.WindowButtonMotionFcn(fig, struct());
+            fig.WindowButtonUpFcn(fig, struct());
+        end
+
+        function point = axesCenterPoint(ax)
+            axesPosition = ax.InnerPosition;
+            point = axesPosition(1:2) + axesPosition(3:4) / 2;
+        end
+
+        function screenDelta = screenDeltaComponents(ax, worldDelta)
+            cameraPosition = campos(ax).';
+            cameraTarget = camtarget(ax).';
+            viewDirection = cameraTarget - cameraPosition;
+            viewDirection = viewDirection / norm(viewDirection);
+            upVector = camup(ax).';
+            upVector = upVector / norm(upVector);
+            rightVector = cross(viewDirection, upVector);
+            rightVector = rightVector / norm(rightVector);
+            screenDelta = [rightVector.' * worldDelta; upVector.' * worldDelta];
+        end
+
         function event = makeKeyEvent(key)
             event = struct();
             event.Key = key;
             event.Modifier = key;
+        end
+
+        function event = makeMouseEvent(modifier)
+            event = struct();
+            event.Modifier = modifier;
         end
 
         function event = makeScrollEvent(verticalScrollCount)

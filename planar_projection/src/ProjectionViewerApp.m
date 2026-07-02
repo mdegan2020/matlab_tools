@@ -11,16 +11,19 @@ classdef ProjectionViewerApp < handle
         ProjectionTiltDegrees double = 0
         ViewTwistDegrees double = 0
         SelectedLayerIndex double = 1
-        IsPanning logical = false
         IsControlDown logical = false
         IsShiftDown logical = false
         IsAltDown logical = false
+        DragMode string = "none"
         LastPointerLocation double = [NaN NaN]
+        NeedsDragFinalize logical = false
         PreviewTimer
         MinPreviewInterval double = 1 / 30
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
         ModifierWheelStepDegrees double = 1
+        ViewVectorDragProbeDegrees double = 0.01
+        MinDragScreenJacobianRcond double = 1e-12
         FallbackViewVectorCorrectionStepDegrees double = 0.1
         KappaViewVectorCorrectionStepDegrees double = 0.1
         MinViewVectorIfovRadians double = 1e-12
@@ -158,7 +161,7 @@ classdef ProjectionViewerApp < handle
                 WindowScrollWheelFcn=@(~, event) app.scrollWheel(event), ...
                 WindowKeyPressFcn=@(~, event) app.keyPressed(event), ...
                 WindowKeyReleaseFcn=@(~, event) app.keyReleased(event), ...
-                WindowButtonDownFcn=@(~, ~) app.beginPan(), ...
+                WindowButtonDownFcn=@(~, event) app.beginPan(event), ...
                 WindowButtonMotionFcn=@(~, ~) app.updatePan(), ...
                 WindowButtonUpFcn=@(~, ~) app.endPan());
 
@@ -805,17 +808,32 @@ classdef ProjectionViewerApp < handle
             drawnow limitrate
         end
 
-        function beginPan(app)
-            if ~app.isPointerInAxes() || app.UIFigure.SelectionType ~= "normal"
+        function beginPan(app, event)
+            if nargin < 2
+                event = struct();
+            end
+            if ~app.isPointerInAxes()
                 return
             end
 
-            app.IsPanning = true;
+            selectionType = string(app.UIFigure.SelectionType);
+            hasControl = app.IsControlDown || app.eventHasControl(event);
+            if hasControl && selectionType == "normal"
+                app.DragMode = "translateLayer";
+            elseif hasControl && selectionType == "alt"
+                app.DragMode = "adjustViewVectors";
+            elseif selectionType == "normal"
+                app.DragMode = "panCamera";
+            else
+                return
+            end
+
+            app.NeedsDragFinalize = false;
             app.LastPointerLocation = app.UIFigure.CurrentPoint;
         end
 
         function updatePan(app)
-            if ~app.IsPanning
+            if app.DragMode == "none"
                 return
             end
 
@@ -826,22 +844,172 @@ classdef ProjectionViewerApp < handle
             end
 
             app.LastPointerLocation = currentPoint;
+            switch app.DragMode
+                case "panCamera"
+                    app.panCameraByPixelDelta(pixelDelta);
+                case "translateLayer"
+                    app.translateSelectedLayerByPixelDelta(pixelDelta);
+                case "adjustViewVectors"
+                    app.adjustSelectedLayerViewVectorsByPixelDelta(pixelDelta);
+            end
+        end
+
+        function endPan(app)
+            dragMode = app.DragMode;
+            app.DragMode = "none";
+            app.LastPointerLocation = [NaN NaN];
+            if app.NeedsDragFinalize && ...
+                    any(dragMode == ["translateLayer", "adjustViewVectors"])
+                layer = app.Scene.layers(app.SelectedLayerIndex);
+                app.updateProjection(app.ProjectionTipDegrees, ...
+                    app.ProjectionTiltDegrees, layer.Alpha, app.DefaultMeshSampling);
+                app.PreviewTimer = tic;
+            end
+            app.NeedsDragFinalize = false;
+        end
+
+        function panCameraByPixelDelta(app, pixelDelta)
             panOffset = app.pixelDeltaToWorldPan(pixelDelta);
             campos(app.Axes, campos(app.Axes) + panOffset.');
             camtarget(app.Axes, camtarget(app.Axes) + panOffset.');
             drawnow limitrate
         end
 
-        function endPan(app)
-            app.IsPanning = false;
-            app.LastPointerLocation = [NaN NaN];
+        function translateSelectedLayerByPixelDelta(app, pixelDelta)
+            layerIndex = app.SelectedLayerIndex;
+            layer = app.Scene.layers(layerIndex);
+            plane = layer.CurrentProjectionPlane;
+            projectionDelta = app.pixelDeltaToProjectionOffsetDelta( ...
+                pixelDelta, plane);
+            if all(abs(projectionDelta) <= eps)
+                return
+            end
+
+            layer.ProjectionOffsetMeters = ...
+                app.layerProjectionOffset(layer) + projectionDelta;
+            app.Scene.layers(layerIndex) = layer;
+            app.updateProjection(app.ProjectionTipDegrees, ...
+                app.ProjectionTiltDegrees, layer.Alpha, app.DragMeshSampling);
+            app.PreviewTimer = tic;
+            app.NeedsDragFinalize = true;
+        end
+
+        function adjustSelectedLayerViewVectorsByPixelDelta(app, pixelDelta)
+            layerIndex = app.SelectedLayerIndex;
+            layer = app.Scene.layers(layerIndex);
+            plane = layer.CurrentProjectionPlane;
+            angleDeltaDegrees = app.pixelDeltaToViewVectorDragDeltaDegrees( ...
+                pixelDelta, layer, plane, layerIndex);
+            if all(abs(angleDeltaDegrees) <= eps)
+                return
+            end
+
+            offsetsDegrees = app.layerViewVectorAngularOffsetsDegrees(layer);
+            offsetsDegrees(1:2) = offsetsDegrees(1:2) + angleDeltaDegrees;
+            layer.ViewVectorAngularOffsetsDegrees = offsetsDegrees;
+            app.Scene.layers(layerIndex) = layer;
+            app.updateProjection(app.ProjectionTipDegrees, ...
+                app.ProjectionTiltDegrees, layer.Alpha, app.DragMeshSampling);
+            app.PreviewTimer = tic;
+            app.NeedsDragFinalize = true;
         end
 
         function panOffset = pixelDeltaToWorldPan(app, pixelDelta)
+            panOffset = -app.pixelDeltaToScreenWorldMotion(pixelDelta);
+        end
+
+        function worldMotion = pixelDeltaToScreenWorldMotion(app, pixelDelta)
             axesPosition = app.Axes.InnerPosition;
             widthPixels = max(axesPosition(3), 1);
             heightPixels = max(axesPosition(4), 1);
+            [rightVector, upVector, ~, viewDistance] = app.cameraScreenBasis();
 
+            viewHeight = 2 * viewDistance * tan(deg2rad(app.Axes.CameraViewAngle) / 2);
+            viewWidth = viewHeight * widthPixels / heightPixels;
+            worldMotion = pixelDelta(1) / widthPixels * viewWidth * rightVector + ...
+                pixelDelta(2) / heightPixels * viewHeight * upVector;
+        end
+
+        function projectionDelta = pixelDeltaToProjectionOffsetDelta(app, pixelDelta, plane)
+            [rightVector, upVector] = app.cameraScreenBasis();
+            screenMotion = app.pixelDeltaToScreenWorldMotion(pixelDelta);
+            target = [rightVector.' * screenMotion; upVector.' * screenMotion];
+            screenJacobian = app.screenJacobianForPlaneBasis( ...
+                plane.basis, rightVector, upVector);
+
+            if rcond(screenJacobian) > app.MinDragScreenJacobianRcond
+                projectionDelta = screenJacobian \ target;
+            else
+                projectionDelta = plane.basis.' * screenMotion;
+            end
+        end
+
+        function angleDeltaDegrees = pixelDeltaToViewVectorDragDeltaDegrees( ...
+                app, pixelDelta, layer, plane, layerIndex)
+            [rightVector, upVector] = app.cameraScreenBasis();
+            screenMotion = app.pixelDeltaToScreenWorldMotion(pixelDelta);
+            target = [rightVector.' * screenMotion; upVector.' * screenMotion];
+            screenJacobian = app.screenJacobianForViewVectorOffsets( ...
+                layer, plane, layerIndex, rightVector, upVector);
+
+            if rcond(screenJacobian) > app.MinDragScreenJacobianRcond
+                angleDeltaDegrees = screenJacobian \ target;
+            else
+                angleDeltaDegrees = app.fallbackViewVectorDragDeltaDegrees( ...
+                    pixelDelta, layer);
+            end
+        end
+
+        function screenJacobian = screenJacobianForPlaneBasis(~, basis, ...
+                rightVector, upVector)
+            screenJacobian = [rightVector.' * basis(:, 1), ...
+                rightVector.' * basis(:, 2); ...
+                upVector.' * basis(:, 1), upVector.' * basis(:, 2)];
+        end
+
+        function screenJacobian = screenJacobianForViewVectorOffsets( ...
+                app, layer, plane, layerIndex, rightVector, upVector)
+            probeDegrees = app.ViewVectorDragProbeDegrees;
+            offsetsDegrees = app.layerViewVectorAngularOffsetsDegrees(layer);
+            sampledLayer = layer;
+            sampledLayer.MeshSampling = app.DragMeshSampling(layerIndex);
+            baseCenter = app.layerMeshCenter(sampledLayer, plane);
+            screenJacobian = zeros(2, 2);
+
+            for componentIndex = 1:2
+                perturbedLayer = sampledLayer;
+                perturbedOffsetsDegrees = offsetsDegrees;
+                perturbedOffsetsDegrees(componentIndex) = ...
+                    perturbedOffsetsDegrees(componentIndex) + probeDegrees;
+                perturbedLayer.ViewVectorAngularOffsetsDegrees = ...
+                    perturbedOffsetsDegrees;
+                perturbedCenter = app.layerMeshCenter(perturbedLayer, plane);
+                centerDerivative = (perturbedCenter - baseCenter) / probeDegrees;
+                screenJacobian(:, componentIndex) = ...
+                    [rightVector.' * centerDerivative; upVector.' * centerDerivative];
+            end
+        end
+
+        function center = layerMeshCenter(app, layer, plane)
+            mesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                layer, plane, app.Scene.renderOrigin);
+            center = [mean(mesh.X, "all"); ...
+                mean(mesh.Y, "all"); mean(mesh.Z, "all")];
+        end
+
+        function angleDeltaDegrees = fallbackViewVectorDragDeltaDegrees( ...
+                app, pixelDelta, layer)
+            axesPosition = app.Axes.InnerPosition;
+            widthPixels = max(axesPosition(3), 1);
+            heightPixels = max(axesPosition(4), 1);
+            omegaStepDegrees = app.layerViewVectorCorrectionStepDegrees(layer, 1);
+            phiStepDegrees = app.layerViewVectorCorrectionStepDegrees(layer, 2);
+            angleDeltaDegrees = [ ...
+                pixelDelta(2) / heightPixels * omegaStepDegrees; ...
+                pixelDelta(1) / widthPixels * phiStepDegrees];
+        end
+
+        function [rightVector, upVector, viewDirection, viewDistance] = cameraScreenBasis(app)
             cameraPosition = campos(app.Axes).';
             cameraTarget = camtarget(app.Axes).';
             viewDirection = cameraTarget - cameraPosition;
@@ -851,11 +1019,6 @@ classdef ProjectionViewerApp < handle
             upVector = upVector / norm(upVector);
             rightVector = cross(viewDirection, upVector);
             rightVector = rightVector / norm(rightVector);
-
-            viewHeight = 2 * viewDistance * tan(deg2rad(app.Axes.CameraViewAngle) / 2);
-            viewWidth = viewHeight * widthPixels / heightPixels;
-            panOffset = -pixelDelta(1) / widthPixels * viewWidth * rightVector - ...
-                pixelDelta(2) / heightPixels * viewHeight * upVector;
         end
 
         function rotatedVector = rotateVectorAboutAxis(~, vector, axis, angle)
