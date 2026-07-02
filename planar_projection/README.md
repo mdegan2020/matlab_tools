@@ -23,6 +23,7 @@ src/ProjectionViewerState.m     JSON-serializable viewer state and scene-apply h
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionBackendOutputGrid.m Backend full-extent output grid planner
 src/ProjectionBackendOutputWriter.m Backend image/mask/metadata writers
+src/ProjectionBackendTiledRenderer.m Backend serial tiled CPU renderer
 src/ProjectionBackendProcessor.m Backend job invocation facade
 tests/PlanarProjectionTest.m    Class-based unit tests
 runProjectionViewerPrototype.m  Launcher for the local prototype TIFF

@@ -17,7 +17,7 @@ classdef ProjectionBackendProcessor
             renderOptions = ProjectionBackendProcessor.renderOptionsWithGrid( ...
                 job.RenderOptions, outputGrid);
             renderTimer = tic;
-            readback = ProjectionReadbackRenderer.renderScene(job.Scene, renderOptions);
+            readback = ProjectionBackendProcessor.renderScene(job.Scene, renderOptions);
             renderSeconds = toc(renderTimer);
 
             result = struct();
@@ -61,6 +61,14 @@ classdef ProjectionBackendProcessor
                 renderOptions.OutputSize = outputGrid.OutputSize;
             end
             renderOptions.OutputGrid = outputGrid;
+        end
+
+        function readback = renderScene(scene, renderOptions)
+            if isfield(renderOptions, "TileSize") && ~isempty(renderOptions.TileSize)
+                readback = ProjectionBackendTiledRenderer.renderScene(scene, renderOptions);
+            else
+                readback = ProjectionReadbackRenderer.renderScene(scene, renderOptions);
+            end
         end
 
         function viewerState = viewerStateForGrid(job)

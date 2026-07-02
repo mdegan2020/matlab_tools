@@ -273,6 +273,7 @@ classdef ProjectionBackendJob
         function options = defaultRenderOptions()
             options = struct();
             options.OutputSize = [];
+            options.TileSize = [];
             options.Interpolation = "bilinear";
             options.UseGPU = false;
             options.InvalidIntersectionPolicy = "error";
@@ -284,6 +285,10 @@ classdef ProjectionBackendJob
             if ~isempty(options.OutputSize)
                 options.OutputSize = ProjectionBackendJob.validateOutputSize( ...
                     options.OutputSize);
+            end
+            if ~isempty(options.TileSize)
+                options.TileSize = ProjectionBackendJob.validateTileSize( ...
+                    options.TileSize);
             end
             options.Interpolation = lower(string(options.Interpolation));
             if ~isscalar(options.Interpolation) || ...
@@ -455,6 +460,16 @@ classdef ProjectionBackendJob
                     any(fix(value) ~= value)
                 error("ProjectionBackendJob:invalidRenderOptions", ...
                     "RenderOptions.OutputSize must be a finite positive 1x2 integer vector.");
+            end
+            value = double(value(:).');
+        end
+
+        function value = validateTileSize(value)
+            if ~isnumeric(value) || ~isvector(value) || numel(value) ~= 2 || ...
+                    any(~isfinite(value)) || any(value < 1) || ...
+                    any(fix(value) ~= value)
+                error("ProjectionBackendJob:invalidRenderOptions", ...
+                    "RenderOptions.TileSize must be a finite positive 1x2 integer vector.");
             end
             value = double(value(:).');
         end
