@@ -10,8 +10,12 @@ classdef ProjectionViewerApp < handle
         LayerTipDegrees double
         LayerTiltDegrees double
         SelectedLayerIndex double = 1
+        IsPanning logical = false
+        LastPointerLocation double = [NaN NaN]
         PreviewTimer
         MinPreviewInterval double = 1 / 30
+        MinCameraViewAngle double = 0.05
+        MaxCameraViewAngle double = 60
         UIFigure matlab.ui.Figure
         GridLayout matlab.ui.container.GridLayout
         Axes matlab.ui.control.UIAxes
@@ -63,7 +67,11 @@ classdef ProjectionViewerApp < handle
     methods (Access = private)
         function createComponents(app)
             app.UIFigure = uifigure(Name="Projection Viewer Prototype", ...
-                Position=[100 100 1100 760]);
+                Position=[100 100 1100 760], ...
+                WindowScrollWheelFcn=@(~, event) app.scrollZoom(event), ...
+                WindowButtonDownFcn=@(~, ~) app.beginPan(), ...
+                WindowButtonMotionFcn=@(~, ~) app.updatePan(), ...
+                WindowButtonUpFcn=@(~, ~) app.endPan());
 
             app.GridLayout = uigridlayout(app.UIFigure, [2 1]);
             app.GridLayout.RowHeight = {"1x", "fit"};
@@ -75,8 +83,8 @@ classdef ProjectionViewerApp < handle
             app.Axes.Layout.Row = 1;
             app.Axes.Layout.Column = 1;
             app.Axes.Box = "on";
-            app.Axes.Toolbar.Visible = "on";
-            app.Axes.Interactions = [panInteraction zoomInteraction];
+            app.Axes.Toolbar.Visible = "off";
+            app.Axes.Interactions = [];
             title(app.Axes, "Projected preview");
             xlabel(app.Axes, "X");
             ylabel(app.Axes, "Y");
@@ -193,6 +201,80 @@ classdef ProjectionViewerApp < handle
             campos(app.Axes, cameraPosition.');
             camtarget(app.Axes, target.');
             camup(app.Axes, upVector.');
+        end
+
+        function scrollZoom(app, event)
+            if ~app.isPointerInAxes()
+                return
+            end
+
+            zoomFactor = 1.12 ^ event.VerticalScrollCount;
+            newAngle = app.Axes.CameraViewAngle * zoomFactor;
+            newAngle = min(max(newAngle, app.MinCameraViewAngle), app.MaxCameraViewAngle);
+            app.Axes.CameraViewAngle = newAngle;
+            drawnow limitrate
+        end
+
+        function beginPan(app)
+            if ~app.isPointerInAxes() || app.UIFigure.SelectionType ~= "normal"
+                return
+            end
+
+            app.IsPanning = true;
+            app.LastPointerLocation = app.UIFigure.CurrentPoint;
+        end
+
+        function updatePan(app)
+            if ~app.IsPanning
+                return
+            end
+
+            currentPoint = app.UIFigure.CurrentPoint;
+            pixelDelta = currentPoint - app.LastPointerLocation;
+            if all(pixelDelta == 0)
+                return
+            end
+
+            app.LastPointerLocation = currentPoint;
+            panOffset = app.pixelDeltaToWorldPan(pixelDelta);
+            campos(app.Axes, campos(app.Axes) + panOffset.');
+            camtarget(app.Axes, camtarget(app.Axes) + panOffset.');
+            drawnow limitrate
+        end
+
+        function endPan(app)
+            app.IsPanning = false;
+            app.LastPointerLocation = [NaN NaN];
+        end
+
+        function panOffset = pixelDeltaToWorldPan(app, pixelDelta)
+            axesPosition = app.Axes.InnerPosition;
+            widthPixels = max(axesPosition(3), 1);
+            heightPixels = max(axesPosition(4), 1);
+
+            cameraPosition = campos(app.Axes).';
+            cameraTarget = camtarget(app.Axes).';
+            viewDirection = cameraTarget - cameraPosition;
+            viewDistance = norm(viewDirection);
+            viewDirection = viewDirection / viewDistance;
+            upVector = camup(app.Axes).';
+            upVector = upVector / norm(upVector);
+            rightVector = cross(viewDirection, upVector);
+            rightVector = rightVector / norm(rightVector);
+
+            viewHeight = 2 * viewDistance * tan(deg2rad(app.Axes.CameraViewAngle) / 2);
+            viewWidth = viewHeight * widthPixels / heightPixels;
+            panOffset = -pixelDelta(1) / widthPixels * viewWidth * rightVector - ...
+                pixelDelta(2) / heightPixels * viewHeight * upVector;
+        end
+
+        function tf = isPointerInAxes(app)
+            pointer = app.UIFigure.CurrentPoint;
+            axesPosition = app.Axes.InnerPosition;
+            tf = pointer(1) >= axesPosition(1) && ...
+                pointer(1) <= axesPosition(1) + axesPosition(3) && ...
+                pointer(2) >= axesPosition(2) && ...
+                pointer(2) <= axesPosition(2) + axesPosition(4);
         end
 
         function sliderChanging(app, source, event, sliderName)
