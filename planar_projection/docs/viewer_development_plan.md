@@ -460,6 +460,9 @@ job.Output.Formats = ["tiff", "png"];
 - Preserve per-layer unblended readbacks so downstream analysis is not limited
   to the composite.
 - Initial image output formats are TIFF and PNG.
+- Backend image processing should support an arbitrary number of bands per
+  image. It may assume bands within each image are already spectrally
+  registered and that the same solved warp applies to every band in that image.
 - Include sidecar metadata describing inputs, output grid, render options,
   execution mode, timing, and state summary.
 
@@ -557,8 +560,8 @@ Deliverables:
 - clearer separation between output-grid construction, layer sampling,
   interpolation, and compositing.
 - baseline timing instrumentation.
-- tests for masks, invalid regions, RGB/single-band preservation, multi-layer
-  compositing, anaglyph compositing, and state-driven rendering.
+- tests for masks, invalid regions, single-band/RGB/arbitrary-band preservation,
+  multi-layer compositing, anaglyph compositing, and state-driven rendering.
 
 Feedback checkpoint:
 
@@ -652,6 +655,17 @@ the same pure alignment helpers.
 ### Auto Alignment Design Decisions
 
 - Initial matching should be feature based on projection-plane working images.
+- Alignment should operate on selected single-band analysis images. For
+  multispectral source data, the user or caller chooses one band from each image
+  for alignment.
+- The solved alignment warp should then be applicable to every band in that
+  image, assuming the image's bands are internally registered.
+- A synthetic alignment harness should support smoke tests from the local TIFF
+  dataset by taking one RGB image, using its red channel as synthetic image 1
+  and its blue channel as synthetic image 2.
+- The synthetic harness should generate two independent geometries with enough
+  disagreement to exercise alignment while preserving credible correspondence
+  between the channel-derived single-band images.
 - Candidate detectors/descriptors include SIFT, SURF, ORB, or MATLAB-supported
   equivalents, with capability checks and clear fallback behavior.
 - Matching should run over the full layer overlap at first.
@@ -701,7 +715,26 @@ Feedback checkpoint:
 - Review request/result structs before wiring them into the viewer so the model
   remains usable from both GUI and backend code.
 
-#### Auto Alignment Milestone 2: Projection-Plane Working Images
+#### Auto Alignment Milestone 2: Synthetic Single-Band Alignment Harness
+
+Deliverables:
+
+- harness that accepts a local RGB TIFF fixture and constructs two synthetic
+  single-band alignment layers from the red and blue channels.
+- independent synthetic geometries and OPK perturbations for the two layers,
+  with approximately overlapping projection-plane footprints.
+- known-perturbation metadata for smoke tests and solver diagnostics.
+- one-line launcher or example for the two-layer synthetic alignment scene,
+  without committing local TIFF data.
+- tests for channel extraction, single-band scene construction, geometry
+  disagreement, overlap sanity, and `SampleFcn` compatibility.
+
+Feedback checkpoint:
+
+- Launch the synthetic red/blue-channel scene and confirm that it gives a
+  useful visual and numerical smoke test before building the full solver.
+
+#### Auto Alignment Milestone 3: Projection-Plane Working Images
 
 Deliverables:
 
@@ -712,14 +745,14 @@ Deliverables:
   source observations.
 - explicit separation from the display z-stagger used by the GUI renderer.
 - tests for overlap extent, mask generation, coordinate mapping, and
-  single-band/RGB handling.
+  single-band handling.
 
 Feedback checkpoint:
 
 - Inspect working images and masks from representative two-layer and multi-layer
   scenes before depending on them for feature matching.
 
-#### Auto Alignment Milestone 3: Feature Detection And Matching
+#### Auto Alignment Milestone 4: Feature Detection And Matching
 
 Deliverables:
 
@@ -737,7 +770,7 @@ Feedback checkpoint:
 - Compare detector choices on actual representative imagery and pick the first
   default for prototype alignment.
 
-#### Auto Alignment Milestone 4: Match Filtering Pipeline
+#### Auto Alignment Milestone 5: Match Filtering Pipeline
 
 Deliverables:
 
@@ -754,7 +787,7 @@ Feedback checkpoint:
 - Import and evaluate the existing radial filter on difficult oblique data, then
   decide whether it becomes default, optional, or data-condition dependent.
 
-#### Auto Alignment Milestone 5: Two-Image 2D OPK Solver
+#### Auto Alignment Milestone 6: Two-Image 2D OPK Solver
 
 Deliverables:
 
@@ -772,7 +805,7 @@ Feedback checkpoint:
 - Run on a few real two-image examples and compare visual alignment, residual
   statistics, and correction magnitudes before expanding to N images.
 
-#### Auto Alignment Milestone 6: GUI Auto Alignment Workflow
+#### Auto Alignment Milestone 7: GUI Auto Alignment Workflow
 
 Deliverables:
 
@@ -789,7 +822,7 @@ Feedback checkpoint:
 - Exercise the full operator loop in the GUI: find matches, inspect matches,
   solve, preview, apply, revert, and save state.
 
-#### Auto Alignment Milestone 7: Multi-Image Matching Scheduler
+#### Auto Alignment Milestone 8: Multi-Image Matching Scheduler
 
 Deliverables:
 
@@ -808,7 +841,7 @@ Feedback checkpoint:
   multi-perspective data before picking the default beyond the center-out
   prototype.
 
-#### Auto Alignment Milestone 8: Joint Multi-Image Solver
+#### Auto Alignment Milestone 9: Joint Multi-Image Solver
 
 Deliverables:
 
@@ -825,7 +858,7 @@ Feedback checkpoint:
 - Validate that allowing every image to move improves alignment without
   producing unintuitive global rotations or runaway corrections.
 
-#### Auto Alignment Milestone 9: Optional Shared Focal/Y-Scale Correction
+#### Auto Alignment Milestone 10: Optional Shared Focal/Y-Scale Correction
 
 Deliverables:
 
@@ -839,7 +872,7 @@ Feedback checkpoint:
 - Decide whether the shared scale correction is necessary for the first real
   sensor workflow or should remain an advanced option.
 
-#### Auto Alignment Milestone 10: Ray-To-Ray 3D Loss Mode
+#### Auto Alignment Milestone 11: Ray-To-Ray 3D Loss Mode
 
 Deliverables:
 
@@ -854,13 +887,15 @@ Feedback checkpoint:
 - Compare 2D and 3D losses on oblique terrain scenes and decide whether
   ray-to-ray closest approach is useful before adding terrain-constrained losses.
 
-#### Auto Alignment Milestone 11: Backend Alignment Integration
+#### Auto Alignment Milestone 12: Backend Alignment Integration
 
 Deliverables:
 
 - backend job option to run alignment before rendering.
 - saved updated viewer state and alignment diagnostics.
 - composite and per-layer backend output using the aligned state.
+- use selected single-band inputs for alignment while applying solved image
+  warps to all bands during backend rendering.
 - CPU-complete execution path with later profiling for threads/GPU work if
   alignment becomes a bottleneck.
 - tests for live and serialized backend jobs that include alignment options.
@@ -870,7 +905,7 @@ Feedback checkpoint:
 - Run the complete headless workflow: load job, align, save diagnostics, render,
   and compare output with the GUI-aligned result.
 
-#### Auto Alignment Milestone 12: Later GUI And Workflow Enhancements
+#### Auto Alignment Milestone 13: Later GUI And Workflow Enhancements
 
 Deliverables:
 
@@ -967,7 +1002,8 @@ becomes clearer.
    serialization.
 6. Keep source geometry integration centered on
    `SampleFcn(rowIndices, columnIndices)`.
-7. Support RGB and single-band imagery.
+7. Support single-band, RGB, and arbitrary-band imagery where backend processing
+   requires it. Alignment may operate on selected single-band analysis inputs.
 8. Do not commit local prototype TIFFs or local agent notes.
 9. Preserve the existing `PlanarProjection` API unless a deliberate geometry
    semantics decision changes it.
