@@ -405,10 +405,247 @@ The current suite exercises pure geometry, scene construction, sparse geometry,
 mesh building, readback, layer workflows, state serialization, and app
 interactions.
 
+## Backend Processor Work Plan
+
+The backend processor should turn an interactively aligned viewer configuration
+into a repeatable noninteractive render. The app's save/load state is the natural
+operator-state bridge, but it should not be the only job description. A complete
+backend job also needs scene inputs, geometry references, output policy, and
+execution policy.
+
+### Backend Job Contract Decisions
+
+- Jobs must be invokable directly from MATLAB with live in-memory structs.
+- Jobs must also be serializable for repeatable runs.
+- Lightweight job parameters and viewer state should be JSON-serializable.
+- Heavy scene data, sparse geometry grids, and view-vector arrays should be
+  stored in `.mat` files rather than JSON.
+- A caller should not be forced to write JSON just to run a job.
+- The backend should accept either live values or paths to serialized JSON/MAT
+  files.
+
+Target API shape:
+
+```matlab
+result = ProjectionBackendProcessor.run(job);
+result = ProjectionBackendProcessor.run("job.json");
+result = ProjectionBackendProcessor.run("job.mat");
+```
+
+where a live job can contain:
+
+```matlab
+job.Scene = scene;
+job.ViewerState = state;
+job.RenderOptions = renderOptions;
+job.Output = outputOptions;
+job.Execution = executionOptions;
+```
+
+and a serialized JSON job can refer to heavier files:
+
+```matlab
+job.SceneMatPath = "scene_geometry.mat";
+job.ViewerStatePath = "viewer_state.json";
+job.Output.Directory = "outputs";
+job.Output.Formats = ["tiff", "png"];
+```
+
+### Backend Output Decisions
+
+- Produce a composite output.
+- Produce per-layer outputs.
+- If the selected blend mode is `redBlueAnaglyph`, the composite output should
+  be an anaglyph image.
+- Preserve per-layer unblended readbacks so downstream analysis is not limited
+  to the composite.
+- Initial image output formats are TIFF and PNG.
+- Include sidecar metadata describing inputs, output grid, render options,
+  execution mode, timing, and state summary.
+
+Anaglyph channel assignment currently follows layer order. A future app control
+should allow explicit red/blue assignment or a stereo-channel swap operation.
+
+### Backend Output Grid Decisions
+
+Backend output should not reproduce transient app pan/zoom. It should:
+
+- apply viewer state to the scene.
+- honor tip, tilt, twist, layer visibility, alpha, blend mode, projection
+  offsets, and OPK corrections.
+- ignore app pan/zoom when choosing backend output bounds.
+- cover the complete projected extent of all rendered layers.
+- use twist to orient the backend output axes.
+- attempt to preserve the effective input scene resolution without inflating
+  output dimensions unnecessarily.
+- warn or require confirmation if the native-ish output grid would become
+  unexpectedly huge.
+
+There is no hard runtime target yet. Correct, clean, measurable CPU behavior
+comes first; optimization follows profiling.
+
+### Backend Milestones
+
+#### Backend Milestone 1: Job Contract And Serialization
+
+Deliverables:
+
+- `ProjectionBackendJob` or equivalent helper for validating job structs.
+- live in-memory job invocation.
+- JSON serialization for lightweight job parameters.
+- `.mat` serialization for scene/geometry payloads.
+- tests for live jobs and path-based jobs.
+
+Feedback checkpoint:
+
+- Review job JSON and MAT payloads for readability, portability, and whether
+  they match the desired workflow from app alignment to backend run.
+
+#### Backend Milestone 2: Pure State-To-Scene Application
+
+Deliverables:
+
+- pure helper that applies `ProjectionViewerState` to a scene without creating
+  `ProjectionViewerApp`.
+- layer-count, layer-order, image-path, and state compatibility validation.
+- tests proving app-exported state and backend-applied state produce equivalent
+  scene/render state.
+
+Feedback checkpoint:
+
+- Save a state from an interactively aligned viewer session, apply it headlessly,
+  and confirm the backend scene represents the intended alignment.
+
+#### Backend Milestone 3: Full-Extent Output Grid Planner
+
+Deliverables:
+
+- output-grid planner independent of app pan/zoom.
+- twist-aware output axes.
+- union extent over all rendered layers.
+- resolution policy based on source GSD/IFOV/mesh spacing.
+- guardrails for unexpectedly large output sizes.
+- tests for output extent, twist orientation, and resolution policy.
+
+Feedback checkpoint:
+
+- Inspect planned output sizes and extents for representative one-layer and
+  two-layer states before committing to the render cost.
+
+#### Backend Milestone 4: Processor Entry Point And Writers
+
+Deliverables:
+
+- `ProjectionBackendProcessor.run(job)` entry point.
+- composite and per-layer render outputs.
+- TIFF and PNG writers.
+- sidecar metadata writer.
+- deterministic naming policy for composite, per-layer, masks, and metadata.
+- tests for output files and metadata.
+
+Feedback checkpoint:
+
+- Run a saved viewer state through the backend and inspect the generated TIFF/PNG
+  outputs against the app preview.
+
+#### Backend Milestone 5: Readback Kernel Hardening
+
+Deliverables:
+
+- explicit render options for output size/grid, invalid fill value, masks,
+  interpolation, and per-layer output policy.
+- clearer separation between output-grid construction, layer sampling,
+  interpolation, and compositing.
+- baseline timing instrumentation.
+- tests for masks, invalid regions, RGB/single-band preservation, multi-layer
+  compositing, anaglyph compositing, and state-driven rendering.
+
+Feedback checkpoint:
+
+- Decide whether the prototype sampled-mesh interpolation is sufficiently exact
+  for current use, or whether a stricter readback kernel is needed.
+
+#### Backend Milestone 6: Tiled CPU Renderer
+
+Deliverables:
+
+- output tiling by rows/columns.
+- bounded-memory tile processing.
+- optional incremental file writing where practical.
+- tile-level timing and memory reporting.
+- serial tiled rendering before parallel execution.
+- tests that tiled and untiled output agree numerically on small scenes.
+
+Feedback checkpoint:
+
+- Benchmark serial tiled rendering on available representative images and choose
+  practical default tile sizes.
+
+#### Backend Milestone 7: Thread-Pool Acceleration
+
+Deliverables:
+
+- `Execution.Mode = "serial"` and `Execution.Mode = "threads"`.
+- use `parpool("threads")` only for parallel pool acceleration.
+- do not create or use heavyweight process-based pools.
+- clear behavior if a process-based pool is already active.
+- tile-level parallel execution with deterministic output.
+- serial-vs-threads numerical equivalence tests.
+
+Feedback checkpoint:
+
+- Benchmark serial versus threads on the same backend job and decide whether
+  threading should be opt-in or automatic for large jobs.
+
+#### Backend Milestone 8: MATLAB-Managed GPU Acceleration
+
+Deliverables:
+
+- optional Windows-targeted GPU execution path using `gpuArray` and
+  GPU-supported MATLAB functions where practical.
+- capability checks so macOS development and CI remain CPU-only.
+- clean fallback to CPU when GPU support is unavailable.
+- `gather` boundaries before file writing or graphics use.
+- CPU-vs-GPU numerical comparison tests on GPU-capable systems.
+
+Feedback checkpoint:
+
+- Profile on the Windows GPU workstation and decide which backend kernels
+  benefit from MATLAB-managed GPU acceleration.
+
+#### Backend Milestone 9: Custom GPU Kernels If Needed
+
+Deliverables:
+
+- profiling report identifying bottlenecks not solved by tiled CPU, threads, or
+  MATLAB-managed GPU acceleration.
+- candidate custom kernel design for the specific bottleneck.
+- CPU reference implementation retained for correctness.
+- numerical equivalence tests against CPU and MATLAB-managed GPU paths.
+
+Feedback checkpoint:
+
+- Decide whether the performance gain justifies the additional maintenance cost
+  of custom kernels.
+
+#### Backend Milestone 10: Viewer/Backend Integration Polish
+
+Deliverables:
+
+- app helper to export a backend job from the current scene and viewer state.
+- optional UI for anaglyph red/blue assignment or swap.
+- documentation and runnable examples for app-to-backend workflow.
+- quick validation command that checks job resolvability without rendering.
+
+Feedback checkpoint:
+
+- Exercise the complete operator workflow: align in app, export job, run backend,
+  inspect composite and per-layer products.
+
 ## Active Roadmap For Discussion
 
-The items below are intentionally not resolved in this cleanup. They should be
-prioritized and specified with user guidance before implementation.
+The backend plan above is now the primary roadmap for readback work. The items
+below remain broader design topics to prioritize with user guidance.
 
 ### Real Sensor Geometry Ingestion
 
@@ -439,9 +676,15 @@ loop.
 
 ### Optional GPU Path
 
-GPU support should remain optional and CPU-equivalent. Candidate acceleration
-targets are sampled ray generation, ray-plane intersections, interpolation, and
-readback resampling.
+GPU support belongs in the backend path before the viewer path. Use MATLAB's
+inherent GPU acceleration first: `gpuArray`, GPU-supported MATLAB functions, and
+explicit `gather` boundaries. Custom kernels should be considered only after
+profiling shows that CPU tiling, `parpool("threads")`, and MATLAB-managed GPU
+operations do not meet backend needs.
+
+macOS development remains CPU-only because `gpuArray` is unsupported in the
+current local environment. Windows GPU testing should add numerical-equivalence
+and performance checks for GPU-capable systems.
 
 ### Geometry API Ray/Line Semantics
 
@@ -484,3 +727,7 @@ becomes clearer.
 8. Do not commit local prototype TIFFs or local agent notes.
 9. Preserve the existing `PlanarProjection` API unless a deliberate geometry
    semantics decision changes it.
+10. Use only `parpool("threads")` for backend parallel-pool acceleration; do not
+    create heavyweight process-based pools.
+11. Treat MATLAB-managed GPU acceleration as the first GPU step; use custom GPU
+    kernels only after profiling justifies them.
