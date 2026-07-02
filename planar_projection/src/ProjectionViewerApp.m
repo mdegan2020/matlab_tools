@@ -4,6 +4,10 @@ classdef ProjectionViewerApp < handle
     properties (Access = private)
         Scene struct
         CurrentMesh struct
+        DefaultMeshSampling struct
+        DragMeshSampling struct
+        PreviewTimer
+        MinPreviewInterval double = 1 / 30
         UIFigure matlab.ui.Figure
         GridLayout matlab.ui.container.GridLayout
         Axes matlab.ui.control.UIAxes
@@ -25,6 +29,9 @@ classdef ProjectionViewerApp < handle
             end
 
             app.Scene = scene;
+            app.DefaultMeshSampling = app.Scene.layers.MeshSampling;
+            app.DragMeshSampling = app.createDragMeshSampling();
+            app.PreviewTimer = tic;
             app.createComponents();
             app.createSurface();
             app.configureFrameCamera();
@@ -152,21 +159,33 @@ classdef ProjectionViewerApp < handle
                     alpha = event.Value;
             end
 
-            app.updateProjection(tipDegrees, tiltDegrees, alpha);
             source.Value = event.Value;
+            app.updateLabels(tipDegrees, tiltDegrees, alpha);
+            if toc(app.PreviewTimer) < app.MinPreviewInterval
+                return
+            end
+
+            app.PreviewTimer = tic;
+            app.updateProjection(tipDegrees, tiltDegrees, alpha, app.DragMeshSampling);
         end
 
         function updateFromSliderValues(app)
             app.updateProjection(app.TipSlider.Value, app.TiltSlider.Value, ...
-                app.AlphaSlider.Value);
+                app.AlphaSlider.Value, app.DefaultMeshSampling);
+            app.PreviewTimer = tic;
         end
 
-        function updateProjection(app, tipDegrees, tiltDegrees, alpha)
+        function updateProjection(app, tipDegrees, tiltDegrees, alpha, meshSampling)
+            if nargin < 5
+                meshSampling = app.DefaultMeshSampling;
+            end
+
             layer = app.Scene.layers;
             plane = ProjectionMeshBuilder.applyPlaneTipTilt( ...
                 layer.BaseProjectionPlane, deg2rad(tipDegrees), deg2rad(tiltDegrees));
             layer.CurrentProjectionPlane = plane;
             layer.Alpha = alpha;
+            layer.MeshSampling = meshSampling;
             app.Scene.layers = layer;
 
             app.CurrentMesh = ProjectionMeshBuilder.buildLayerMesh( ...
@@ -189,8 +208,16 @@ classdef ProjectionViewerApp < handle
             app.TipSlider.Value = 0;
             app.TiltSlider.Value = 0;
             app.AlphaSlider.Value = 1;
-            app.updateProjection(0, 0, 1);
+            app.updateProjection(0, 0, 1, app.DefaultMeshSampling);
             app.configureFrameCamera();
+        end
+
+        function meshSampling = createDragMeshSampling(app)
+            imageSize = app.Scene.layers.SourceGeometry.ImageSize;
+            rowStride = max(1, app.DefaultMeshSampling.RowStride * 2);
+            columnStride = max(1, app.DefaultMeshSampling.ColumnStride * 2);
+            meshSampling = ProjectionViewerHarness.createMeshSampling( ...
+                imageSize, rowStride, columnStride);
         end
     end
 end
