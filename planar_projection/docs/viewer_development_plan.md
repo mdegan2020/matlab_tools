@@ -1,104 +1,106 @@
 # Projection Viewer Development Plan
 
-This document captures the planned MATLAB viewing and rendering framework for interactive prototyping of 2D/3D image projection workflows. It is intended to be readable by a human developer and specific enough for a coding agent to implement in stages.
+This document tracks the current MATLAB projection viewer prototype and the
+remaining roadmap. It supersedes the original first-cut milestone plan: the
+initial harness, mesh builder, app, responsiveness work, exact readback
+prototype, and multi-layer support have all been implemented.
 
-The project goal is to develop a backend-capable processor that reads, renders, and writes imagery without interaction. The immediate need is an interactive MATLAB tool that supports responsive exploration of projection geometry using large remote-sensing imagery.
+The project goal remains a backend-capable processor that can read, render, and
+write projected imagery without interaction. The interactive MATLAB app is the
+current exploration surface for validating geometry, layer alignment, and
+operator controls before those workflows are moved into more automated
+processing.
 
 ## Current Context
 
-The repository currently contains a compact MATLAB geometry library:
+The repository now contains:
 
-- `src/PlanarProjection.m`
-- `tests/PlanarProjectionTest.m`
-- `README.md`
+```text
+src/PlanarProjection.m             Core projection geometry helpers
+src/ProjectionViewerHarness.m      Synthetic scene/layer/source-geometry builder
+src/ProjectionSourceGeometry.m     Sparse grid source-geometry adapter
+src/ProjectionMeshBuilder.m        Pure sampled projection mesh builder
+src/ProjectionReadbackRenderer.m   Headless frame-camera readback prototype
+src/ProjectionLayerManager.m       Multi-layer workflow helpers
+src/ProjectionViewerState.m        JSON viewer-state serialization
+src/ProjectionViewerApp.m          Programmatic interactive preview app
 
-The available prototype image is:
+tests/PlanarProjectionTest.m
+tests/ProjectionViewerHarnessTest.m
+tests/ProjectionSourceGeometryTest.m
+tests/ProjectionMeshBuilderTest.m
+tests/ProjectionReadbackRendererTest.m
+tests/ProjectionLayerManagerTest.m
+tests/ProjectionViewerStateTest.m
+tests/ProjectionViewerAppInteractionTest.m
 
-- `test_data/10.tif`
+runProjectionViewerPrototype.m
+runTests.m
+buildfile.m
+```
 
-The TIFF is local test content and is intentionally ignored by git. Its observed characteristics are:
+Local prototype TIFFs live under `test_data/` and are intentionally ignored by
+git. The default test image is `test_data/10.tif`; current two-layer manual
+testing commonly uses `test_data/10.tif` and `test_data/102.tif`.
 
-- truecolor RGB TIFF
-- approximately `3320 x 3228`
-- approximately `31 MB`
-- uncompressed
-- rectified, north-up remote-sensing style imagery
-- approximate GSD: `0.5 m`
-- approximate footprint: `1660 m x 1614 m`
+Development is currently on macOS. MATLAB GPU acceleration through Parallel
+Computing Toolbox is not available in this macOS configuration, so the CPU path
+is required and remains the tested reference path. Future GPU support should be
+optional, guarded by capability checks, and limited to pure numeric work.
 
-The local MATLAB installation is R2026a and includes Image Processing Toolbox, Mapping Toolbox, Computer Vision Toolbox, and Parallel Computing Toolbox.
+Real data may be RGB or single-band. Typical real image sizes are expected to be
+around `15000 x 10000`, with possible growth to roughly `30000 x 20000`. The
+design should continue to avoid dense full-resolution per-pixel 3D vector
+storage and avoid unnecessary full-size temporary arrays.
 
-Development is currently on macOS. MATLAB does not support GPU acceleration through Parallel Computing Toolbox on this macOS configuration, so every feature must work well on CPU. After the first prototype is working, testing is expected to move to a high-end Windows workstation with MATLAB GPU support. The architecture should therefore allow optional `gpuArray` acceleration where useful, without making GPU support required.
+## Current High-Level Capability
 
-The current test image is RGB truecolor. Real data may be RGB or single-band. Typical real image sizes are expected to be around `15000 x 10000`, with possible growth by roughly `2x` in each dimension. Individual images should remain manageable on modern memory and graphics hardware, but the design should avoid unnecessary full-size intermediate arrays.
+The current prototype can:
 
-## High-Level Goal
-
-Build a responsive MATLAB app and supporting backend-compatible library that can:
-
-1. Load a large image.
-2. Generate or accept collection geometry for a linear-array-style sensor.
-3. Project the image through its source collection geometry onto a target plane.
-4. View the projected image through a fixed frame-camera model.
-5. Manipulate the projection plane interactively with controls such as tip, tilt, and transparency.
-6. Keep all core computation explainable and exportable to a headless batch renderer.
-7. Start with one image/layer, while designing the architecture to support multiple image layers later.
-
-## Non-Goals For The First Cut
-
-The first implementation should not try to solve every final-rendering problem.
-
-Do not initially implement:
-
-- full real sensor model ingestion
-- GPU-only code paths
-- dense per-pixel vector storage unless required by a test
-- multiple image layers in the UI
-- exact pixel-identical backend readback
-- tiled out-of-core rendering for imagery larger than the current TIFF
-- free 3D orbit camera interaction
-- App Designer `.mlapp` files
-
-These capabilities should remain natural extensions of the architecture.
+1. Load one or more image layers.
+2. Generate synthetic linear-array-style source geometry for each layer.
+3. Accept sparse source geometry through a `SampleFcn(rowIndices, columnIndices)`
+   adapter contract.
+4. Project sampled source rays onto a shared target projection plane.
+5. Preview projected textures in a fixed frame-camera-style view.
+6. Manipulate projection plane tip, tilt, camera twist, layer alpha/visibility,
+   per-layer projection offsets, and per-layer omega/phi/kappa view-vector
+   corrections.
+7. Serialize and restore a human-readable JSON viewer state.
+8. Render deterministic headless frame-camera readback images with configurable
+   interpolation and basic multi-layer blending.
 
 ## Core Design Principles
 
 ### Responsiveness Is The App Contract
 
-Interactive controls must avoid queued-event lag and judder. During mouse or slider manipulation, the app should render the newest requested state using a lightweight preview representation.
-
-Initial app updates should:
-
-- reuse graphics objects
-- update existing surface vertices and alpha values
-- avoid recreating UI components
-- avoid reloading the image during interaction
-- use sparse geometry during drag
-- coalesce rapid slider events to the latest state when possible
+Interactive controls must avoid queued-event lag and judder. The app should
+reuse graphics objects, update existing surface vertices and alpha values, avoid
+reloading images during interaction, use coarser sampled geometry during drag,
+and converge to the latest requested state on mouse release or settled slider
+events.
 
 ### Explainability Is The Computation Contract
 
-The geometry and rendering state should be represented as plain MATLAB structs or value-like classes. The computation path should be understandable without inspecting MATLAB graphics state.
-
-The graphics layer should visualize computed state, not own the mathematical model.
+Scene, layer, source geometry, mesh, render, and viewer state should remain
+plain structs or value-like data. Graphics handles belong only to the app layer.
+The graphics layer visualizes computed state; it does not own the mathematical
+model.
 
 ### Backend Compatibility Is Required
 
-The final renderer must be able to run without MATLAB graphics. The app may use MATLAB graphics for fast preview, but it should call pure computation functions for geometry construction and, later, exact readback.
+Preview and exact readback should share scene/layer state and pure geometry
+helpers. The headless renderer must remain callable without MATLAB graphics.
 
 ### CPU Baseline, Optional GPU Acceleration
 
-The CPU path is mandatory and should be the reference path for tests and correctness. Optional GPU acceleration may be added for pure numeric operations such as sampled ray generation, ray-plane intersections, image resampling, or exact readback.
+CPU execution is mandatory and tested. GPU execution, if added later, should be
+opt-in or automatically enabled only after capability checks. Data assigned to
+MATLAB graphics objects must be gathered back to CPU arrays.
 
-GPU use must be explicit and guarded by capability checks. If a GPU is unavailable or unsupported, code must automatically fall back to CPU. Graphics-preview code should not require `gpuArray`; data used by MATLAB graphics objects should be gathered back to CPU arrays before assignment.
+## Data And Geometry Contracts
 
-### Single-Layer First, Multi-Layer Ready
-
-The first app will operate on one image and one projection layer. The data model should still use layer terminology so future stereo or change-detection workflows can render multiple projected images in the same view.
-
-## Coordinate And Image Conventions
-
-### MATLAB Image Coordinates
+### Image Coordinates
 
 Use MATLAB image indexing:
 
@@ -106,253 +108,75 @@ Use MATLAB image indexing:
 Image(y, x, :)
 ```
 
-where:
+where `y` is row and `x` is column. For the linear-array model, each image
+column is one acquisition instant.
 
-- `y` is the row coordinate.
-- `x` is the column coordinate.
-- all pixels in `Image(:, 1)` are collected at time 1.
-- all pixels in `Image(:, 2)` are collected at time 2.
+### Source Geometry Contract
 
-### Supported Image Band Shapes
-
-The first implementation should support both:
+All synthetic and real geometry adapters should expose:
 
 ```matlab
-Image(y, x)       % single-band image
-Image(y, x, :)    % multiband image, initially RGB
-```
-
-Core geometry code should not depend on band count. Display code should convert image data into a texture representation suitable for MATLAB graphics:
-
-- RGB input can be used directly when its type and range are display-ready.
-- single-band input can be displayed with a default grayscale mapping.
-- future exact readback should preserve source band semantics where possible.
-
-### Linear-Array Collection Geometry
-
-Each image column is one acquisition instant.
-
-For a source image:
-
-```matlab
-G(:, x)          % sensor origin for image column x
-V(:, y, x)       % world-frame view vector for pixel Image(y, x, :)
-```
-
-Interpretation:
-
-- all pixels in a given column share one origin `G(:, x)`.
-- row variation at fixed column is due to camera or scanner geometry.
-- column variation at fixed row is due to platform motion.
-- the model should be agnostic to whether row variation came from active telescope scanning, push-broom scanning, or another sensor-specific mechanism.
-
-### Real Geometry Adapter Contract
-
-The transition from synthetic geometry to real linear-array geometry should be clean and obvious. Synthetic geometry and real geometry should use the same source-geometry interface.
-
-At minimum, a source geometry provider must answer this query:
-
-```matlab
-[G, V] = provider.sample(rowIndices, columnIndices);
+[G, V] = sourceGeometry.SampleFcn(rowIndices, columnIndices);
 ```
 
 where:
 
 - `rowIndices` are MATLAB image row indices.
 - `columnIndices` are MATLAB image column indices.
-- `G` is `3 x numel(columnIndices)` and contains one sensor origin per requested column.
-- `V` is `3 x numel(rowIndices) x numel(columnIndices)` and contains one world-frame view vector per requested pixel sample.
+- `G` is `3 x numel(columnIndices)`.
+- `V` is `3 x numel(rowIndices) x numel(columnIndices)`.
 - `G(:, ix)` applies to all requested rows for `columnIndices(ix)`.
 - `V(:, iy, ix)` corresponds to `Image(rowIndices(iy), columnIndices(ix), :)`.
-- coordinates may be ECEF or any arbitrary world Cartesian frame.
-- vectors should be finite and nonzero; the mesh builder may normalize them before use.
+- coordinates may be any arbitrary Cartesian world frame, including future ECEF.
+- vectors should be finite and nonzero.
 
-The synthetic harness should implement this same contract. The real sensor adapter can later be as simple as a wrapper around generated camera-model code that exposes the same `sample(rowIndices, columnIndices)` method or function-handle signature.
+Downstream code should prefer `SampleFcn` over synthetic-only fields. Synthetic
+fields can exist for diagnostics, but the mesh builder and renderer should not
+depend on them except for explicitly supported correction axes.
 
-Suggested struct form:
+### Sparse Geometry Adapter
 
-```matlab
-sourceGeometry = struct();
-sourceGeometry.ImageSize = [height width];
-sourceGeometry.CoordinateFrame = "world";
-sourceGeometry.SampleFcn = @sampleGeometry;
-sourceGeometry.Metadata = metadata;
-```
+`ProjectionSourceGeometry.fromGrid` adapts sparse, uniformly spaced row/column
+geometry posts into the same `SampleFcn` contract. This is the current bridge
+for future sensor-specific camera models that cannot provide dense full-image
+view vectors.
 
-Suggested function-handle signature:
-
-```matlab
-[G, V] = sourceGeometry.SampleFcn(rowIndices, columnIndices);
-```
-
-All downstream code should prefer `SampleFcn` over inspecting synthetic-only fields. Synthetic-specific fields can exist for debugging, but they should not be required by the mesh builder.
-
-### World Coordinates
-
-The framework should treat world coordinates as arbitrary 3D Cartesian coordinates. They may later be ECEF coordinates, but app and core code should not assume ECEF, ENU, NED, or any other Earth-fixed convention.
-
-For synthetic test geometry:
-
-- platform motion may be locally linear.
-- a default path can move in `+Z` of the chosen world frame to approximate a "north-ish" trajectory.
-- a nominal platform height or slant range of `10000 m` is acceptable for first synthetic tests.
-
-### Local Render Frame
-
-When world coordinates are ECEF-like, absolute position values can be large. Rendering should therefore use an origin-shifted local frame:
+For a linear-array sensor:
 
 ```matlab
-Prender = Pworld - renderOrigin
-Grender = Gworld - renderOrigin
+G(:, n)          % one perspective center per geometry column post
+V(:, m, n)       % one view vector per row/column geometry post
 ```
 
-The backend model should preserve world-frame values. The graphics preview should render local shifted values.
-
-## Projection And View Model
-
-The desired conceptual pipeline is:
-
-```text
-source image and source collection geometry
-    -> project sampled source rays onto target projection plane
-    -> render projected texture as seen by a fixed frame camera
-    -> display the frame-camera output with 2D-style pan/zoom
-```
-
-### Source Image Geometry
-
-The source image starts in a positive-focal-plane-style collection geometry. For the synthetic harness, derive normalized camera parameters from:
-
-- image size
-- approximate `0.5 m` GSD
-- nominal range `10000 m`
-- optical axis pointing toward the projection center
-
-Given a `1660 m` image width at `10000 m` range, the initial synthetic horizontal angular footprint is modest, roughly 9 to 10 degrees.
-
-### Projection Plane
-
-The target projection plane should be defined with the existing `PlanarProjection` API, using functions such as:
-
-```matlab
-plane = PlanarProjection.definePlane(G0, V0, V1, R0);
-plane = PlanarProjection.defineStereoPlane(G1, V1, R1, G2, V2, R2);
-plane = PlanarProjection.defineFitPlane(G0, V0, P1, P2, P3, P4);
-plane = PlanarProjection.definePlaneFromBasis(P0, VX, VY);
-```
-
-For the first synthetic case:
-
-- `G0` is the initial or central camera/sensor location.
-- `V0` is the camera optical axis.
-- `V1` is a ray corresponding to a pixel around `+10` pixels in image `+X` from the optical center.
-- `R0` is the nominal camera range.
-
-Implementation note: verify whether `definePlane(G0, V0, V1, R0)` maps the `V1` offset to the intended app plane axis. If the app needs explicit image-axis orientation, add a small helper that constructs the projection plane from basis vectors in an unambiguous way.
-
-### Frame Camera
-
-The fixed frame camera is the view model used by both preview alignment and eventual backend readback.
-
-Use:
-
-```matlab
-camera = PlanarProjection.defineFrameCamera(G0, V0, F, referencePlane);
-```
-
-Initial behavior:
-
-- camera looks at the projection plane center.
-- camera/view geometry remains fixed while tip/tilt sliders are manipulated.
-- mouse interaction behaves like pan/zoom on the resulting 2D camera output, not free 3D orbit.
-
-### Interactive Plane Manipulation
-
-The initial sliders should manipulate the projection plane only.
-
-Controls:
-
-- `Tip`: rotate the projection plane about its local `X` axis.
-- `Tilt`: rotate the projection plane about its local `Y` axis.
-- `Transparency`: modulate layer alpha from `0` to `1`.
-
-Sensor geometry and frame camera remain fixed in the first prototype.
-
-## Preview Versus Exact Rendering
-
-The project should explicitly separate interactive preview from exact readback.
-
-### Stage A: Geometry-Equivalent Interactive Preview
-
-This is the first app target.
-
-Use MATLAB graphics to render a texture-mapped surface:
-
-- sparse sampled geometry mesh
-- source image as texture
-- fixed app camera aligned to the frame-camera model as closely as practical
-- 2D-style pan/zoom interaction
-- fast tip/tilt/alpha updates
-
-This stage should prioritize responsiveness and geometric interpretability. It does not need pixel-identical backend output.
-
-### Stage B: Exact Frame-Camera Readback
-
-This is a later backend-compatible renderer.
-
-It should:
-
-- use the same scene/layer state as the app
-- avoid reliance on MATLAB graphics objects
-- sample projected imagery according to the frame-camera model
-- default to bilinear interpolation for the first exact readback implementation
-- expose interpolation as an option so nearest, bicubic, or other methods can be evaluated later
-- produce deterministic output images
-- be callable from scripts and batch workflows
-
-### Stage C: Preview Versus Exact Comparison
-
-Eventually the app should support a comparison mode:
-
-- interactive preview display
-- exact readback display
-- difference or flicker views if useful
-
-This mode will help quantify where MATLAB graphics interpolation and camera behavior diverge from the backend renderer.
-
-## Proposed Architecture
-
-The first implementation can use structs and static/helper functions. Classes may be introduced when state ownership becomes clearer.
+The adapter interpolates requested image row/column indices from those posts and
+can carry optional IFOV metadata for OPK step sizing.
 
 ### Scene Structure
 
-Use a scene-level model:
+The scene model is:
 
 ```matlab
 scene = struct();
 scene.frameCamera = camera;
 scene.renderOrigin = renderOrigin;
 scene.preview = previewOptions;
-scene.layers = layer;
+scene.renderOptions = renderOptions;
+scene.layers = layers;
 ```
 
-The first app will use exactly one layer:
-
-```matlab
-numel(scene.layers) == 1
-```
-
-The renderer should still loop over `scene.layers` internally where this does not add complexity.
+`scene.layers` supports one or more layers. The app defaults the selected layer
+to the topmost layer.
 
 ### Layer Structure
 
-Suggested first-layer fields:
+Current layer fields include:
 
 ```matlab
 layer = struct();
-layer.Name = "Test image";
+layer.Name = "Layer name";
 layer.Image = imageData;
 layer.ImagePath = imagePath;
+layer.DisplayTexture = textureData;
 layer.SourceGeometry = sourceGeometry;
 layer.BaseProjectionPlane = plane0;
 layer.CurrentProjectionPlane = plane;
@@ -360,37 +184,22 @@ layer.MeshSampling = meshSampling;
 layer.Alpha = 1.0;
 layer.BlendMode = "alpha";
 layer.Visible = true;
+layer.ProjectionOffsetMeters = [0; 0];
+layer.ViewVectorAngularOffsetsDegrees = [0; 0; 0]; % omega, phi, kappa
 ```
 
-### Source Geometry Structure
+`ProjectionOffsetMeters` shifts where the image is projected on the current
+projection plane. It does not move the projection plane and does not move the
+source sensor origin.
 
-Use a compact representation where possible:
-
-```matlab
-sourceGeometry = struct();
-sourceGeometry.ImageSize = [height width];
-sourceGeometry.GSD = 0.5;
-sourceGeometry.NominalRange = 10000;
-sourceGeometry.Origins = G;              % 3 x Nx, sampled or full-column
-sourceGeometry.CameraRays = Vcamera;     % 3 x Ny, row scan geometry
-sourceGeometry.Attitudes = R;            % 3 x 3 x Nx, optional
-sourceGeometry.WorldVectors = [];        % optional dense or sampled cache
-sourceGeometry.SampleFcn = @sampleGeometry;
-```
-
-For the first cut, avoid dense full-resolution `V(:, y, x)` unless needed. Compute sampled world vectors on demand:
-
-```matlab
-Vworld(:, iy, ix) = R(:, :, ix) * Vcamera(:, iy);
-```
-
-The first synthetic case may use identity attitudes or a simple smooth variation.
-
-Real geometry should be introduced by supplying a different `SampleFcn`, not by changing app or mesh-builder logic.
+`ViewVectorAngularOffsetsDegrees` rotates source view vectors before planar
+intersection. Omega acts about the source image Y axis, phi about the source
+image X axis, and kappa about the axis from the source reference origin to the
+projection-plane origin.
 
 ### Mesh Sampling Structure
 
-Independent row and column strides are required:
+Independent row and column sampling is required:
 
 ```matlab
 meshSampling = struct();
@@ -400,237 +209,37 @@ meshSampling.RowIndices = rowIndices;
 meshSampling.ColumnIndices = columnIndices;
 ```
 
-The initial defaults can be:
+The app maintains default mesh sampling and coarser drag-preview sampling. On
+mouse release, the selected operation refreshes back to default sampling.
 
-```matlab
-RowStride = 16;
-ColumnStride = 8;
-```
+## Projection And View Model
 
-These are only defaults. The app can expose them later.
-
-## Proposed File Layout
-
-The names below are suggestions. Keep code small and focused.
+The conceptual pipeline is:
 
 ```text
-src/
-    PlanarProjection.m
-    ProjectionViewerHarness.m
-    ProjectionSceneBuilder.m
-    ProjectionMeshBuilder.m
-    ProjectionViewerApp.m
-
-tests/
-    PlanarProjectionTest.m
-    ProjectionViewerHarnessTest.m
-    ProjectionMeshBuilderTest.m
-
-docs/
-    viewer_development_plan.md
-
-runProjectionViewerPrototype.m
+source image and source collection geometry
+    -> sample source origins and view vectors
+    -> apply per-layer OPK view-vector corrections
+    -> intersect rays with a shared projection plane
+    -> apply per-layer projection-plane offsets
+    -> preview projected textures in a fixed frame-camera-style view
+    -> optionally render exact headless frame-camera readback
 ```
 
-### `ProjectionViewerHarness`
-
-Purpose:
-
-- load the local TIFF
-- create the first synthetic source geometry
-- create the base projection plane
-- create the fixed frame camera
-- return a complete single-layer scene
-
-Likely public entry point:
+The shared projection plane can be created from:
 
 ```matlab
-scene = ProjectionViewerHarness.createDefaultScene(imagePath, options);
+plane = PlanarProjection.definePlane(G0, V0, V1, R0);
+plane = PlanarProjection.defineStereoPlane(G1, V1, R1, G2, V2, R2);
+plane = PlanarProjection.defineFitPlane(G0, V0, P1, P2, P3, P4);
+plane = PlanarProjection.definePlaneFromBasis(P0, VX, VY);
 ```
 
-Suggested options:
+The harness supports `ProjectionPlaneMode` values `"current"`, `"fit"`, and
+`"stereo"`, and it also accepts an explicit projection plane.
 
-```matlab
-options.GSD = 0.5;
-options.NominalRange = 10000;
-options.RowStride = 16;
-options.ColumnStride = 8;
-options.PlatformDirection = [0; 0; 1];
-```
-
-### `ProjectionSceneBuilder`
-
-Purpose:
-
-- create validated scene/layer/source geometry structs
-- centralize defaults
-- avoid app callbacks assembling ad hoc state
-
-Likely functions:
-
-```matlab
-scene = ProjectionSceneBuilder.makeSingleLayerScene(imageData, sourceGeometry, plane, camera, options);
-layer = ProjectionSceneBuilder.makeLayer(imageData, sourceGeometry, plane, options);
-```
-
-### `ProjectionMeshBuilder`
-
-Purpose:
-
-- build sampled ray-plane intersection mesh
-- apply local render-origin shifting
-- produce arrays suitable for MATLAB texture-mapped surfaces
-- remain independent of graphics handles
-
-Likely function:
-
-```matlab
-mesh = ProjectionMeshBuilder.buildLayerMesh(layer, plane, renderOrigin);
-```
-
-Suggested mesh fields:
-
-```matlab
-mesh = struct();
-mesh.X = X;
-mesh.Y = Y;
-mesh.Z = Z;
-mesh.RowIndices = rowIndices;
-mesh.ColumnIndices = columnIndices;
-mesh.Texture = textureData;
-mesh.Alpha = alpha;
-```
-
-### Render Options Structure
-
-Exact readback and preview generation should accept explicit options rather than relying on hardcoded choices.
-
-Suggested first fields:
-
-```matlab
-renderOptions = struct();
-renderOptions.Interpolation = "bilinear";
-renderOptions.UseGPU = false;
-renderOptions.InvalidIntersectionPolicy = "error";
-```
-
-Interpolation should default to `"bilinear"`. Other values can be added later, but the option should exist from the beginning so algorithm comparisons do not require API changes.
-
-`InvalidIntersectionPolicy` controls what happens when a sampled source ray intersects the projection plane behind the source origin. In a properly defined geometric setup this is not expected. The first safe behavior should be to detect it and report it clearly rather than silently rendering misleading geometry.
-
-### `ProjectionViewerApp`
-
-Purpose:
-
-- programmatic MATLAB app, not `.mlapp`
-- show one projected image layer
-- provide controls for tip, tilt, transparency
-- provide 2D-style pan/zoom over the fixed frame-camera output
-
-Expected construction:
-
-```matlab
-app = ProjectionViewerApp(scene);
-```
-
-UI components:
-
-- main display area
-- slider for tip
-- slider for tilt
-- slider for transparency
-- optional labels showing current values
-- optional reset button
-
-Implementation guidance:
-
-- use `uifigure` and `uigridlayout`
-- store component handles as private properties
-- keep layout construction separate from computation
-- keep callbacks short
-- update existing graphics objects in callbacks
-
-### `runProjectionViewerPrototype.m`
-
-Purpose:
-
-- add `src` to the MATLAB path
-- locate `test_data/10.tif`
-- create the default scene
-- launch the app
-
-The launcher should be convenient for manual testing.
-
-## Rendering Implementation Notes
-
-### Texture-Mapped Surface Preview
-
-The first preview can use a MATLAB graphics surface:
-
-```matlab
-h = surface(ax, X, Y, Z, textureData, ...
-    FaceColor="texturemap", ...
-    EdgeColor="none");
-```
-
-Then update only existing properties:
-
-```matlab
-h.XData = Xnew;
-h.YData = Ynew;
-h.ZData = Znew;
-h.FaceAlpha = alpha;
-```
-
-If full-resolution texture updates are too slow, the first preview may use a downsampled texture while preserving the same mesh geometry. This should be an app/display choice, not part of the backend geometry model.
-
-### 2D-Style Mouse Interaction
-
-The user should feel like they are viewing a static output image in a normal 2D viewer.
-
-Initial behavior:
-
-- pan and zoom are allowed
-- free 3D orbit is not part of the first target
-- camera orientation remains tied to the fixed frame camera
-
-Implementation trade space:
-
-- A high-level `viewer2d` plus `imageshow` path is useful for later exact readback display.
-- The projected texture preview likely needs `uiaxes` or axes-based graphics to display a texture-mapped surface.
-- If a strict 2D viewer experience conflicts with 3D surface rendering, prefer a two-stage display:
-  - render preview from fixed camera into an image-like view, then show it in `viewer2d`
-  - keep the lower-level surface preview available for diagnostics
-
-This choice should be revisited after the first performance experiment.
-
-### Event Coalescing
-
-Slider updates should avoid processing every intermediate event when the user drags quickly.
-
-Possible first implementation:
-
-- use `ValueChangingFcn` for lightweight preview updates
-- use `ValueChangedFcn` for final settled update
-- keep a timestamp or dirty flag if needed
-- call `drawnow limitrate`
-
-The app should always converge to the latest slider state.
-
-## Plane Tip/Tilt Update
-
-Given a base plane:
-
-```matlab
-plane0.P0
-plane0.basis(:, 1)   % local X
-plane0.basis(:, 2)   % local Y
-plane0.VN
-```
-
-Tip and tilt should rotate the projection plane around its local axes. Keep `P0` fixed in the first implementation.
-
-Conceptual update:
+Tip and tilt rotate the current projection plane about its local axes while
+keeping `P0` fixed:
 
 ```matlab
 Rtip = rotationAboutAxis(plane0.basis(:, 1), tipRadians);
@@ -642,109 +251,145 @@ VY = R * plane0.basis(:, 2);
 plane = PlanarProjection.definePlaneFromBasis(plane0.P0, VX, VY);
 ```
 
-Implementation note: if the order of rotations becomes visually important, make it explicit in docs and tests. Start with `R = Rtilt * Rtip`.
-
-## Future Sensor Geometry Manipulation
-
-The first app should manipulate only the projection plane. Sensor geometry and frame camera remain fixed.
-
-The architecture should still allow future controls that modify source geometry, such as:
-
-- platform origin offsets
-- attitude perturbations
-- scan-angle bias
-- range or altitude perturbations
-- synthetic geometry parameters
-
-These future controls should update the same source geometry provider contract:
+The frame camera is defined with:
 
 ```matlab
-[G, V] = sourceGeometry.SampleFcn(rowIndices, columnIndices);
+camera = PlanarProjection.defineFrameCamera(G0, V0, F, referencePlane);
 ```
 
-They should not require the mesh builder or renderer to know whether geometry came from a synthetic model, a real camera model, or an interactive perturbation layer.
+The camera/view geometry remains fixed while projection plane and layer
+corrections are manipulated. Twist rolls the viewer camera up vector about the
+camera view direction; it does not rotate the projection plane.
 
-## Synthetic Geometry Details
+## Interactive Viewer Controls
 
-The first synthetic geometry does not need to be physically exact. It should be clear, stable, and representative enough to exercise the pipeline.
+The app is programmatic MATLAB UI code using `uifigure` and `uigridlayout`, not
+an App Designer `.mlapp` file.
 
-Inputs:
+Current controls:
 
-- image height `H`
-- image width `W`
-- GSD `0.5 m`
-- nominal range `10000 m`
-- center pixel approximately `[H/2, W/2]`
+- mouse wheel zooms the view.
+- plain left-drag pans the camera.
+- Shift + wheel adjusts projection-plane tip.
+- Alt/Option + wheel adjusts projection-plane tilt.
+- Control + wheel adjusts camera twist.
+- W/A/S/D translates the selected layer up/left/down/right on the projection
+  plane.
+- Control + left-drag translates the selected layer on the projection plane.
+- I/K adjust phi.
+- J/L adjust omega.
+- U/O adjust kappa.
+- Control + right-drag adjusts omega and phi so the selected layer tracks the
+  mouse drag.
+- layer dropdown selects the active layer.
+- alpha slider changes selected-layer alpha.
+- Visible checkbox changes selected-layer visibility.
+- blend dropdown supports `"alpha"` and `"redBlueAnaglyph"`.
+- Cycle advances the single-active-layer change workflow.
+- Save/Load write and read JSON viewer state.
+- Reset returns tip, tilt, twist, and alpha to defaults and restores the frame
+  camera view.
 
-Approximate focal-plane dimensions:
+Omega and phi keyboard steps default to one estimated IFOV for the selected
+layer. Kappa defaults to `0.1` degrees.
+
+## Preview Versus Exact Rendering
+
+### Interactive Preview
+
+The app uses MATLAB graphics surfaces:
 
 ```matlab
-widthMeters = W * GSD;
-heightMeters = H * GSD;
+h = surface(ax, X, Y, Z, textureData, ...
+    FaceColor="texturemap", ...
+    EdgeColor="none");
 ```
 
-Build camera-frame detector rays from focal-plane offsets:
+Callbacks update existing surface `XData`, `YData`, `ZData`, `CData`,
+`FaceAlpha`, and `Visible` values. Multi-layer preview surfaces share the same
+projection plane and use a display-only depth bias along the frame-camera view
+direction to avoid renderer depth fighting.
+
+### Headless Readback
+
+`ProjectionReadbackRenderer.renderScene(scene, options)` renders visible layers
+without MATLAB graphics. It currently supports:
+
+- deterministic output images.
+- configurable `OutputSize`.
+- interpolation values `"bilinear"` and `"nearest"`.
+- single-band and RGB outputs.
+- visible-layer filtering.
+- alpha compositing.
+- red/blue anaglyph compositing.
+
+The readback prototype is suitable for qualitative and unit-test validation. It
+is not yet a production tiled renderer for very large images.
+
+### Preview/Exact Comparison
+
+An app mode that shows preview, exact readback, and difference/flicker views is
+not yet implemented. This remains a likely next milestone.
+
+## Viewer State
+
+`ProjectionViewerState` validates, encodes, decodes, writes, and reads a
+JSON-serializable state:
 
 ```matlab
-xMeters = (x - centerX) * GSD;
-yMeters = (y - centerY) * GSD;
-Vcamera = normalize([xMeters; yMeters; nominalRange]);
+state.Format
+state.Version
+state.LayerCount
+state.SelectedLayerIndex
+state.Projection.TipDegrees
+state.Projection.TiltDegrees
+state.View.TwistDegrees
+state.Camera.Position
+state.Camera.Target
+state.Camera.UpVector
+state.Camera.ViewAngle
+state.Camera.Projection
+state.Layers(k).Alpha
+state.Layers(k).Visible
+state.Layers(k).BlendMode
+state.Layers(k).ProjectionOffsetMeters
+state.Layers(k).ViewVectorAngularOffsetsDegrees
 ```
 
-Then introduce collection geometry:
+The app can export/import state programmatically, construct from an initial
+state, and save/load state from GUI file dialogs.
 
-- column index controls platform origin.
-- row index controls camera ray.
-- first implementation may hold attitude constant.
+## Historical Milestone Status
 
-For sampled rows and columns:
+The original milestone plan is complete unless otherwise noted.
 
-```matlab
-Gsample(:, ix) = G0 + platformStepMeters * (xSample(ix) - centerX) * platformDirection;
-Vsample(:, iy, ix) = R(:, :, ix) * Vcamera(:, iy);
-```
+| Milestone | Status | Notes |
+| --- | --- | --- |
+| 1. Data model and harness | Complete | `ProjectionViewerHarness`, scene/layer/source structs, synthetic `SampleFcn`, RGB/single-band display prep, tests. |
+| 2. Pure mesh builder | Complete | `ProjectionMeshBuilder`, sampled intersections, render-origin shift, projection offsets, OPK correction support, tests. |
+| 3. Interactive app | Complete | Programmatic app, launcher, fixed camera-style preview, tip/tilt/alpha, pan/zoom, tests. |
+| 4. Responsiveness refinement | Complete | `drawnow limitrate`, drag-preview sampling, settled refresh, stable axes, reusable surfaces. |
+| 5. Exact backend readback prototype | Complete | Headless renderer with bilinear default, nearest option, RGB/single-band, alpha/anaglyph blending, tests. |
+| 6. Multi-layer extension | Complete | 1-N layers, independent alpha/visibility/blend/geometry, top-layer default, depth bias, layer cycling, tests. |
 
-The exact initial `platformStepMeters` can be derived from GSD or set to a simple value that keeps the projected mesh well-conditioned. Because the source image is rectified north-up and the first goal is framework performance, do not overfit these parameters.
+Post-milestone features already added:
 
-## Testing Plan
+- projection plane mode selection and explicit plane injection.
+- camera twist control.
+- modifier-wheel controls for tip, tilt, and twist.
+- image-axis decoration removal.
+- selected-layer WASD projection offsets.
+- selected-layer OPK view-vector corrections.
+- IFOV-derived omega/phi key steps.
+- sparse source-geometry grid adapter.
+- JSON state save/load.
+- compact UI control layout.
+- Control + left-drag layer translation.
+- Control + right-drag omega/phi correction.
 
-### Unit Tests
+## Validation
 
-Add tests for pure functions first.
-
-Suggested tests:
-
-- default harness creates a scene with one layer
-- scene has valid frame camera and projection plane
-- source geometry exposes the `SampleFcn(rowIndices, columnIndices)` contract
-- synthetic and stub real-geometry providers can be consumed through the same interface
-- row and column strides produce expected index vectors
-- sampled origins have one origin per sampled column
-- sampled vectors have one vector per sampled row/column
-- single-band and RGB images can both be prepared for display
-- mesh builder returns `X`, `Y`, and `Z` arrays with size `[numRows numColumns]`
-- mesh vertices are finite
-- alpha is clamped or validated in `[0, 1]`
-- tip/tilt update preserves a valid plane
-- local render-origin shifting is applied consistently
-
-### App Smoke Tests
-
-The app can initially be verified manually. Later, add a smoke test that launches and closes the app if reliable in the local MATLAB environment.
-
-Manual checks:
-
-- app launches from `runProjectionViewerPrototype`
-- image appears
-- pan/zoom feels responsive
-- tip slider changes projected geometry
-- tilt slider changes projected geometry
-- transparency slider changes alpha
-- reset returns to the initial plane
-
-### Existing Tests
-
-Continue running:
+Default validation remains:
 
 ```matlab
 results = runTests;
@@ -756,207 +401,86 @@ or:
 buildtool test
 ```
 
-## Performance Plan
+The current suite exercises pure geometry, scene construction, sparse geometry,
+mesh building, readback, layer workflows, state serialization, and app
+interactions.
 
-### First Performance Target
+## Active Roadmap For Discussion
 
-For the current TIFF, the app should feel responsive with preview geometry around:
+The items below are intentionally not resolved in this cleanup. They should be
+prioritized and specified with user guidance before implementation.
 
-```matlab
-RowStride = 16;
-ColumnStride = 8;
-```
+### Real Sensor Geometry Ingestion
 
-For a `3228 x 3320` image, this yields roughly:
+The current bridge is `ProjectionSourceGeometry.fromGrid`. The next step is to
+define how sensor-specific camera-model output should be packaged into sparse
+geometry grids, metadata, correction axes, and optional IFOV values.
 
-- `203` sampled rows
-- `415` sampled columns
-- about `84k` mesh vertices
+### Source Geometry Manipulation Model
 
-If that is too slow, increase the strides or use a coarser drag-preview mesh.
+The app now supports per-layer projection offsets and OPK view-vector
+corrections. Broader sensor-geometry controls may include platform origin
+offsets, attitude perturbations, scan-angle bias, range/altitude corrections, or
+synthetic-geometry parameter edits. These should keep using the `SampleFcn`
+contract and should not require mesh-builder special cases.
 
-### Progressive Quality
+### Preview/Exact Comparison Mode
 
-Use two quality levels:
+A comparison view could show interactive preview, exact readback, and
+difference/flicker output. This would help quantify where MATLAB graphics
+interpolation and camera behavior differ from the headless renderer.
 
-- drag preview: coarse mesh and optional downsampled texture
-- settled preview: denser mesh and full or higher-resolution texture
+### Large-Image Tiling And Pyramids
 
-The first implementation can start with only one quality level. The code should not prevent adding progressive quality later.
-
-### Large-Image Future
-
-Real imagery is expected to be commonly around `15000 x 10000`, with possible growth to roughly `30000 x 20000`. These are large but still within the range of modern workstation memory and graphics hardware when handled carefully.
-
-For larger remote-sensing imagery, consider:
-
-- `blockedImage`
-- image pyramids
-- tile selection based on zoom
-- lower-resolution textures during interaction
-- full-resolution exact readback outside the UI loop
-
-The first implementation does not need full out-of-core tiling, but it should avoid architectural choices that require dense full-resolution 3D vectors or multiple full-size temporary images.
+For `15000 x 10000` to `30000 x 20000` imagery, likely future work includes
+`blockedImage`, image pyramids, zoom-dependent tile selection, lower-resolution
+textures during interaction, and full-resolution exact readback outside the UI
+loop.
 
 ### Optional GPU Path
 
-GPU acceleration should be planned as an optional optimization for Windows or other MATLAB GPU-supported systems.
+GPU support should remain optional and CPU-equivalent. Candidate acceleration
+targets are sampled ray generation, ray-plane intersections, interpolation, and
+readback resampling.
 
-Guidelines:
+### Geometry API Ray/Line Semantics
 
-- CPU implementation must remain complete and tested.
-- GPU execution should be opt-in or automatically enabled only after capability checks.
-- Use `gpuArray` only inside pure numeric compute functions.
-- Gather arrays before assigning to MATLAB graphics objects.
-- Keep CPU and GPU results numerically comparable in tests where practical.
-- Do not introduce APIs that require callers to know whether data is currently CPU or GPU unless a future performance review proves that necessary.
+`tracked_issues.md` records a ray-versus-line ambiguity:
 
-## Milestone Implementation Plan
+- `PlanarProjection.intersectPlane` currently allows signed line-plane
+  intersections.
+- `PlanarProjection.triangulateRays` currently solves closest points for
+  infinite lines.
 
-### Milestone 1: Documented Data Model And Harness
+Before exact backend readback becomes authoritative, decide whether these APIs
+should enforce forward-ray semantics or be documented/renamed as signed-line
+operations.
 
-Deliverables:
+### Blend And Change-Detection Workflows
 
-- `ProjectionViewerHarness`
-- scene/layer/source geometry structs
-- tests for default scene creation
+Current blend support is alpha and red/blue anaglyph, plus layer cycling. Future
+work may add difference, flicker, swipe, false-color, checkerboard, or other
+change/stereo workflows.
 
-Acceptance criteria:
+### Scene Builder Boundary
 
-- default scene loads `test_data/10.tif`
-- scene contains one layer
-- image metadata and synthetic geometry are internally consistent
-- tests pass
+The original plan proposed `ProjectionSceneBuilder`, but current responsibilities
+are covered by `ProjectionViewerHarness`, `ProjectionSourceGeometry`, and
+validation in downstream helpers. Either keep this implicit boundary or add a
+small scene builder only if it removes real duplication as real sensor ingestion
+becomes clearer.
 
-### Milestone 2: Pure Mesh Builder
+## Standing Implementation Rules
 
-Deliverables:
-
-- `ProjectionMeshBuilder`
-- sampled ray-plane intersections
-- local render-origin shifting
-- tests for mesh shape and finite vertices
-
-Acceptance criteria:
-
-- mesh builds without graphics
-- mesh dimensions match sampled rows/columns
-- changing tip/tilt changes mesh vertices
-- tests pass
-
-### Milestone 3: First Interactive App
-
-Deliverables:
-
-- `ProjectionViewerApp`
-- `runProjectionViewerPrototype.m`
-- tip, tilt, and alpha sliders
-- fixed frame-camera-style view
-
-Acceptance criteria:
-
-- app launches
-- projected image is visible
-- sliders update without object recreation
-- mouse pan/zoom is usable and 2D-like
-- no obvious queued-event lag on the provided TIFF
-
-### Milestone 4: Responsiveness Refinement
-
-Deliverables:
-
-- event coalescing or `drawnow limitrate`
-- optional separate drag and settled quality
-- optional texture downsampling for preview
-
-Acceptance criteria:
-
-- rapid slider movement stays responsive
-- final display converges to the last slider state
-- UI remains explainable and deterministic from scene state
-
-### Milestone 5: Exact Backend Readback Prototype
-
-Deliverables:
-
-- pure renderer entry point
-- frame-camera readback using scene/layer state
-- configurable interpolation with initial default `"bilinear"`
-- initial output image generation without MATLAB graphics
-
-Acceptance criteria:
-
-- renderer runs headless
-- output image is deterministic
-- bilinear interpolation is the default and can be changed through an option
-- app state can be passed to renderer
-- preview and exact output can be compared qualitatively
-
-### Milestone 6: Multi-Layer Extension
-
-Deliverables:
-
-- multiple `scene.layers`
-- layer visibility and alpha controls
-- per-layer blend settings
-- initial red/blue anaglyph blend mode for stereo viewing
-- image cycling control for change workflows
-- support for stereo/change exploration
-
-Acceptance criteria:
-
-- two layers can render in one frame-camera view
-- each layer has independent geometry and alpha
-- stereo layers can be rendered as a red/blue anaglyph without preserving full true color
-- change workflows can toggle or cycle one image to `100%` alpha while other layers are `0%`
-- the first single-layer workflow remains simple
-
-## Agent Implementation Notes
-
-When coding from this plan:
-
-1. Keep the first code changes small and testable.
-2. Prefer pure functions for geometry and state construction.
-3. Keep MATLAB graphics handles out of scene/layer structs.
-4. Use `uifigure` and `uigridlayout` for app construction.
-5. Do not use App Designer `.mlapp` files.
-6. Avoid `imshow` for app image display. Use `imageshow`/`viewer2d` where displaying final image-like output is appropriate.
-7. For texture-mapped geometry, use existing surface/axes objects and update their data properties.
-8. Do not commit prototype TIFF data.
-9. Preserve compatibility with the existing `PlanarProjection` API.
-10. Add tests for core computation before tuning the UI.
-11. Keep CPU as the required execution path; add `gpuArray` only behind optional capability checks.
-12. Keep real sensor geometry integration focused on the `SampleFcn(rowIndices, columnIndices)` contract.
-13. Support single-band and RGB images in display preparation and tests.
-
-## Resolved Design Decisions
-
-These decisions should guide the first implementation:
-
-1. Exact frame-camera readback should start with bilinear interpolation.
-2. Interpolation should be configurable through an option.
-3. Ray-plane intersections behind the source origin are not expected in a properly defined geometric setup.
-4. The first implementation should detect invalid behind-origin intersections and report them clearly rather than silently rendering misleading output.
-5. Future app versions should allow source sensor geometry manipulation in addition to projection-plane manipulation.
-6. Each layer should have its own alpha value.
-7. Stereo viewing should eventually support red/blue anaglyph rendering, without requiring full true color preservation.
-8. Multi-image change workflows should eventually support cycling one layer to `100%` alpha while setting other layers to `0%`.
-
-## Open Questions
-
-These do not block the first implementation, but should be revisited:
-
-1. Should `PlanarProjection.definePlane` be wrapped for clearer image-axis semantics?
-2. Should the preview path render directly as a texture-mapped surface, or should it produce an intermediate image shown with `viewer2d`?
-3. Which invalid-intersection policy options are ultimately needed beyond the first `"error"` behavior?
-4. What exact UI should be used for future source geometry manipulation?
-5. What blend modes beyond alpha, red/blue anaglyph, and layer cycling are useful for stereo or image-to-image change workflows?
-
-## Known Geometry Caveat
-
-Previous review identified a ray-versus-line ambiguity in the current geometry helpers:
-
-- `PlanarProjection.intersectPlane` currently allows signed line-plane intersections.
-- `PlanarProjection.triangulateRays` currently solves closest points for infinite lines.
-
-The first viewer prototype can proceed with this behavior if synthetic geometry keeps intersections in front of the source origins. Before exact backend readback becomes authoritative, decide whether these APIs should enforce forward-ray semantics or be documented as signed-line operations.
+1. Keep CPU complete and tested.
+2. Do not require GPU support.
+3. Keep MATLAB app code programmatic; do not use `.mlapp` files.
+4. Keep graphics handles out of scene/layer/source structs.
+5. Prefer pure functions for geometry, mesh construction, readback, and state
+   serialization.
+6. Keep source geometry integration centered on
+   `SampleFcn(rowIndices, columnIndices)`.
+7. Support RGB and single-band imagery.
+8. Do not commit local prototype TIFFs or local agent notes.
+9. Preserve the existing `PlanarProjection` API unless a deliberate geometry
+   semantics decision changes it.
