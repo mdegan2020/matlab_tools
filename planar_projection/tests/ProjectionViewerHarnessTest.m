@@ -50,6 +50,26 @@ classdef ProjectionViewerHarnessTest < matlab.unittest.TestCase
             testCase.verifyEqual(scene.layers.ImageMetadata.ImageSize, [5 5]);
         end
 
+        function testCreateDefaultSceneLoadsMultipleImagePaths(testCase)
+            imagePath1 = string(tempname) + ".tif";
+            imagePath2 = string(tempname) + ".tif";
+            imageData1 = uint8(reshape(1:60, 4, 5, 3));
+            imageData2 = uint8(reshape(1:72, 6, 4, 3));
+            imwrite(imageData1, imagePath1);
+            imwrite(imageData2, imagePath2);
+            testCase.addTeardown(@() delete(imagePath1));
+            testCase.addTeardown(@() delete(imagePath2));
+
+            scene = ProjectionViewerHarness.createDefaultScene( ...
+                [imagePath1 imagePath2], ProjectionViewerHarnessTest.makeOptions());
+
+            testCase.verifyNumElements(scene.layers, 2);
+            testCase.verifyEqual(scene.layers(1).Image, imageData1);
+            testCase.verifyEqual(scene.layers(2).Image, imageData2);
+            testCase.verifyEqual(scene.layers(1).ImageMetadata.ImageSize, [4 5]);
+            testCase.verifyEqual(scene.layers(2).ImageMetadata.ImageSize, [6 4]);
+        end
+
         function testSourceGeometrySampleFunctionUsesRowColumnContract(testCase)
             imageData = zeros(6, 7, "uint8");
             scene = ProjectionViewerHarness.createSceneFromImage( ...
@@ -82,6 +102,38 @@ classdef ProjectionViewerHarnessTest < matlab.unittest.TestCase
             testCase.verifyEqual(meshSampling.ColumnStride, 7);
             testCase.verifyEqual(meshSampling.RowIndices, [1 6 11 16 17]);
             testCase.verifyEqual(meshSampling.ColumnIndices, [1 8 15 19]);
+        end
+
+        function testCreateSceneFromImagesBuildsIndependentOverlappingLayers(testCase)
+            imageData1 = zeros(5, 6, "uint8");
+            imageData2 = ones(7, 4, "uint8");
+            options = ProjectionViewerHarnessTest.makeOptions();
+            options.RowStride = 1;
+            options.ColumnStride = 1;
+
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                {imageData1, imageData2}, ["layer1.tif", "layer2.tif"], options);
+            mesh1 = ProjectionMeshBuilder.buildLayerMesh( ...
+                scene.layers(1), scene.layers(1).CurrentProjectionPlane, scene.renderOrigin);
+            mesh2 = ProjectionMeshBuilder.buildLayerMesh( ...
+                scene.layers(2), scene.layers(2).CurrentProjectionPlane, scene.renderOrigin);
+            centerDistance = norm(ProjectionViewerHarnessTest.meshCenter(mesh1) - ...
+                ProjectionViewerHarnessTest.meshCenter(mesh2));
+
+            testCase.verifyNumElements(scene.layers, 2);
+            testCase.verifyEqual(scene.layers(1).SourceGeometry.ImageSize, [5 6]);
+            testCase.verifyEqual(scene.layers(2).SourceGeometry.ImageSize, [7 4]);
+            testCase.verifyEqual(scene.layers(1).BaseProjectionPlane, ...
+                scene.layers(2).BaseProjectionPlane);
+            testCase.verifyGreaterThan(norm( ...
+                scene.layers(1).SourceGeometry.ReferenceOrigin - ...
+                scene.layers(2).SourceGeometry.ReferenceOrigin), 0);
+            testCase.verifyGreaterThan(norm( ...
+                scene.layers(1).SourceGeometry.OpticalAxis - ...
+                scene.layers(2).SourceGeometry.OpticalAxis), 0);
+            testCase.verifyLessThan(centerDistance, ...
+                min(ProjectionViewerHarnessTest.meshSpan(mesh1), ...
+                ProjectionViewerHarnessTest.meshSpan(mesh2)));
         end
 
         function testProjectionPlaneModeStereoUsesStereoPlane(testCase)
@@ -205,6 +257,16 @@ classdef ProjectionViewerHarnessTest < matlab.unittest.TestCase
         function plane = makeCustomPlane()
             plane = PlanarProjection.definePlaneFromBasis( ...
                 [9000; 10; 20], [0; 1; 0], [0; 0; 1]);
+        end
+
+        function center = meshCenter(mesh)
+            points = reshape(mesh.WorldPoints, 3, []);
+            center = mean(points, 2);
+        end
+
+        function span = meshSpan(mesh)
+            points = reshape(mesh.WorldPoints, 3, []);
+            span = norm(max(points, [], 2) - min(points, [], 2));
         end
     end
 end

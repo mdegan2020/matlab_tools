@@ -1,5 +1,5 @@
 function app = runProjectionViewerPrototype(imagePath, options)
-%runProjectionViewerPrototype Launch the programmatic projection viewer app.
+%runProjectionViewerPrototype Launch the projection viewer app for one or more images.
 
 projectRoot = fileparts(mfilename("fullpath"));
 addpath(fullfile(projectRoot, "src"));
@@ -7,7 +7,9 @@ addpath(fullfile(projectRoot, "src"));
 if nargin < 2
     options = struct();
 end
-if nargin < 1 || strlength(string(imagePath)) == 0
+if nargin < 1 || isempty(imagePath) || ...
+        ((ischar(imagePath) || isstring(imagePath)) && ...
+        isscalar(string(imagePath)) && strlength(string(imagePath)) == 0)
     scene = ProjectionViewerHarness.createDefaultScene("", options);
 else
     scene = ProjectionViewerHarness.createDefaultScene(imagePath, options);

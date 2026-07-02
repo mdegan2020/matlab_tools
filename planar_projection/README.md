@@ -145,6 +145,12 @@ app = runProjectionViewerPrototype;
 ```
 
 The default launcher expects the local ignored prototype image at `test_data/10.tif`.
+To launch the prototype with two local dummy textures:
+
+```matlab
+app = runProjectionViewerPrototype(["test_data/10.tif", "test_data/100.tif"]);
+```
+
 Use the mouse wheel over the view to zoom. Hold Shift while spinning the mouse
 wheel to adjust Tip, Alt/Option for Tilt, and Control for Twist camera roll.
 
