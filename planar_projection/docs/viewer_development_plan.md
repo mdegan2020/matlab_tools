@@ -642,10 +642,254 @@ Feedback checkpoint:
 - Exercise the complete operator workflow: align in app, export job, run backend,
   inspect composite and per-layer products.
 
+## Auto Alignment Feature Tree
+
+Auto alignment should begin as an interactive viewer workflow and later become a
+backend-capable processing step. The core implementation should be a reusable
+feature-based alignment engine, with the GUI and backend acting as clients of
+the same pure alignment helpers.
+
+### Auto Alignment Design Decisions
+
+- Initial matching should be feature based on projection-plane working images.
+- Candidate detectors/descriptors include SIFT, SURF, ORB, or MATLAB-supported
+  equivalents, with capability checks and clear fallback behavior.
+- Matching should run over the full layer overlap at first.
+- Manual rectangular ROI/rubber-band selection is a later GUI enhancement.
+- The first solver should adjust per-image `omega`, `phi`, and `kappa`
+  corrections only.
+- Do not include WASD projection offsets in the first solver because small
+  translations and small angular corrections can become difficult to separate.
+- A future optional focal-length correction may be represented as one shared
+  image-Y scale factor for all images, reflecting the fixed-camera linear-array
+  scanner model.
+- The default matching reference should be the middle image by input order.
+- The project plane is assumed to be closest to the center perspective when the
+  user sets up the scene.
+- The reference image is a scheduling/reference image, not a fixed truth anchor.
+  All images, including the reference, may move within correction bounds.
+- Correction bounds should be tied to image angular scale. The default hard cap
+  should be less than one quarter of the full field of view, for example
+  `0.25 * min(horizontalFOV, verticalFOV)`.
+- Solvers must include least-adjustment regularization so the solution stays
+  close to the original pointing knowledge and does not drift or run away.
+- The first loss mode should minimize two-dimensional feature residuals on the
+  projection plane.
+- A second loss mode should evaluate ray-to-ray closest approach between matched
+  feature observations.
+- Non-planar terrain or DEM-constrained losses may be added later if ray-to-ray
+  closest approach is too noisy.
+- The existing external feature-match direction/magnitude filter should be
+  integrated later as a pluggable `RadialFilterFcn`.
+
+### Auto Alignment Milestones
+
+#### Auto Alignment Milestone 1: Alignment Request And Result Model
+
+Deliverables:
+
+- `ProjectionAlignmentRequest`, `ProjectionAlignmentOptions`, and
+  `ProjectionAlignmentResult` structs or equivalent helpers.
+- option fields for detector, matcher, filter pipeline, loss mode, scheduling
+  strategy, movable parameters, bounds, regularization weights, and diagnostics.
+- result fields for matched pairs, inliers, residuals, solved corrections,
+  convergence state, warnings, and timing.
+- tests for option defaults, validation, and serialization compatibility.
+
+Feedback checkpoint:
+
+- Review request/result structs before wiring them into the viewer so the model
+  remains usable from both GUI and backend code.
+
+#### Auto Alignment Milestone 2: Projection-Plane Working Images
+
+Deliverables:
+
+- pure helper that renders selected layers into common projection-plane analysis
+  images at a controlled resolution.
+- overlap-mask generation for each layer and layer pair.
+- mappings from working-image pixels back to projection-plane coordinates and
+  source observations.
+- explicit separation from the display z-stagger used by the GUI renderer.
+- tests for overlap extent, mask generation, coordinate mapping, and
+  single-band/RGB handling.
+
+Feedback checkpoint:
+
+- Inspect working images and masks from representative two-layer and multi-layer
+  scenes before depending on them for feature matching.
+
+#### Auto Alignment Milestone 3: Feature Detection And Matching
+
+Deliverables:
+
+- detector/matcher abstraction with capability checks for available MATLAB
+  feature methods.
+- feature extraction on projection-plane working images.
+- pairwise match table containing feature locations, scores, descriptors or
+  descriptor references, and coordinate mappings.
+- GUI diagnostic view for matched features without applying corrections.
+- focused tests using synthetic or small fixture images where matches are known
+  or at least structurally valid.
+
+Feedback checkpoint:
+
+- Compare detector choices on actual representative imagery and pick the first
+  default for prototype alignment.
+
+#### Auto Alignment Milestone 4: Match Filtering Pipeline
+
+Deliverables:
+
+- descriptor-score and ratio/uniqueness filtering.
+- overlap-mask filtering.
+- geometric outlier rejection for projection-plane matches.
+- pluggable `RadialFilterFcn` hook for the external direction/magnitude filter.
+- diagnostics that record how many matches survive each stage.
+- tests for filter ordering, mask rejection, radial-filter callback behavior,
+  and deterministic diagnostics.
+
+Feedback checkpoint:
+
+- Import and evaluate the existing radial filter on difficult oblique data, then
+  decide whether it becomes default, optional, or data-condition dependent.
+
+#### Auto Alignment Milestone 5: Two-Image 2D OPK Solver
+
+Deliverables:
+
+- two-image solver that minimizes projection-plane feature residuals.
+- per-image `omega`, `phi`, and `kappa` corrections for both images.
+- scale-aware bounds derived from approximate image field of view.
+- least-adjustment regularization toward the starting pointing knowledge.
+- robust residual weighting to reduce sensitivity to remaining outliers.
+- preview/apply/revert support for solved corrections.
+- tests for known synthetic perturbations, bounds enforcement,
+  regularization behavior, and solver diagnostics.
+
+Feedback checkpoint:
+
+- Run on a few real two-image examples and compare visual alignment, residual
+  statistics, and correction magnitudes before expanding to N images.
+
+#### Auto Alignment Milestone 6: GUI Auto Alignment Workflow
+
+Deliverables:
+
+- compact viewer controls for reference layer, moving layer, detector, loss mode,
+  run/cancel, preview/apply, and revert.
+- live solver progress reporting.
+- match and inlier overlays on the projection viewer.
+- residual summary, correction summary, and warning display.
+- nonblocking or interruption-friendly execution where practical.
+- manual validation workflow in the README.
+
+Feedback checkpoint:
+
+- Exercise the full operator loop in the GUI: find matches, inspect matches,
+  solve, preview, apply, revert, and save state.
+
+#### Auto Alignment Milestone 7: Multi-Image Matching Scheduler
+
+Deliverables:
+
+- default reference index computed as the middle image by input order.
+- center-out pair scheduling for ordered image sets, such as image 4 against
+  images 3 and 5 before expanding toward images 1 and 7.
+- pluggable scheduling strategies for center-star, adjacent-chain, and hybrid
+  matching.
+- pairwise match diagnostics and confidence scoring.
+- tests for odd/even layer counts, schedule construction, and disabled/hidden
+  layers.
+
+Feedback checkpoint:
+
+- Compare center-star, adjacent-chain, and hybrid schedules on representative
+  multi-perspective data before picking the default beyond the center-out
+  prototype.
+
+#### Auto Alignment Milestone 8: Joint Multi-Image Solver
+
+Deliverables:
+
+- joint solver over all selected images using pairwise match residuals.
+- per-image `omega`, `phi`, and `kappa` corrections, including the middle
+  reference image.
+- least-adjustment regularization to remove gauge freedom and avoid global
+  drift.
+- pairwise residual reporting before and after solve.
+- tests for synthetic multi-image perturbations and solver stability.
+
+Feedback checkpoint:
+
+- Validate that allowing every image to move improves alignment without
+  producing unintuitive global rotations or runaway corrections.
+
+#### Auto Alignment Milestone 9: Optional Shared Focal/Y-Scale Correction
+
+Deliverables:
+
+- optional single shared focal-length or image-Y scale parameter for all images.
+- scale bounds and regularization separate from OPK bounds.
+- solver tests showing when the shared scale parameter helps versus when OPK
+  corrections alone are sufficient.
+
+Feedback checkpoint:
+
+- Decide whether the shared scale correction is necessary for the first real
+  sensor workflow or should remain an advanced option.
+
+#### Auto Alignment Milestone 10: Ray-To-Ray 3D Loss Mode
+
+Deliverables:
+
+- optional loss based on closest approach between matched feature rays.
+- coordinate mapping from matched projection-plane features back to source rays.
+- robust handling of near-parallel rays and noisy matches.
+- comparison diagnostics between 2D projection-plane loss and ray-to-ray loss.
+- tests for synthetic ray geometry and numerical stability.
+
+Feedback checkpoint:
+
+- Compare 2D and 3D losses on oblique terrain scenes and decide whether
+  ray-to-ray closest approach is useful before adding terrain-constrained losses.
+
+#### Auto Alignment Milestone 11: Backend Alignment Integration
+
+Deliverables:
+
+- backend job option to run alignment before rendering.
+- saved updated viewer state and alignment diagnostics.
+- composite and per-layer backend output using the aligned state.
+- CPU-complete execution path with later profiling for threads/GPU work if
+  alignment becomes a bottleneck.
+- tests for live and serialized backend jobs that include alignment options.
+
+Feedback checkpoint:
+
+- Run the complete headless workflow: load job, align, save diagnostics, render,
+  and compare output with the GUI-aligned result.
+
+#### Auto Alignment Milestone 12: Later GUI And Workflow Enhancements
+
+Deliverables:
+
+- manual rectangular ROI/rubber-band selection.
+- match table or inspection tool for accepting/rejecting pairs.
+- per-pair enable/disable controls for multi-image alignment.
+- alignment presets for fast preview versus high-quality solve.
+- documentation for recommended workflows and failure modes.
+
+Feedback checkpoint:
+
+- Decide which operator controls are genuinely useful after the automatic path
+  has been exercised on real data.
+
 ## Active Roadmap For Discussion
 
-The backend plan above is now the primary roadmap for readback work. The items
-below remain broader design topics to prioritize with user guidance.
+The backend and auto-alignment plans above are now the primary roadmaps for
+readback and alignment work. The items below remain broader design topics to
+prioritize with user guidance.
 
 ### Real Sensor Geometry Ingestion
 
