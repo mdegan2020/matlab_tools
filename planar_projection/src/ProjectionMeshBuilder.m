@@ -49,20 +49,15 @@ classdef ProjectionMeshBuilder
             mesh.SampledVectors = V;
         end
 
-        function plane = applyPlaneTipTilt(basePlane, tipRadians, tiltRadians, twistRadians)
-            %applyPlaneTipTilt Rotate a plane about local X/Y and world +Z.
-            if nargin < 4
-                twistRadians = 0;
-            end
+        function plane = applyPlaneTipTilt(basePlane, tipRadians, tiltRadians)
+            %applyPlaneTipTilt Rotate a plane about its local X and Y axes.
             PlanarProjection.validatePlane(basePlane);
             tipRadians = ProjectionMeshBuilder.validateScalar(tipRadians, "tipRadians");
             tiltRadians = ProjectionMeshBuilder.validateScalar(tiltRadians, "tiltRadians");
-            twistRadians = ProjectionMeshBuilder.validateScalar(twistRadians, "twistRadians");
 
             Rtip = ProjectionMeshBuilder.rotationAboutAxis(basePlane.basis(:, 1), tipRadians);
             Rtilt = ProjectionMeshBuilder.rotationAboutAxis(basePlane.basis(:, 2), tiltRadians);
-            Rtwist = ProjectionMeshBuilder.rotationAboutAxis([0; 0; 1], twistRadians);
-            R = Rtwist * Rtilt * Rtip;
+            R = Rtilt * Rtip;
 
             VX = R * basePlane.basis(:, 1);
             VY = R * basePlane.basis(:, 2);

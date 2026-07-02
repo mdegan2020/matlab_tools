@@ -9,7 +9,7 @@ classdef ProjectionViewerApp < handle
         DragMeshSampling struct
         LayerTipDegrees double
         LayerTiltDegrees double
-        LayerTwistDegrees double
+        ViewTwistDegrees double = 0
         SelectedLayerIndex double = 1
         IsPanning logical = false
         LastPointerLocation double = [NaN NaN]
@@ -47,7 +47,6 @@ classdef ProjectionViewerApp < handle
             numLayers = numel(app.Scene.layers);
             app.LayerTipDegrees = zeros(1, numLayers);
             app.LayerTiltDegrees = zeros(1, numLayers);
-            app.LayerTwistDegrees = zeros(1, numLayers);
             app.DefaultMeshSampling = app.Scene.layers(1).MeshSampling;
             app.DragMeshSampling = app.createDragMeshSampling();
             app.PreviewTimer = tic;
@@ -144,8 +143,8 @@ classdef ProjectionViewerApp < handle
             app.TwistSlider.Layout.Column = 4;
             app.TwistSlider.MajorTicks = -30:10:30;
             app.TwistSlider.ValueChangingFcn = @(source, event) ...
-                app.sliderChanging(source, event, "twist");
-            app.TwistSlider.ValueChangedFcn = @(~, ~) app.updateFromSliderValues();
+                app.twistChanging(source, event);
+            app.TwistSlider.ValueChangedFcn = @(~, ~) app.updateViewTwistFromSlider();
 
             app.AlphaLabel = uilabel(app.ControlGrid, Text="Alpha 1.00");
             app.AlphaLabel.Layout.Row = 1;
@@ -216,6 +215,35 @@ classdef ProjectionViewerApp < handle
             campos(app.Axes, cameraPosition.');
             camtarget(app.Axes, target.');
             camup(app.Axes, upVector.');
+            app.applyViewTwist();
+        end
+
+        function twistChanging(app, source, event)
+            source.Value = event.Value;
+            app.updateViewTwist(event.Value);
+        end
+
+        function updateViewTwistFromSlider(app)
+            app.updateViewTwist(app.TwistSlider.Value);
+        end
+
+        function updateViewTwist(app, twistDegrees)
+            app.ViewTwistDegrees = twistDegrees;
+            app.applyViewTwist();
+
+            layer = app.Scene.layers(app.SelectedLayerIndex);
+            app.updateLabels(app.LayerTipDegrees(app.SelectedLayerIndex), ...
+                app.LayerTiltDegrees(app.SelectedLayerIndex), ...
+                app.ViewTwistDegrees, layer.Alpha);
+            drawnow limitrate
+        end
+
+        function applyViewTwist(app)
+            baseUpVector = app.Scene.frameCamera.focalPlane.basis(:, 2);
+            viewDirection = camtarget(app.Axes).' - campos(app.Axes).';
+            upVector = app.rotateVectorAboutAxis( ...
+                baseUpVector, viewDirection, deg2rad(app.ViewTwistDegrees));
+            camup(app.Axes, upVector.');
         end
 
         function scrollZoom(app, event)
@@ -283,6 +311,14 @@ classdef ProjectionViewerApp < handle
                 pixelDelta(2) / heightPixels * viewHeight * upVector;
         end
 
+        function rotatedVector = rotateVectorAboutAxis(~, vector, axis, angle)
+            vector = vector(:);
+            axis = axis(:) / norm(axis);
+            K = [0 -axis(3) axis(2); axis(3) 0 -axis(1); -axis(2) axis(1) 0];
+            R = cos(angle) * eye(3) + (1 - cos(angle)) * (axis * axis.') + sin(angle) * K;
+            rotatedVector = R * vector;
+        end
+
         function tf = isPointerInAxes(app)
             pointer = app.UIFigure.CurrentPoint;
             axesPosition = app.Axes.InnerPosition;
@@ -295,7 +331,6 @@ classdef ProjectionViewerApp < handle
         function sliderChanging(app, source, event, sliderName)
             tipDegrees = app.LayerTipDegrees(app.SelectedLayerIndex);
             tiltDegrees = app.LayerTiltDegrees(app.SelectedLayerIndex);
-            twistDegrees = app.LayerTwistDegrees(app.SelectedLayerIndex);
             alpha = app.Scene.layers(app.SelectedLayerIndex).Alpha;
 
             switch sliderName
@@ -303,46 +338,41 @@ classdef ProjectionViewerApp < handle
                     tipDegrees = event.Value;
                 case "tilt"
                     tiltDegrees = event.Value;
-                case "twist"
-                    twistDegrees = event.Value;
                 case "alpha"
                     alpha = event.Value;
             end
 
             source.Value = event.Value;
-            app.updateLabels(tipDegrees, tiltDegrees, twistDegrees, alpha);
+            app.updateLabels(tipDegrees, tiltDegrees, app.ViewTwistDegrees, alpha);
             if toc(app.PreviewTimer) < app.MinPreviewInterval
                 return
             end
 
             app.PreviewTimer = tic;
-            app.updateProjection(tipDegrees, tiltDegrees, twistDegrees, alpha, ...
-                app.DragMeshSampling);
+            app.updateProjection(tipDegrees, tiltDegrees, alpha, app.DragMeshSampling);
         end
 
         function updateFromSliderValues(app)
             app.updateProjection(app.TipSlider.Value, app.TiltSlider.Value, ...
-                app.TwistSlider.Value, app.AlphaSlider.Value, app.DefaultMeshSampling);
+                app.AlphaSlider.Value, app.DefaultMeshSampling);
             app.PreviewTimer = tic;
         end
 
-        function updateProjection(app, tipDegrees, tiltDegrees, twistDegrees, alpha, meshSampling)
-            if nargin < 6
+        function updateProjection(app, tipDegrees, tiltDegrees, alpha, meshSampling)
+            if nargin < 5
                 meshSampling = app.DefaultMeshSampling;
             end
 
             layerIndex = app.SelectedLayerIndex;
             layer = app.Scene.layers(layerIndex);
             plane = ProjectionMeshBuilder.applyPlaneTipTilt( ...
-                layer.BaseProjectionPlane, deg2rad(tipDegrees), ...
-                deg2rad(tiltDegrees), deg2rad(twistDegrees));
+                layer.BaseProjectionPlane, deg2rad(tipDegrees), deg2rad(tiltDegrees));
             layer.CurrentProjectionPlane = plane;
             layer.Alpha = alpha;
             layer.MeshSampling = meshSampling;
             app.Scene.layers(layerIndex) = layer;
             app.LayerTipDegrees(layerIndex) = tipDegrees;
             app.LayerTiltDegrees(layerIndex) = tiltDegrees;
-            app.LayerTwistDegrees(layerIndex) = twistDegrees;
 
             app.CurrentMesh = ProjectionMeshBuilder.buildLayerMesh( ...
                 layer, plane, app.Scene.renderOrigin);
@@ -352,7 +382,7 @@ classdef ProjectionViewerApp < handle
             app.Surface.ZData = app.CurrentMesh.Z;
             app.Surface.FaceAlpha = app.CurrentMesh.Alpha;
             app.Surface.Visible = app.onOff(layer.Visible);
-            app.updateLabels(tipDegrees, tiltDegrees, twistDegrees, alpha);
+            app.updateLabels(tipDegrees, tiltDegrees, app.ViewTwistDegrees, alpha);
             drawnow limitrate
         end
 
@@ -368,7 +398,8 @@ classdef ProjectionViewerApp < handle
             app.TiltSlider.Value = 0;
             app.TwistSlider.Value = 0;
             app.AlphaSlider.Value = 1;
-            app.updateProjection(0, 0, 0, 1, app.DefaultMeshSampling);
+            app.ViewTwistDegrees = 0;
+            app.updateProjection(0, 0, 1, app.DefaultMeshSampling);
             app.configureFrameCamera();
         end
 
@@ -413,7 +444,7 @@ classdef ProjectionViewerApp < handle
             app.LayerDropDown.Value = app.SelectedLayerIndex;
             app.TipSlider.Value = app.LayerTipDegrees(app.SelectedLayerIndex);
             app.TiltSlider.Value = app.LayerTiltDegrees(app.SelectedLayerIndex);
-            app.TwistSlider.Value = app.LayerTwistDegrees(app.SelectedLayerIndex);
+            app.TwistSlider.Value = app.ViewTwistDegrees;
             app.AlphaSlider.Value = layer.Alpha;
             app.VisibleCheckBox.Value = layer.Visible;
             app.BlendModeDropDown.Value = string(layer.BlendMode);
