@@ -162,6 +162,8 @@ classdef ProjectionViewerHarness
             geometryData.OpticalAxis = opticalAxis;
             geometryData.RowAxis = rowAxis;
             geometryData.PlatformDirection = platformDirection;
+            geometryData.ImageXAxis = platformDirection;
+            geometryData.ImageYAxis = rowAxis;
             geometryData.Origins = origins;
             geometryData.CameraRays = cameraRays;
             geometryData.Attitudes = [];
@@ -421,6 +423,7 @@ classdef ProjectionViewerHarness
             layer.CurrentProjectionPlane = basePlane;
             layer.MeshSampling = meshSampling;
             layer.ProjectionOffsetMeters = [0; 0];
+            layer.ViewVectorAngularOffsetsDegrees = [0; 0; 0];
             layer.Alpha = 1.0;
             layer.BlendMode = "alpha";
             layer.Visible = true;

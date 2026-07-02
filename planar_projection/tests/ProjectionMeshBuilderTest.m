@@ -35,6 +35,10 @@ classdef ProjectionMeshBuilderTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(mesh.Z), "all"));
             testCase.verifySize(mesh.WorldPoints, [3 numRows numColumns]);
             testCase.verifySize(mesh.SampledVectors, [3 numRows numColumns]);
+            testCase.verifyEqual(mesh.ViewVectorAngularOffsetsDegrees, [0; 0; 0], ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
+            testCase.verifyEqual(mesh.ViewVectorRotationMatrix, eye(3), ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
         end
 
         function testBuildLayerMeshUsesSampleFunctionContract(testCase)
@@ -108,6 +112,32 @@ classdef ProjectionMeshBuilderTest < matlab.unittest.TestCase
                 AbsTol=ProjectionMeshBuilderTest.Tol);
         end
 
+        function testViewVectorAngularOffsetsRotateSamplesWithoutMovingOrigins(testCase)
+            scene = ProjectionMeshBuilderTest.makeScene();
+            layer = scene.layers;
+            plane = layer.CurrentProjectionPlane;
+            baseMesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                layer, plane, scene.renderOrigin);
+            layer.ViewVectorAngularOffsetsDegrees = [0.25; -0.15; 0.1];
+
+            correctedMesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                layer, plane, scene.renderOrigin);
+            expectedVectors = reshape( ...
+                correctedMesh.ViewVectorRotationMatrix * ...
+                reshape(baseMesh.SampledVectors, 3, []), ...
+                size(baseMesh.SampledVectors));
+            vertexDifference = max(abs( ...
+                correctedMesh.WorldPoints - baseMesh.WorldPoints), [], "all");
+
+            testCase.verifyEqual(correctedMesh.ViewVectorAngularOffsetsDegrees, ...
+                layer.ViewVectorAngularOffsetsDegrees, AbsTol=ProjectionMeshBuilderTest.Tol);
+            testCase.verifyEqual(correctedMesh.SampledOrigins, baseMesh.SampledOrigins, ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
+            testCase.verifyEqual(correctedMesh.SampledVectors, expectedVectors, ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
+            testCase.verifyGreaterThan(vertexDifference, 1e-3);
+        end
+
         function testBehindSourceIntersectionsError(testCase)
             scene = ProjectionMeshBuilderTest.makeScene();
             layer = scene.layers;
@@ -127,6 +157,17 @@ classdef ProjectionMeshBuilderTest < matlab.unittest.TestCase
                 @() ProjectionMeshBuilder.buildLayerMesh( ...
                 layer, layer.CurrentProjectionPlane, scene.renderOrigin), ...
                 "ProjectionMeshBuilder:invalidAlpha");
+        end
+
+        function testInvalidViewVectorAngularOffsetsError(testCase)
+            scene = ProjectionMeshBuilderTest.makeScene();
+            layer = scene.layers;
+            layer.ViewVectorAngularOffsetsDegrees = [0; NaN; 0];
+
+            testCase.verifyError( ...
+                @() ProjectionMeshBuilder.buildLayerMesh( ...
+                layer, layer.CurrentProjectionPlane, scene.renderOrigin), ...
+                "ProjectionMeshBuilder:invalidViewVectorCorrection");
         end
     end
 

@@ -21,6 +21,7 @@ classdef ProjectionViewerApp < handle
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
         ModifierWheelStepDegrees double = 1
+        ViewVectorCorrectionStepDegrees double = 0.1
         PreviewLayerDepthStepFraction double = 1e-4
         PreviewLayerDepthMinimumStepMeters double = 0.5
         MinProjectedNudgeNorm double = 1e-9
@@ -37,6 +38,7 @@ classdef ProjectionViewerApp < handle
         TiltLabel matlab.ui.control.Label
         TwistLabel matlab.ui.control.Label
         AlphaLabel matlab.ui.control.Label
+        ViewVectorLabel matlab.ui.control.Label
         LayerDropDown matlab.ui.control.DropDown
         VisibleCheckBox matlab.ui.control.CheckBox
         BlendModeDropDown matlab.ui.control.DropDown
@@ -99,12 +101,12 @@ classdef ProjectionViewerApp < handle
             app.Axes.Interactions = [];
             app.hideImageAxesDecorations();
 
-            app.ControlGrid = uigridlayout(app.GridLayout, [2 9]);
+            app.ControlGrid = uigridlayout(app.GridLayout, [2 10]);
             app.ControlGrid.Layout.Row = 2;
             app.ControlGrid.Layout.Column = 1;
             app.ControlGrid.RowHeight = {"fit", "fit"};
             app.ControlGrid.ColumnWidth = {"1.2x", "1x", "1x", "1x", "1x", ...
-                "fit", "1x", "fit", "fit"};
+                "1.2x", "fit", "1x", "fit", "fit"};
             app.ControlGrid.Padding = [0 0 0 0];
             app.ControlGrid.ColumnSpacing = 14;
 
@@ -163,30 +165,34 @@ classdef ProjectionViewerApp < handle
                 app.alphaChanging(source, event);
             app.AlphaSlider.ValueChangedFcn = @(~, ~) app.updateAlphaFromSlider();
 
+            app.ViewVectorLabel = uilabel(app.ControlGrid, Text="OPK 0.0/0.0/0.0 deg");
+            app.ViewVectorLabel.Layout.Row = [1 2];
+            app.ViewVectorLabel.Layout.Column = 6;
+
             app.VisibleCheckBox = uicheckbox(app.ControlGrid, Text="Visible", ...
                 Value=true, ValueChangedFcn=@(~, event) app.visibleChanged(event));
             app.VisibleCheckBox.Layout.Row = [1 2];
-            app.VisibleCheckBox.Layout.Column = 6;
+            app.VisibleCheckBox.Layout.Column = 7;
 
             blendLabel = uilabel(app.ControlGrid, Text="Blend");
             blendLabel.Layout.Row = 1;
-            blendLabel.Layout.Column = 7;
+            blendLabel.Layout.Column = 8;
             app.BlendModeDropDown = uidropdown(app.ControlGrid, ...
                 Items=["alpha", "redBlueAnaglyph"], ...
                 Value="alpha", ...
                 ValueChangedFcn=@(~, event) app.blendModeChanged(event));
             app.BlendModeDropDown.Layout.Row = 2;
-            app.BlendModeDropDown.Layout.Column = 7;
+            app.BlendModeDropDown.Layout.Column = 8;
 
             app.CycleButton = uibutton(app.ControlGrid, Text="Cycle", ...
                 ButtonPushedFcn=@(~, ~) app.cycleLayer());
             app.CycleButton.Layout.Row = [1 2];
-            app.CycleButton.Layout.Column = 8;
+            app.CycleButton.Layout.Column = 9;
 
             app.ResetButton = uibutton(app.ControlGrid, Text="Reset", ...
                 ButtonPushedFcn=@(~, ~) app.resetView());
             app.ResetButton.Layout.Row = [1 2];
-            app.ResetButton.Layout.Column = 9;
+            app.ResetButton.Layout.Column = 10;
         end
 
         function createSurface(app)
@@ -270,7 +276,8 @@ classdef ProjectionViewerApp < handle
             app.Axes.CameraViewAngle = cameraViewAngle;
         end
 
-        function nudgeSelectedLayerFromKey(app, event)
+        function handled = nudgeSelectedLayerFromKey(app, event)
+            handled = false;
             key = app.eventStringValue(event, "Key");
             if isempty(key)
                 return
@@ -280,6 +287,7 @@ classdef ProjectionViewerApp < handle
             if ~any(key == ["w", "a", "s", "d"])
                 return
             end
+            handled = true;
 
             layerIndex = app.SelectedLayerIndex;
             layer = app.Scene.layers(layerIndex);
@@ -349,6 +357,64 @@ classdef ProjectionViewerApp < handle
             end
         end
 
+        function handled = adjustSelectedLayerViewVectorCorrectionFromKey(app, event)
+            handled = false;
+            key = app.eventStringValue(event, "Key");
+            if isempty(key)
+                return
+            end
+
+            [componentIndex, direction] = app.viewVectorCorrectionKey(key(1));
+            if componentIndex == 0
+                return
+            end
+            handled = true;
+
+            layerIndex = app.SelectedLayerIndex;
+            layer = app.Scene.layers(layerIndex);
+            offsetsDegrees = app.layerViewVectorAngularOffsetsDegrees(layer);
+            offsetsDegrees(componentIndex) = offsetsDegrees(componentIndex) + ...
+                direction * app.ViewVectorCorrectionStepDegrees;
+            layer.ViewVectorAngularOffsetsDegrees = offsetsDegrees;
+            app.Scene.layers(layerIndex) = layer;
+            app.updateProjection(app.ProjectionTipDegrees, app.ProjectionTiltDegrees, ...
+                layer.Alpha, app.DefaultMeshSampling);
+            app.PreviewTimer = tic;
+        end
+
+        function [componentIndex, direction] = viewVectorCorrectionKey(~, key)
+            componentIndex = 0;
+            direction = 0;
+            switch key
+                case "j"
+                    componentIndex = 1;
+                    direction = -1;
+                case "l"
+                    componentIndex = 1;
+                    direction = 1;
+                case "k"
+                    componentIndex = 2;
+                    direction = -1;
+                case "i"
+                    componentIndex = 2;
+                    direction = 1;
+                case "u"
+                    componentIndex = 3;
+                    direction = -1;
+                case "o"
+                    componentIndex = 3;
+                    direction = 1;
+            end
+        end
+
+        function offsetsDegrees = layerViewVectorAngularOffsetsDegrees(~, layer)
+            if isfield(layer, "ViewVectorAngularOffsetsDegrees")
+                offsetsDegrees = double(layer.ViewVectorAngularOffsetsDegrees(:));
+            else
+                offsetsDegrees = [0; 0; 0];
+            end
+        end
+
         function keyPressed(app, event)
             if app.eventHasControl(event)
                 app.IsControlDown = true;
@@ -362,7 +428,10 @@ classdef ProjectionViewerApp < handle
             if app.IsControlDown || app.IsShiftDown || app.IsAltDown
                 return
             end
-            app.nudgeSelectedLayerFromKey(event);
+            if app.nudgeSelectedLayerFromKey(event)
+                return
+            end
+            app.adjustSelectedLayerViewVectorCorrectionFromKey(event);
         end
 
         function keyReleased(app, event)
@@ -677,6 +746,14 @@ classdef ProjectionViewerApp < handle
             app.TiltLabel.Text = sprintf("Tilt %.1f deg", tiltDegrees);
             app.TwistLabel.Text = sprintf("Twist %.1f deg", twistDegrees);
             app.AlphaLabel.Text = sprintf("Alpha %.2f", alpha);
+            app.updateViewVectorLabel();
+        end
+
+        function updateViewVectorLabel(app)
+            layer = app.Scene.layers(app.SelectedLayerIndex);
+            offsetsDegrees = app.layerViewVectorAngularOffsetsDegrees(layer);
+            app.ViewVectorLabel.Text = sprintf("OPK %.1f/%.1f/%.1f deg", ...
+                offsetsDegrees(1), offsetsDegrees(2), offsetsDegrees(3));
         end
 
         function alpha = validateSliderAlpha(app, alpha)

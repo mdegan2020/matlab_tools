@@ -26,6 +26,10 @@ classdef ProjectionMeshBuilder
             numRows = numel(rowIndices);
             numColumns = numel(columnIndices);
             ProjectionMeshBuilder.validateSampledGeometry(G, V, numRows, numColumns);
+            [viewVectorRotationMatrix, viewVectorAngularOffsetsDegrees] = ...
+                ProjectionMeshBuilder.layerViewVectorRotation(layer, plane);
+            V = ProjectionMeshBuilder.rotateSampledVectors( ...
+                V, viewVectorRotationMatrix);
 
             [worldPoints, ranges] = ProjectionMeshBuilder.intersectSampledRays( ...
                 G, V, plane, options);
@@ -49,6 +53,8 @@ classdef ProjectionMeshBuilder
             mesh.RenderPoints = renderPoints;
             mesh.ProjectionOffsetMeters = projectionOffsetMeters;
             mesh.ProjectionOffsetWorld = projectionOffsetWorld;
+            mesh.ViewVectorAngularOffsetsDegrees = viewVectorAngularOffsetsDegrees;
+            mesh.ViewVectorRotationMatrix = viewVectorRotationMatrix;
             mesh.Ranges = ranges;
             mesh.SampledOrigins = G;
             mesh.SampledVectors = V;
@@ -131,6 +137,7 @@ classdef ProjectionMeshBuilder
             ProjectionMeshBuilder.validateIndices(meshSampling.ColumnIndices, "ColumnIndices");
             ProjectionMeshBuilder.validateAlpha(layer.Alpha);
             ProjectionMeshBuilder.layerProjectionOffset(layer);
+            ProjectionMeshBuilder.layerViewVectorAngularOffsetsDegrees(layer);
         end
 
         function validateIndices(indices, name)
@@ -201,6 +208,80 @@ classdef ProjectionMeshBuilder
             offset = double(offset(:));
         end
 
+        function [R, offsetsDegrees] = layerViewVectorRotation(layer, plane)
+            offsetsDegrees = ProjectionMeshBuilder.layerViewVectorAngularOffsetsDegrees(layer);
+            if all(abs(offsetsDegrees) <= ProjectionMeshBuilder.defaultTolerance())
+                R = eye(3);
+                return
+            end
+
+            sourceGeometry = layer.SourceGeometry;
+            imageYAxis = ProjectionMeshBuilder.sourceGeometryUnitVector( ...
+                sourceGeometry, ["ImageYAxis", "RowAxis"], "image y axis");
+            imageXAxis = ProjectionMeshBuilder.sourceGeometryUnitVector( ...
+                sourceGeometry, ["ImageXAxis", "PlatformDirection"], "image x axis");
+            referenceOrigin = ProjectionMeshBuilder.sourceGeometryPoint( ...
+                sourceGeometry, ["G0", "ReferenceOrigin"], "G0");
+            kappaAxis = ProjectionMeshBuilder.unitVector( ...
+                plane.P0 - referenceOrigin, "kappa axis");
+
+            omegaRadians = deg2rad(offsetsDegrees(1));
+            phiRadians = deg2rad(offsetsDegrees(2));
+            kappaRadians = deg2rad(offsetsDegrees(3));
+            Romega = ProjectionMeshBuilder.rotationAboutAxis(imageYAxis, omegaRadians);
+            Rphi = ProjectionMeshBuilder.rotationAboutAxis(imageXAxis, phiRadians);
+            Rkappa = ProjectionMeshBuilder.rotationAboutAxis(kappaAxis, kappaRadians);
+            R = Rkappa * Rphi * Romega;
+        end
+
+        function offsets = layerViewVectorAngularOffsetsDegrees(layer)
+            if ~isfield(layer, "ViewVectorAngularOffsetsDegrees")
+                offsets = [0; 0; 0];
+                return
+            end
+
+            offsets = layer.ViewVectorAngularOffsetsDegrees;
+            if ~isnumeric(offsets) || numel(offsets) ~= 3 || any(~isfinite(offsets), "all")
+                error("ProjectionMeshBuilder:invalidViewVectorCorrection", ...
+                    "Layer ViewVectorAngularOffsetsDegrees must be a finite numeric 3-vector.");
+            end
+            offsets = double(offsets(:));
+        end
+
+        function V = rotateSampledVectors(V, R)
+            originalSize = size(V);
+            V = reshape(R * reshape(V, 3, []), originalSize);
+        end
+
+        function vector = sourceGeometryUnitVector(sourceGeometry, fieldNames, name)
+            vector = ProjectionMeshBuilder.sourceGeometryVector( ...
+                sourceGeometry, fieldNames, name);
+            vector = ProjectionMeshBuilder.unitVector(vector, name);
+        end
+
+        function vector = sourceGeometryVector(sourceGeometry, fieldNames, name)
+            for fieldName = string(fieldNames)
+                if isfield(sourceGeometry, fieldName)
+                    vector = sourceGeometry.(fieldName);
+                    if ~isnumeric(vector) || ~isequal(size(vector), [3 1]) || ...
+                            any(~isfinite(vector))
+                        error("ProjectionMeshBuilder:invalidViewVectorCorrection", ...
+                            "Source geometry %s must be a finite numeric 3x1 vector.", name);
+                    end
+                    vector = double(vector);
+                    return
+                end
+            end
+
+            error("ProjectionMeshBuilder:invalidViewVectorCorrection", ...
+                "Source geometry must contain %s for view-vector correction.", name);
+        end
+
+        function point = sourceGeometryPoint(sourceGeometry, fieldNames, name)
+            point = ProjectionMeshBuilder.sourceGeometryVector( ...
+                sourceGeometry, fieldNames, name);
+        end
+
         function P = validatePoint(P, name)
             if ~isnumeric(P) || ~isequal(size(P), [3 1]) || any(~isfinite(P))
                 error("ProjectionMeshBuilder:invalidPoint", ...
@@ -218,9 +299,23 @@ classdef ProjectionMeshBuilder
         end
 
         function R = rotationAboutAxis(axis, angle)
-            axis = axis / norm(axis);
+            axis = ProjectionMeshBuilder.unitVector(axis, "rotation axis");
             K = [0 -axis(3) axis(2); axis(3) 0 -axis(1); -axis(2) axis(1) 0];
             R = cos(angle) * eye(3) + (1 - cos(angle)) * (axis * axis.') + sin(angle) * K;
+        end
+
+        function vector = unitVector(vector, name)
+            if ~isnumeric(vector) || ~isequal(size(vector), [3 1]) || any(~isfinite(vector))
+                error("ProjectionMeshBuilder:invalidVector", ...
+                    "%s must be a finite numeric 3x1 vector.", name);
+            end
+
+            magnitude = norm(vector);
+            if magnitude <= ProjectionMeshBuilder.defaultTolerance()
+                error("ProjectionMeshBuilder:invalidVector", ...
+                    "%s must have nonzero length.", name);
+            end
+            vector = double(vector) / magnitude;
         end
 
         function tol = defaultTolerance()

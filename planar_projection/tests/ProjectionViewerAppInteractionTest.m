@@ -315,6 +315,95 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
+        function testViewVectorCorrectionKeysAdjustSelectedLayerOnly(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            opkLabel = ProjectionViewerAppInteractionTest.findOpkLabel(fig);
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            layer1X = layerSurfaces(1).XData;
+            layer1Y = layerSurfaces(1).YData;
+            layer1Z = layerSurfaces(1).ZData;
+            layer2X = layerSurfaces(2).XData;
+            layer2Y = layerSurfaces(2).YData;
+            layer2Z = layerSurfaces(2).ZData;
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("i"));
+            drawnow
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            phiChange = ProjectionViewerAppInteractionTest.surfaceChange( ...
+                layerSurfaces(2), layer2X, layer2Y, layer2Z);
+
+            testCase.verifyEqual(ProjectionViewerAppInteractionTest.surfaceChange( ...
+                layerSurfaces(1), layer1X, layer1Y, layer1Z), 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyGreaterThan(phiChange, 1e-3);
+            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.0/0.1/0.0 deg");
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("k"));
+            drawnow
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+
+            testCase.verifyEqual(layerSurfaces(2).XData, layer2X, AbsTol=1e-9);
+            testCase.verifyEqual(layerSurfaces(2).YData, layer2Y, AbsTol=1e-9);
+            testCase.verifyEqual(layerSurfaces(2).ZData, layer2Z, AbsTol=1e-9);
+            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.0/0.0/0.0 deg");
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("l"));
+            drawnow
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            omegaChange = ProjectionViewerAppInteractionTest.surfaceChange( ...
+                layerSurfaces(2), layer2X, layer2Y, layer2Z);
+
+            testCase.verifyGreaterThan(omegaChange, 1e-3);
+            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.1/0.0/0.0 deg");
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("j"));
+            drawnow
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+
+            testCase.verifyEqual(layerSurfaces(2).XData, layer2X, AbsTol=1e-9);
+            testCase.verifyEqual(layerSurfaces(2).YData, layer2Y, AbsTol=1e-9);
+            testCase.verifyEqual(layerSurfaces(2).ZData, layer2Z, AbsTol=1e-9);
+            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.0/0.0/0.0 deg");
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("o"));
+            drawnow
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            kappaChange = ProjectionViewerAppInteractionTest.surfaceChange( ...
+                layerSurfaces(2), layer2X, layer2Y, layer2Z);
+
+            testCase.verifyGreaterThan(kappaChange, 1e-3);
+            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.0/0.0/0.1 deg");
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("u"));
+            drawnow
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+
+            testCase.verifyEqual(layerSurfaces(2).XData, layer2X, AbsTol=1e-9);
+            testCase.verifyEqual(layerSurfaces(2).YData, layer2Y, AbsTol=1e-9);
+            testCase.verifyEqual(layerSurfaces(2).ZData, layer2Z, AbsTol=1e-9);
+            testCase.verifyEqual(string(opkLabel.Text), "OPK 0.0/0.0/0.0 deg");
+        end
+
         function testTipTiltControlsSharedProjectionPlane(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             app = ProjectionViewerApp(scene);
@@ -447,6 +536,15 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             sliders = findall(fig, "-isa", "matlab.ui.control.Slider");
             sliderColumns = arrayfun(@(slider) slider.Layout.Column, sliders);
             slider = sliders(sliderColumns == column);
+        end
+
+        function label = findOpkLabel(fig)
+            labels = findall(fig, "-isa", "matlab.ui.control.Label");
+            labelTexts = strings(size(labels));
+            for k = 1:numel(labels)
+                labelTexts(k) = string(labels(k).Text);
+            end
+            label = labels(startsWith(labelTexts, "OPK "));
         end
 
         function surfaces = findLayerSurfaces(ax, scene)
