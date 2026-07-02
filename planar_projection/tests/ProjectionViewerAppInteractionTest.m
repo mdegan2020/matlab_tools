@@ -44,6 +44,50 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(ax.Visible), "off");
         end
 
+        function testCommandButtonsUseCompactGrid(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            saveButton = ProjectionViewerAppInteractionTest.findButton(fig, "Save");
+            loadButton = ProjectionViewerAppInteractionTest.findButton(fig, "Load");
+            cycleButton = ProjectionViewerAppInteractionTest.findButton(fig, "Cycle");
+            resetButton = ProjectionViewerAppInteractionTest.findButton(fig, "Reset");
+
+            testCase.verifyEqual(saveButton.Parent, loadButton.Parent);
+            testCase.verifyEqual(saveButton.Parent, cycleButton.Parent);
+            testCase.verifyEqual(saveButton.Parent, resetButton.Parent);
+            testCase.verifyEqual( ...
+                ProjectionViewerAppInteractionTest.layoutPosition(saveButton), [1 1]);
+            testCase.verifyEqual( ...
+                ProjectionViewerAppInteractionTest.layoutPosition(loadButton), [1 2]);
+            testCase.verifyEqual( ...
+                ProjectionViewerAppInteractionTest.layoutPosition(cycleButton), [2 1]);
+            testCase.verifyEqual( ...
+                ProjectionViewerAppInteractionTest.layoutPosition(resetButton), [2 2]);
+        end
+
+        function testLayerStyleControlsAreStacked(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            visibleCheckBox = findall(fig, "-isa", "matlab.ui.control.CheckBox");
+            blendDropDown = ProjectionViewerAppInteractionTest.findBlendDropDown(fig);
+
+            testCase.verifyEqual(visibleCheckBox.Parent, blendDropDown.Parent);
+            testCase.verifyEqual( ...
+                ProjectionViewerAppInteractionTest.layoutPosition(visibleCheckBox), [1 1]);
+            testCase.verifyEqual( ...
+                ProjectionViewerAppInteractionTest.layoutPosition(blendDropDown), [2 1]);
+        end
+
         function testControlScrollAdjustsTwistWithoutZoomOrMeshChange(testCase)
             scene = ProjectionViewerAppInteractionTest.makeScene();
             app = ProjectionViewerApp(scene);
@@ -647,6 +691,29 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                     isequal(dropdowns(k).ItemsData, 1:numel(dropdowns(k).Items));
             end
             dropdown = dropdowns(isLayerDropDown);
+        end
+
+        function dropdown = findBlendDropDown(fig)
+            dropdowns = findall(fig, "-isa", "matlab.ui.control.DropDown");
+            isBlendDropDown = false(size(dropdowns));
+            for k = 1:numel(dropdowns)
+                items = reshape(string(dropdowns(k).Items), 1, []);
+                isBlendDropDown(k) = isequal(items, ["alpha", "redBlueAnaglyph"]);
+            end
+            dropdown = dropdowns(isBlendDropDown);
+        end
+
+        function button = findButton(fig, text)
+            buttons = findall(fig, "-isa", "matlab.ui.control.Button");
+            buttonTexts = strings(size(buttons));
+            for k = 1:numel(buttons)
+                buttonTexts(k) = string(buttons(k).Text);
+            end
+            button = buttons(buttonTexts == string(text));
+        end
+
+        function position = layoutPosition(component)
+            position = [component.Layout.Row component.Layout.Column];
         end
 
         function slider = findSliderInColumn(fig, column)

@@ -32,6 +32,8 @@ classdef ProjectionViewerApp < handle
         Axes matlab.ui.control.UIAxes
         Surface
         ControlGrid matlab.ui.container.GridLayout
+        LayerStyleGrid matlab.ui.container.GridLayout
+        CommandGrid matlab.ui.container.GridLayout
         TipSlider matlab.ui.control.Slider
         TiltSlider matlab.ui.control.Slider
         TwistSlider matlab.ui.control.Slider
@@ -173,14 +175,14 @@ classdef ProjectionViewerApp < handle
             app.Axes.Interactions = [];
             app.hideImageAxesDecorations();
 
-            app.ControlGrid = uigridlayout(app.GridLayout, [2 12]);
+            app.ControlGrid = uigridlayout(app.GridLayout, [2 8]);
             app.ControlGrid.Layout.Row = 2;
             app.ControlGrid.Layout.Column = 1;
             app.ControlGrid.RowHeight = {"fit", "fit"};
             app.ControlGrid.ColumnWidth = {"1.2x", "1x", "1x", "1x", "1x", ...
-                "fit", "fit", "1x", "fit", "fit", "fit", "fit"};
+                "fit", "fit", "fit"};
             app.ControlGrid.Padding = [0 0 0 0];
-            app.ControlGrid.ColumnSpacing = 14;
+            app.ControlGrid.ColumnSpacing = 12;
 
             layerLabel = uilabel(app.ControlGrid, Text="Layer");
             layerLabel.Layout.Row = 1;
@@ -242,40 +244,54 @@ classdef ProjectionViewerApp < handle
             app.ViewVectorLabel.Layout.Row = [1 2];
             app.ViewVectorLabel.Layout.Column = 6;
 
-            app.VisibleCheckBox = uicheckbox(app.ControlGrid, Text="Visible", ...
-                Value=true, ValueChangedFcn=@(~, event) app.visibleChanged(event));
-            app.VisibleCheckBox.Layout.Row = [1 2];
-            app.VisibleCheckBox.Layout.Column = 7;
+            app.LayerStyleGrid = uigridlayout(app.ControlGrid, [2 1]);
+            app.LayerStyleGrid.Layout.Row = [1 2];
+            app.LayerStyleGrid.Layout.Column = 7;
+            app.LayerStyleGrid.RowHeight = {"fit", "fit"};
+            app.LayerStyleGrid.ColumnWidth = {"fit"};
+            app.LayerStyleGrid.Padding = [0 0 0 0];
+            app.LayerStyleGrid.RowSpacing = 4;
 
-            blendLabel = uilabel(app.ControlGrid, Text="Blend");
-            blendLabel.Layout.Row = 1;
-            blendLabel.Layout.Column = 8;
-            app.BlendModeDropDown = uidropdown(app.ControlGrid, ...
+            app.VisibleCheckBox = uicheckbox(app.LayerStyleGrid, Text="Visible", ...
+                Value=true, ValueChangedFcn=@(~, event) app.visibleChanged(event));
+            app.VisibleCheckBox.Layout.Row = 1;
+            app.VisibleCheckBox.Layout.Column = 1;
+
+            app.BlendModeDropDown = uidropdown(app.LayerStyleGrid, ...
                 Items=["alpha", "redBlueAnaglyph"], ...
                 Value="alpha", ...
                 ValueChangedFcn=@(~, event) app.blendModeChanged(event));
             app.BlendModeDropDown.Layout.Row = 2;
-            app.BlendModeDropDown.Layout.Column = 8;
+            app.BlendModeDropDown.Layout.Column = 1;
 
-            app.SaveButton = uibutton(app.ControlGrid, Text="Save", ...
+            app.CommandGrid = uigridlayout(app.ControlGrid, [2 2]);
+            app.CommandGrid.Layout.Row = [1 2];
+            app.CommandGrid.Layout.Column = 8;
+            app.CommandGrid.RowHeight = {"fit", "fit"};
+            app.CommandGrid.ColumnWidth = {"fit", "fit"};
+            app.CommandGrid.Padding = [0 0 0 0];
+            app.CommandGrid.RowSpacing = 4;
+            app.CommandGrid.ColumnSpacing = 4;
+
+            app.SaveButton = uibutton(app.CommandGrid, Text="Save", ...
                 ButtonPushedFcn=@(~, ~) app.saveStateFromDialog());
-            app.SaveButton.Layout.Row = [1 2];
-            app.SaveButton.Layout.Column = 9;
+            app.SaveButton.Layout.Row = 1;
+            app.SaveButton.Layout.Column = 1;
 
-            app.LoadButton = uibutton(app.ControlGrid, Text="Load", ...
+            app.LoadButton = uibutton(app.CommandGrid, Text="Load", ...
                 ButtonPushedFcn=@(~, ~) app.loadStateFromDialog());
-            app.LoadButton.Layout.Row = [1 2];
-            app.LoadButton.Layout.Column = 10;
+            app.LoadButton.Layout.Row = 1;
+            app.LoadButton.Layout.Column = 2;
 
-            app.CycleButton = uibutton(app.ControlGrid, Text="Cycle", ...
+            app.CycleButton = uibutton(app.CommandGrid, Text="Cycle", ...
                 ButtonPushedFcn=@(~, ~) app.cycleLayer());
-            app.CycleButton.Layout.Row = [1 2];
-            app.CycleButton.Layout.Column = 11;
+            app.CycleButton.Layout.Row = 2;
+            app.CycleButton.Layout.Column = 1;
 
-            app.ResetButton = uibutton(app.ControlGrid, Text="Reset", ...
+            app.ResetButton = uibutton(app.CommandGrid, Text="Reset", ...
                 ButtonPushedFcn=@(~, ~) app.resetView());
-            app.ResetButton.Layout.Row = [1 2];
-            app.ResetButton.Layout.Column = 12;
+            app.ResetButton.Layout.Row = 2;
+            app.ResetButton.Layout.Column = 2;
         end
 
         function layerState = exportLayerState(app, layerIndex)
