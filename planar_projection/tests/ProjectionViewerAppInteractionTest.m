@@ -240,6 +240,28 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(tipSlider.Value, 6, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
+
+        function testMultiLayerPreviewUsesStableDepthBias(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            viewDirection = ProjectionViewerAppInteractionTest.cameraViewDirection(ax);
+
+            layer1Depth = ProjectionViewerAppInteractionTest.meanSurfaceDepth( ...
+                layerSurfaces(1), viewDirection);
+            layer2Depth = ProjectionViewerAppInteractionTest.meanSurfaceDepth( ...
+                layerSurfaces(2), viewDirection);
+
+            testCase.verifyEqual(layer2Depth - layer1Depth, -0.05, ...
+                AbsTol=1e-8);
+        end
     end
 
     methods (Static, Access = private)
@@ -288,6 +310,17 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                     scene.layers(layerIndex).DisplayTexture), surfaceHandles);
                 surfaces(layerIndex) = surfaceHandles(isLayerSurface);
             end
+        end
+
+        function viewDirection = cameraViewDirection(ax)
+            viewDirection = camtarget(ax).' - campos(ax).';
+            viewDirection = viewDirection / norm(viewDirection);
+        end
+
+        function depth = meanSurfaceDepth(surfaceHandle, viewDirection)
+            points = [surfaceHandle.XData(:).'; ...
+                surfaceHandle.YData(:).'; surfaceHandle.ZData(:).'];
+            depth = mean(viewDirection(:).' * points);
         end
 
         function event = makeKeyEvent(key)

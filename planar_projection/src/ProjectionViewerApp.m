@@ -21,6 +21,7 @@ classdef ProjectionViewerApp < handle
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
         ModifierWheelStepDegrees double = 1
+        PreviewLayerDepthStepMeters double = 0.05
         UIFigure matlab.ui.Figure
         GridLayout matlab.ui.container.GridLayout
         Axes matlab.ui.control.UIAxes
@@ -192,8 +193,9 @@ classdef ProjectionViewerApp < handle
                 layer = app.Scene.layers(layerIndex);
                 mesh = ProjectionMeshBuilder.buildLayerMesh( ...
                     layer, layer.CurrentProjectionPlane, app.Scene.renderOrigin);
-                app.Surfaces{layerIndex} = surface(app.Axes, mesh.X, mesh.Y, ...
-                    mesh.Z, mesh.Texture, FaceColor="texturemap", EdgeColor="none", ...
+                [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
+                app.Surfaces{layerIndex} = surface(app.Axes, X, Y, ...
+                    Z, mesh.Texture, FaceColor="texturemap", EdgeColor="none", ...
                     FaceAlpha=mesh.Alpha, Visible=app.onOff(layer.Visible));
                 if layerIndex == app.SelectedLayerIndex
                     app.Surface = app.Surfaces{layerIndex};
@@ -482,12 +484,39 @@ classdef ProjectionViewerApp < handle
 
         function updateSurfaceFromMesh(app, layerIndex, mesh)
             surfaceHandle = app.Surfaces{layerIndex};
-            surfaceHandle.XData = mesh.X;
-            surfaceHandle.YData = mesh.Y;
-            surfaceHandle.ZData = mesh.Z;
+            [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
+            surfaceHandle.XData = X;
+            surfaceHandle.YData = Y;
+            surfaceHandle.ZData = Z;
             surfaceHandle.CData = mesh.Texture;
             surfaceHandle.FaceAlpha = mesh.Alpha;
             surfaceHandle.Visible = app.onOff(mesh.Visible);
+        end
+
+        function [X, Y, Z] = previewSurfaceCoordinates(app, mesh, layerIndex)
+            offset = app.previewLayerDepthOffset(layerIndex);
+            X = mesh.X + offset(1);
+            Y = mesh.Y + offset(2);
+            Z = mesh.Z + offset(3);
+        end
+
+        function offset = previewLayerDepthOffset(app, layerIndex)
+            layerCount = numel(app.Scene.layers);
+            if layerCount < 2 || app.PreviewLayerDepthStepMeters == 0
+                offset = [0; 0; 0];
+                return
+            end
+
+            centeredLayerIndex = double(layerIndex) - (double(layerCount) + 1) / 2;
+            offset = -centeredLayerIndex * app.PreviewLayerDepthStepMeters * ...
+                app.frameCameraViewDirection();
+        end
+
+        function viewDirection = frameCameraViewDirection(app)
+            cameraPosition = app.Scene.frameCamera.G0 - app.Scene.renderOrigin;
+            target = app.Scene.layers(1).BaseProjectionPlane.P0 - app.Scene.renderOrigin;
+            viewDirection = target - cameraPosition;
+            viewDirection = viewDirection / norm(viewDirection);
         end
 
         function updateLabels(app, tipDegrees, tiltDegrees, twistDegrees, alpha)
