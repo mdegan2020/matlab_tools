@@ -57,6 +57,18 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
             testCase.verifyFalse(job.Execution.UseGPU);
         end
 
+        function testValidationAcceptsGpuRequests(testCase)
+            scene = ProjectionBackendJobTest.makeScene();
+            job = struct(Scene=scene, ...
+                RenderOptions=struct(UseGPU=true), ...
+                Execution=struct(UseGPU=true));
+
+            job = ProjectionBackendJob.validate(job);
+
+            testCase.verifyTrue(job.RenderOptions.UseGPU);
+            testCase.verifyTrue(job.Execution.UseGPU);
+        end
+
         function testLiveJobInvocationReturnsValidatedContract(testCase)
             scene = ProjectionBackendJobTest.makeScene();
             job = struct();

@@ -111,6 +111,7 @@ classdef ProjectionBackendOutputWriter
             metadata.Execution = result.Execution;
             metadata.OutputGrid = ProjectionBackendOutputWriter.metadataGrid( ...
                 result.OutputGrid);
+            metadata.GpuInfo = result.GpuInfo;
             metadata.OutputFiles = outputFiles;
             metadata.Timing = result.Timing;
             if ~isempty(result.ViewerState)

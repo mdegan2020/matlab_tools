@@ -28,6 +28,8 @@ classdef ProjectionBackendTiledRenderer
             layerReadbacks = struct([]);
             layerIndex = [];
             layerIndices = [];
+            useGPU = false;
+            gpuInfo = ProjectionBackendGpuSupport.resolve(false);
             tileReports = ProjectionBackendTiledRenderer.emptyTileReports();
             tileReportIndex = 0;
 
@@ -46,6 +48,8 @@ classdef ProjectionBackendTiledRenderer
                 if isempty(layerIndices)
                     layerIndex = tileReadback.LayerIndex;
                     layerIndices = tileReadback.LayerIndices;
+                    useGPU = tileReadback.UseGPU;
+                    gpuInfo = tileReadback.GpuInfo;
                 end
                 if isempty(compositeImage)
                     compositeImage = ProjectionBackendTiledRenderer.allocateImage( ...
@@ -87,6 +91,8 @@ classdef ProjectionBackendTiledRenderer
             readback.OutputGrid = outputGrid;
             readback.Tiled = true;
             readback.ExecutionMode = options.ExecutionMode;
+            readback.UseGPU = useGPU;
+            readback.GpuInfo = gpuInfo;
             readback.TileSize = options.TileSize;
             readback.TileCount = numel(tileReports);
             readback.TileReports = tileReports;

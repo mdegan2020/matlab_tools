@@ -47,6 +47,12 @@ classdef ProjectionReadbackRenderer
                 end
             end
 
+            if options.UseGPU
+                compositeImage = ProjectionReadbackRenderer.gatherIfNeeded( ...
+                    compositeImage);
+                validMask = ProjectionReadbackRenderer.gatherIfNeeded(validMask);
+            end
+
             readback = struct();
             readback.Image = compositeImage;
             readback.ValidMask = validMask;
@@ -61,6 +67,8 @@ classdef ProjectionReadbackRenderer
             readback.Mesh = ProjectionReadbackRenderer.firstLayerField( ...
                 layerReadbacks, "Mesh");
             readback.LayerReadbacks = layerReadbacks;
+            readback.UseGPU = options.UseGPU;
+            readback.GpuInfo = options.GpuInfo;
             if isfield(options, "OutputGrid")
                 readback.OutputGrid = options.OutputGrid;
             else
@@ -109,6 +117,8 @@ classdef ProjectionReadbackRenderer
             defaults.Interpolation = "bilinear";
             defaults.InvalidFillValue = NaN;
             defaults.IncludeLayerReadbacks = true;
+            defaults.UseGPU = false;
+            defaults.GpuInfo = ProjectionBackendGpuSupport.resolve(false);
 
             names = fieldnames(options);
             for k = 1:numel(names)
@@ -131,6 +141,10 @@ classdef ProjectionReadbackRenderer
             defaults.IncludeLayerReadbacks = ...
                 ProjectionReadbackRenderer.validateLogicalScalar( ...
                 defaults.IncludeLayerReadbacks, "IncludeLayerReadbacks");
+            defaults.UseGPU = ProjectionReadbackRenderer.validateLogicalScalar( ...
+                defaults.UseGPU, "UseGPU");
+            defaults.GpuInfo = ProjectionBackendGpuSupport.resolve(defaults.UseGPU);
+            defaults.UseGPU = defaults.GpuInfo.Enabled;
 
             options = defaults;
         end
@@ -251,8 +265,14 @@ classdef ProjectionReadbackRenderer
 
         function [compositeImage, validMask] = alphaBlend( ...
                 compositeImage, validMask, layerImage, layerValidMask, alpha, options)
+            if options.UseGPU
+                [compositeImage, validMask, layerImage, layerValidMask] = ...
+                    ProjectionReadbackRenderer.moveBlendInputsToGpu( ...
+                    compositeImage, validMask, layerImage, layerValidMask);
+            end
             if isempty(compositeImage)
-                compositeImage = zeros(size(layerImage));
+                compositeImage = ProjectionReadbackRenderer.zerosLike( ...
+                    size(layerImage), layerImage);
             end
             [compositeImage, layerImage] = ProjectionReadbackRenderer.matchBandCounts( ...
                 compositeImage, layerImage, options.OutputSize);
@@ -268,12 +288,19 @@ classdef ProjectionReadbackRenderer
         function [compositeImage, validMask] = anaglyphBlend( ...
                 compositeImage, validMask, layerImage, layerValidMask, alpha, ...
                 options, anaglyphOrdinal)
+            if options.UseGPU
+                [compositeImage, validMask, layerImage, layerValidMask] = ...
+                    ProjectionReadbackRenderer.moveBlendInputsToGpu( ...
+                    compositeImage, validMask, layerImage, layerValidMask);
+            end
             if isempty(compositeImage) || ismatrix(compositeImage)
-                compositeImage = zeros([options.OutputSize 3]);
+                compositeImage = ProjectionReadbackRenderer.zerosLike( ...
+                    [options.OutputSize 3], layerImage);
             end
             grayImage = ProjectionReadbackRenderer.grayscale(layerImage);
             grayImage = ProjectionReadbackRenderer.replaceInvalid(grayImage);
-            contribution = zeros([options.OutputSize 3]);
+            contribution = ProjectionReadbackRenderer.zerosLike( ...
+                [options.OutputSize 3], compositeImage);
             channelIndex = 1 + 2 * double(mod(anaglyphOrdinal, 2) == 0);
             contribution(:, :, channelIndex) = grayImage;
             contribution = alpha * contribution;
@@ -288,7 +315,7 @@ classdef ProjectionReadbackRenderer
             elseif ~ismatrix(A) && ismatrix(B)
                 B = repmat(B, 1, 1, size(A, 3));
             elseif isempty(A)
-                A = zeros(outputSize);
+                A = ProjectionReadbackRenderer.zerosLike(outputSize, B);
             end
         end
 
@@ -302,6 +329,33 @@ classdef ProjectionReadbackRenderer
 
         function imageData = replaceInvalid(imageData)
             imageData(~isfinite(imageData)) = 0;
+        end
+
+        function [compositeImage, validMask, layerImage, layerValidMask] = ...
+                moveBlendInputsToGpu(compositeImage, validMask, layerImage, ...
+                layerValidMask)
+            if ~isempty(compositeImage)
+                compositeImage = ProjectionReadbackRenderer.moveToGpu(compositeImage);
+            end
+            validMask = ProjectionReadbackRenderer.moveToGpu(validMask);
+            layerImage = ProjectionReadbackRenderer.moveToGpu(layerImage);
+            layerValidMask = ProjectionReadbackRenderer.moveToGpu(layerValidMask);
+        end
+
+        function value = moveToGpu(value)
+            if ~isa(value, "gpuArray")
+                value = gpuArray(value);
+            end
+        end
+
+        function value = gatherIfNeeded(value)
+            if isa(value, "gpuArray")
+                value = gather(value);
+            end
+        end
+
+        function imageData = zerosLike(outputSize, prototype)
+            imageData = zeros(outputSize, "like", prototype);
         end
 
         function outputSize = validateOutputSize(outputSize)

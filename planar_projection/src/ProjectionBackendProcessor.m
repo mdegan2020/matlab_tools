@@ -16,6 +16,8 @@ classdef ProjectionBackendProcessor
                 ProjectionBackendProcessor.viewerStateForGrid(job), job.RenderOptions);
             renderOptions = ProjectionBackendProcessor.renderOptionsWithGrid( ...
                 job.RenderOptions, outputGrid);
+            renderOptions = ProjectionBackendProcessor.renderOptionsWithExecution( ...
+                renderOptions, job.Execution);
             renderTimer = tic;
             readback = ProjectionBackendProcessor.renderScene( ...
                 job.Scene, renderOptions, job.Execution);
@@ -36,6 +38,7 @@ classdef ProjectionBackendProcessor
             result.Execution = job.Execution;
             result.OutputGrid = outputGrid;
             result.Readback = readback;
+            result.GpuInfo = readback.GpuInfo;
             result.OutputFiles = [];
             result.Timing = struct(RenderSeconds=renderSeconds, ...
                 WriteSeconds=0, TotalSeconds=0);
@@ -62,6 +65,10 @@ classdef ProjectionBackendProcessor
                 renderOptions.OutputSize = outputGrid.OutputSize;
             end
             renderOptions.OutputGrid = outputGrid;
+        end
+
+        function renderOptions = renderOptionsWithExecution(renderOptions, execution)
+            renderOptions.UseGPU = renderOptions.UseGPU || execution.UseGPU;
         end
 
         function readback = renderScene(scene, renderOptions, execution)

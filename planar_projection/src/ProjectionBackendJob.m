@@ -298,10 +298,6 @@ classdef ProjectionBackendJob
             end
             options.UseGPU = ProjectionBackendJob.validateLogicalScalar( ...
                 options.UseGPU, "RenderOptions.UseGPU");
-            if options.UseGPU
-                error("ProjectionBackendJob:unsupportedExecution", ...
-                    "Backend Milestone 1 supports CPU-only jobs; UseGPU must be false.");
-            end
             options.InvalidIntersectionPolicy = string(options.InvalidIntersectionPolicy);
             if ~isscalar(options.InvalidIntersectionPolicy) || ...
                     options.InvalidIntersectionPolicy ~= "error"
@@ -357,10 +353,6 @@ classdef ProjectionBackendJob
             end
             execution.UseGPU = ProjectionBackendJob.validateLogicalScalar( ...
                 execution.UseGPU, "Execution.UseGPU");
-            if execution.UseGPU
-                error("ProjectionBackendJob:unsupportedExecution", ...
-                    "Backend Milestone 1 supports CPU-only jobs; Execution.UseGPU must be false.");
-            end
         end
 
         function validateScene(scene)
