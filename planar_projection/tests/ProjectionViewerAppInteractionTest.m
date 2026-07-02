@@ -412,6 +412,115 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 ProjectionViewerAppInteractionTest.opkText([0; 0; 0]));
         end
 
+        function testExportImportStateRestoresViewerConfiguration(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            state = app.exportState();
+            state.SelectedLayerIndex = 2;
+            state.Projection.TipDegrees = 5.5;
+            state.Projection.TiltDegrees = -4.25;
+            state.View.TwistDegrees = 3.75;
+            state.Camera.ViewAngle = 11;
+            state.Layers(1).Alpha = 0.35;
+            state.Layers(1).Visible = false;
+            state.Layers(1).BlendMode = "redBlueAnaglyph";
+            state.Layers(1).ProjectionOffsetMeters = [0.5 -0.25];
+            state.Layers(1).ViewVectorAngularOffsetsDegrees = [0.01 0.02 0.03];
+            state.Layers(2).Alpha = 0.45;
+            state.Layers(2).Visible = true;
+            state.Layers(2).BlendMode = "alpha";
+            state.Layers(2).ProjectionOffsetMeters = [-0.75 1.25];
+            state.Layers(2).ViewVectorAngularOffsetsDegrees = [-0.04 0.05 -0.06];
+            state = ProjectionViewerState.validate(state, 2);
+
+            app.importState(state);
+            actual = app.exportState();
+
+            testCase.verifyEqual(actual.SelectedLayerIndex, 2);
+            testCase.verifyEqual(actual.Projection.TipDegrees, 5.5, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Projection.TiltDegrees, -4.25, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.View.TwistDegrees, 3.75, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Camera.ViewAngle, 11, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Layers(1).Alpha, 0.35, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyFalse(actual.Layers(1).Visible);
+            testCase.verifyEqual(actual.Layers(1).BlendMode, "redBlueAnaglyph");
+            testCase.verifyEqual(actual.Layers(1).ProjectionOffsetMeters, ...
+                [0.5 -0.25], AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Layers(1).ViewVectorAngularOffsetsDegrees, ...
+                [0.01 0.02 0.03], AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Layers(2).Alpha, 0.45, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Layers(2).ProjectionOffsetMeters, ...
+                [-0.75 1.25], AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Layers(2).ViewVectorAngularOffsetsDegrees, ...
+                [-0.04 0.05 -0.06], AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
+
+        function testSaveLoadStateRoundTrip(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            state = app.exportState();
+            state.SelectedLayerIndex = 2;
+            state.Projection.TipDegrees = 2.25;
+            state.Layers(2).Alpha = 0.25;
+            state.Layers(2).ProjectionOffsetMeters = [1.25 -1.5];
+            state = ProjectionViewerState.validate(state, 2);
+            app.importState(state);
+            filePath = fullfile(tempdir, "projection_viewer_app_state_test.json");
+            testCase.addTeardown(@() delete(filePath));
+
+            app.saveState(filePath);
+            resetState = app.exportState();
+            resetState.Projection.TipDegrees = 0;
+            resetState.Layers(2).Alpha = 1;
+            resetState.Layers(2).ProjectionOffsetMeters = [0 0];
+            app.importState(ProjectionViewerState.validate(resetState, 2));
+            loadedState = app.loadState(filePath);
+            actual = app.exportState();
+            jsonText = fileread(filePath);
+
+            testCase.verifyTrue(contains(jsonText, '"ProjectionOffsetMeters"'));
+            testCase.verifyEqual(loadedState.Projection.TipDegrees, 2.25, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Layers(2).Alpha, 0.25, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Layers(2).ProjectionOffsetMeters, ...
+                [1.25 -1.5], AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
+
+        function testConstructorAcceptsViewerState(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            state = ProjectionViewerAppInteractionTest.makeViewerState(scene);
+
+            app = ProjectionViewerApp(scene, [], state);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            actual = app.exportState();
+
+            testCase.verifyEqual(actual.SelectedLayerIndex, 2);
+            testCase.verifyEqual(actual.Projection.TipDegrees, ...
+                state.Projection.TipDegrees, AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.View.TwistDegrees, ...
+                state.View.TwistDegrees, AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Layers(2).Alpha, state.Layers(2).Alpha, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Layers(2).ProjectionOffsetMeters, ...
+                state.Layers(2).ProjectionOffsetMeters, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
+
         function testTipTiltControlsSharedProjectionPlane(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             app = ProjectionViewerApp(scene);
@@ -552,7 +661,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             for k = 1:numel(labels)
                 labelTexts(k) = string(labels(k).Text);
             end
-            label = labels(startsWith(labelTexts, "OPK "));
+            label = labels(startsWith(labelTexts, "Omega "));
         end
 
         function ifovDegrees = layerIfovDegrees(layer)
@@ -581,8 +690,37 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
         end
 
         function text = opkText(offsetsDegrees)
-            text = string(sprintf("OPK %.4f/%.4f/%.3f deg", ...
+            text = string(sprintf("Omega %.4f deg\nPhi %.4f deg\nKappa %.3f deg", ...
                 offsetsDegrees(1), offsetsDegrees(2), offsetsDegrees(3)));
+        end
+
+        function state = makeViewerState(scene)
+            state = struct();
+            state.Format = "ProjectionViewerState";
+            state.Version = 1;
+            state.LayerCount = numel(scene.layers);
+            state.SelectedLayerIndex = 2;
+            state.Projection = struct(TipDegrees=3.5, TiltDegrees=-2.5);
+            state.View = struct(TwistDegrees=1.25);
+            state.Layers = [ ...
+                ProjectionViewerAppInteractionTest.makeViewerLayerState( ...
+                scene.layers(1), 1, 1, [0 0], [0 0 0]), ...
+                ProjectionViewerAppInteractionTest.makeViewerLayerState( ...
+                scene.layers(2), 2, 0.3, [0.5 -0.75], [0.01 0.02 0.03])];
+        end
+
+        function layerState = makeViewerLayerState(layer, index, alpha, ...
+                projectionOffsetMeters, viewVectorAngularOffsetsDegrees)
+            layerState = struct();
+            layerState.Index = index;
+            layerState.Name = layer.Name;
+            layerState.ImagePath = layer.ImagePath;
+            layerState.Alpha = alpha;
+            layerState.Visible = true;
+            layerState.BlendMode = "alpha";
+            layerState.ProjectionOffsetMeters = projectionOffsetMeters;
+            layerState.ViewVectorAngularOffsetsDegrees = ...
+                viewVectorAngularOffsetsDegrees;
         end
 
         function surfaces = findLayerSurfaces(ax, scene)

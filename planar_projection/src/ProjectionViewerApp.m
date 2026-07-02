@@ -44,14 +44,26 @@ classdef ProjectionViewerApp < handle
         LayerDropDown matlab.ui.control.DropDown
         VisibleCheckBox matlab.ui.control.CheckBox
         BlendModeDropDown matlab.ui.control.DropDown
+        SaveButton matlab.ui.control.Button
+        LoadButton matlab.ui.control.Button
         CycleButton matlab.ui.control.Button
         ResetButton matlab.ui.control.Button
     end
 
     methods
-        function app = ProjectionViewerApp(scene, projectionPlane)
+        function app = ProjectionViewerApp(scene, projectionPlane, viewerState)
             if nargin < 1
                 scene = ProjectionViewerHarness.createDefaultScene();
+            end
+            if nargin < 2
+                projectionPlane = [];
+            end
+            if nargin < 3
+                viewerState = [];
+            end
+            if ~isempty(projectionPlane) && ProjectionViewerState.isState(projectionPlane)
+                viewerState = projectionPlane;
+                projectionPlane = [];
             end
             if nargin >= 2 && ~isempty(projectionPlane)
                 scene = ProjectionViewerHarness.applyProjectionPlane(scene, projectionPlane);
@@ -62,10 +74,18 @@ classdef ProjectionViewerApp < handle
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
             app.PreviewTimer = tic;
+            if ~isempty(viewerState)
+                viewerState = ProjectionViewerState.validate( ...
+                    viewerState, numel(app.Scene.layers));
+                app.applyViewerStateToScene(viewerState);
+            end
             app.createComponents();
             app.createSurface();
             app.configureFrameCamera();
-            app.updateLabels(0, 0, 0, app.Scene.layers(app.SelectedLayerIndex).Alpha);
+            if ~isempty(viewerState) && isfield(viewerState, "Camera")
+                app.applyCameraState(viewerState.Camera);
+            end
+            app.updateControlsFromSelectedLayer();
 
             if nargout == 0
                 clear app
@@ -76,6 +96,56 @@ classdef ProjectionViewerApp < handle
             if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
                 delete(app.UIFigure);
             end
+        end
+
+        function state = exportState(app)
+            %exportState Return a JSON-serializable snapshot of viewer state.
+            state = struct();
+            state.Format = ProjectionViewerState.Format;
+            state.Version = ProjectionViewerState.Version;
+            state.LayerCount = numel(app.Scene.layers);
+            state.SelectedLayerIndex = app.SelectedLayerIndex;
+            state.Projection = struct();
+            state.Projection.TipDegrees = app.ProjectionTipDegrees;
+            state.Projection.TiltDegrees = app.ProjectionTiltDegrees;
+            state.View = struct();
+            state.View.TwistDegrees = app.ViewTwistDegrees;
+            state.Camera = app.exportCameraState();
+
+            for layerIndex = 1:numel(app.Scene.layers)
+                layerState = app.exportLayerState(layerIndex);
+                if layerIndex == 1
+                    layers = layerState;
+                else
+                    layers(layerIndex) = layerState;
+                end
+            end
+            state.Layers = layers;
+            state = ProjectionViewerState.validate(state, numel(app.Scene.layers));
+        end
+
+        function importState(app, state)
+            %importState Apply a validated viewer state to the app.
+            state = ProjectionViewerState.validate(state, numel(app.Scene.layers));
+            app.applyViewerStateToScene(state);
+            app.refreshProjectionSurfaces(app.DefaultMeshSampling);
+            app.configureFrameCamera();
+            if isfield(state, "Camera")
+                app.applyCameraState(state.Camera);
+            end
+            app.updateControlsFromSelectedLayer();
+            drawnow limitrate
+        end
+
+        function saveState(app, filePath)
+            %saveState Write the current viewer state to a JSON file.
+            ProjectionViewerState.write(filePath, app.exportState());
+        end
+
+        function state = loadState(app, filePath)
+            %loadState Read and apply a viewer state JSON file.
+            state = ProjectionViewerState.read(filePath, numel(app.Scene.layers));
+            app.importState(state);
         end
     end
 
@@ -103,12 +173,12 @@ classdef ProjectionViewerApp < handle
             app.Axes.Interactions = [];
             app.hideImageAxesDecorations();
 
-            app.ControlGrid = uigridlayout(app.GridLayout, [2 10]);
+            app.ControlGrid = uigridlayout(app.GridLayout, [2 12]);
             app.ControlGrid.Layout.Row = 2;
             app.ControlGrid.Layout.Column = 1;
             app.ControlGrid.RowHeight = {"fit", "fit"};
             app.ControlGrid.ColumnWidth = {"1.2x", "1x", "1x", "1x", "1x", ...
-                "1.2x", "fit", "1x", "fit", "fit"};
+                "fit", "fit", "1x", "fit", "fit", "fit", "fit"};
             app.ControlGrid.Padding = [0 0 0 0];
             app.ControlGrid.ColumnSpacing = 14;
 
@@ -167,7 +237,8 @@ classdef ProjectionViewerApp < handle
                 app.alphaChanging(source, event);
             app.AlphaSlider.ValueChangedFcn = @(~, ~) app.updateAlphaFromSlider();
 
-            app.ViewVectorLabel = uilabel(app.ControlGrid, Text="OPK 0.0/0.0/0.0 deg");
+            app.ViewVectorLabel = uilabel(app.ControlGrid, ...
+                Text=sprintf("Omega 0.0000 deg\nPhi 0.0000 deg\nKappa 0.000 deg"));
             app.ViewVectorLabel.Layout.Row = [1 2];
             app.ViewVectorLabel.Layout.Column = 6;
 
@@ -186,15 +257,120 @@ classdef ProjectionViewerApp < handle
             app.BlendModeDropDown.Layout.Row = 2;
             app.BlendModeDropDown.Layout.Column = 8;
 
+            app.SaveButton = uibutton(app.ControlGrid, Text="Save", ...
+                ButtonPushedFcn=@(~, ~) app.saveStateFromDialog());
+            app.SaveButton.Layout.Row = [1 2];
+            app.SaveButton.Layout.Column = 9;
+
+            app.LoadButton = uibutton(app.ControlGrid, Text="Load", ...
+                ButtonPushedFcn=@(~, ~) app.loadStateFromDialog());
+            app.LoadButton.Layout.Row = [1 2];
+            app.LoadButton.Layout.Column = 10;
+
             app.CycleButton = uibutton(app.ControlGrid, Text="Cycle", ...
                 ButtonPushedFcn=@(~, ~) app.cycleLayer());
             app.CycleButton.Layout.Row = [1 2];
-            app.CycleButton.Layout.Column = 9;
+            app.CycleButton.Layout.Column = 11;
 
             app.ResetButton = uibutton(app.ControlGrid, Text="Reset", ...
                 ButtonPushedFcn=@(~, ~) app.resetView());
             app.ResetButton.Layout.Row = [1 2];
-            app.ResetButton.Layout.Column = 10;
+            app.ResetButton.Layout.Column = 12;
+        end
+
+        function layerState = exportLayerState(app, layerIndex)
+            layer = app.Scene.layers(layerIndex);
+            layerState = struct();
+            layerState.Index = layerIndex;
+            layerState.Name = string(layer.Name);
+            layerState.ImagePath = string(layer.ImagePath);
+            layerState.Alpha = layer.Alpha;
+            layerState.Visible = logical(layer.Visible);
+            layerState.BlendMode = string(layer.BlendMode);
+            layerState.ProjectionOffsetMeters = app.layerProjectionOffset(layer).';
+            layerState.ViewVectorAngularOffsetsDegrees = ...
+                app.layerViewVectorAngularOffsetsDegrees(layer).';
+        end
+
+        function cameraState = exportCameraState(app)
+            cameraState = struct();
+            cameraState.Position = campos(app.Axes);
+            cameraState.Target = camtarget(app.Axes);
+            cameraState.UpVector = camup(app.Axes);
+            cameraState.ViewAngle = app.Axes.CameraViewAngle;
+            cameraState.Projection = "orthographic";
+        end
+
+        function applyViewerStateToScene(app, state)
+            app.SelectedLayerIndex = state.SelectedLayerIndex;
+            app.ProjectionTipDegrees = state.Projection.TipDegrees;
+            app.ProjectionTiltDegrees = state.Projection.TiltDegrees;
+            app.ViewTwistDegrees = state.View.TwistDegrees;
+            plane = app.currentProjectionPlane();
+
+            for layerIndex = 1:numel(app.Scene.layers)
+                layer = app.Scene.layers(layerIndex);
+                layerState = state.Layers(layerIndex);
+                layer.Alpha = layerState.Alpha;
+                layer.Visible = layerState.Visible;
+                layer.BlendMode = string(layerState.BlendMode);
+                layer.ProjectionOffsetMeters = layerState.ProjectionOffsetMeters(:);
+                layer.ViewVectorAngularOffsetsDegrees = ...
+                    layerState.ViewVectorAngularOffsetsDegrees(:);
+                layer.CurrentProjectionPlane = plane;
+                app.Scene.layers(layerIndex) = layer;
+            end
+        end
+
+        function plane = currentProjectionPlane(app)
+            plane = ProjectionMeshBuilder.applyPlaneTipTilt( ...
+                app.Scene.layers(1).BaseProjectionPlane, ...
+                deg2rad(app.ProjectionTipDegrees), ...
+                deg2rad(app.ProjectionTiltDegrees));
+        end
+
+        function applyCameraState(app, cameraState)
+            camproj(app.Axes, char(cameraState.Projection));
+            campos(app.Axes, cameraState.Position);
+            camtarget(app.Axes, cameraState.Target);
+            camup(app.Axes, cameraState.UpVector);
+            app.Axes.CameraViewAngle = cameraState.ViewAngle;
+        end
+
+        function saveStateFromDialog(app)
+            [fileName, folderName] = uiputfile("*.json", ...
+                "Save Projection Viewer State", "projection_viewer_state.json");
+            if isequal(fileName, 0)
+                return
+            end
+
+            try
+                app.saveState(fullfile(folderName, fileName));
+            catch ME
+                app.showStateFileError("Save Failed", ME);
+            end
+        end
+
+        function loadStateFromDialog(app)
+            [fileName, folderName] = uigetfile("*.json", ...
+                "Load Projection Viewer State");
+            if isequal(fileName, 0)
+                return
+            end
+
+            try
+                app.loadState(fullfile(folderName, fileName));
+            catch ME
+                app.showStateFileError("Load Failed", ME);
+            end
+        end
+
+        function showStateFileError(app, titleText, ME)
+            if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
+                uialert(app.UIFigure, ME.message, titleText);
+            else
+                warning("%s: %s", titleText, ME.message);
+            end
         end
 
         function createSurface(app)
@@ -776,6 +952,28 @@ classdef ProjectionViewerApp < handle
             drawnow limitrate
         end
 
+        function refreshProjectionSurfaces(app, meshSamplings)
+            if nargin < 2
+                meshSamplings = app.DefaultMeshSampling;
+            end
+
+            plane = app.currentProjectionPlane();
+            for layerIndex = 1:numel(app.Scene.layers)
+                layer = app.Scene.layers(layerIndex);
+                layer.CurrentProjectionPlane = plane;
+                layer.MeshSampling = meshSamplings(layerIndex);
+                app.Scene.layers(layerIndex) = layer;
+
+                mesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                    layer, plane, app.Scene.renderOrigin);
+                app.updateSurfaceFromMesh(layerIndex, mesh);
+                if layerIndex == app.SelectedLayerIndex
+                    app.CurrentMesh = mesh;
+                    app.Surface = app.Surfaces{layerIndex};
+                end
+            end
+        end
+
         function updateSurfaceFromMesh(app, layerIndex, mesh)
             surfaceHandle = app.Surfaces{layerIndex};
             [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
@@ -862,7 +1060,8 @@ classdef ProjectionViewerApp < handle
         function updateViewVectorLabel(app)
             layer = app.Scene.layers(app.SelectedLayerIndex);
             offsetsDegrees = app.layerViewVectorAngularOffsetsDegrees(layer);
-            app.ViewVectorLabel.Text = sprintf("OPK %.4f/%.4f/%.3f deg", ...
+            app.ViewVectorLabel.Text = sprintf( ...
+                "Omega %.4f deg\nPhi %.4f deg\nKappa %.3f deg", ...
                 offsetsDegrees(1), offsetsDegrees(2), offsetsDegrees(3));
         end
 
