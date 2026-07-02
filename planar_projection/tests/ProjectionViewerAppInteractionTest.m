@@ -199,6 +199,32 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
+        function testInitialSelectionTargetsTopLayer(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
+            alphaSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 5);
+
+            alphaSlider.Value = 0.35;
+            alphaSlider.ValueChangedFcn(alphaSlider, struct());
+            drawnow
+
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+
+            testCase.verifyEqual(layerDropDown.Value, 2);
+            testCase.verifyEqual(layerSurfaces(1).FaceAlpha, 1, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerSurfaces(2).FaceAlpha, 0.35, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
+
         function testTipTiltControlsSharedProjectionPlane(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             app = ProjectionViewerApp(scene);

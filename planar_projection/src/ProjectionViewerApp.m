@@ -53,6 +53,7 @@ classdef ProjectionViewerApp < handle
             end
 
             app.Scene = scene;
+            app.SelectedLayerIndex = numel(app.Scene.layers);
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
             app.PreviewTimer = tic;
