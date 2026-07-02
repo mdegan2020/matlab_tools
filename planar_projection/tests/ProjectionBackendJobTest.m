@@ -154,7 +154,7 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
         function layer = makeLayerState()
             layer = struct();
             layer.Index = 1;
-            layer.Name = "synthetic";
+            layer.Name = "Test image";
             layer.ImagePath = "synthetic.tif";
             layer.Alpha = 0.8;
             layer.Visible = true;

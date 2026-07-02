@@ -19,7 +19,7 @@ src/ProjectionLayerManager.m    Multi-layer visibility and change-workflow helpe
 src/ProjectionMeshBuilder.m     Pure sampled projection mesh builder
 src/ProjectionReadbackRenderer.m Headless frame-camera readback prototype
 src/ProjectionViewerApp.m       Programmatic interactive preview app
-src/ProjectionViewerState.m     JSON-serializable viewer state helpers
+src/ProjectionViewerState.m     JSON-serializable viewer state and scene-apply helpers
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionBackendProcessor.m Backend job invocation facade
 tests/PlanarProjectionTest.m    Class-based unit tests

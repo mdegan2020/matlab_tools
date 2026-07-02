@@ -5,9 +5,19 @@ classdef ProjectionBackendProcessor
         function result = run(jobInput)
             %run Resolve and validate a backend job without rendering yet.
             job = ProjectionBackendJob.resolvePayloads(jobInput);
+            stateApplied = false;
+            if isfield(job, "ViewerState")
+                [job.Scene, job.ViewerState] = ProjectionViewerState.applyToScene( ...
+                    job.Scene, job.ViewerState);
+                stateApplied = true;
+            end
 
             result = struct();
-            result.Status = "validated";
+            if stateApplied
+                result.Status = "stateApplied";
+            else
+                result.Status = "validated";
+            end
             result.Format = "ProjectionBackendResult";
             result.Version = 1;
             result.Job = job;
@@ -16,7 +26,7 @@ classdef ProjectionBackendProcessor
             result.Output = job.Output;
             result.Execution = job.Execution;
             result.Readback = [];
-            result.Message = "Backend Milestone 1 validated the job contract; rendering is implemented in later milestones.";
+            result.Message = "Backend job is resolved and ready for later rendering milestones.";
 
             if isfield(job, "ViewerState")
                 result.ViewerState = job.ViewerState;

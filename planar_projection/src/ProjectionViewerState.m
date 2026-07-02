@@ -108,9 +108,86 @@ classdef ProjectionViewerState
             filePath = ProjectionViewerState.validateFilePath(filePath);
             state = ProjectionViewerState.decode(fileread(filePath), layerCount);
         end
+
+        function [scene, state] = applyToScene(scene, state)
+            %applyToScene Apply viewer state to a scene without creating an app.
+            ProjectionViewerState.validateScene(scene);
+            state = ProjectionViewerState.validate(state, numel(scene.layers));
+            ProjectionViewerState.validateSceneCompatibility(scene, state);
+
+            plane = ProjectionMeshBuilder.applyPlaneTipTilt( ...
+                scene.layers(1).BaseProjectionPlane, ...
+                deg2rad(state.Projection.TipDegrees), ...
+                deg2rad(state.Projection.TiltDegrees));
+
+            for layerIndex = 1:numel(scene.layers)
+                layer = scene.layers(layerIndex);
+                layerState = state.Layers(layerIndex);
+                layer.Alpha = layerState.Alpha;
+                layer.Visible = layerState.Visible;
+                layer.BlendMode = string(layerState.BlendMode);
+                layer.ProjectionOffsetMeters = layerState.ProjectionOffsetMeters(:);
+                layer.ViewVectorAngularOffsetsDegrees = ...
+                    layerState.ViewVectorAngularOffsetsDegrees(:);
+                layer.CurrentProjectionPlane = plane;
+                scene.layers(layerIndex) = layer;
+            end
+        end
     end
 
     methods (Static, Access = private)
+        function validateScene(scene)
+            if ~isstruct(scene) || ~isscalar(scene) || ~isfield(scene, "layers") || ...
+                    isempty(scene.layers) || ~isstruct(scene.layers)
+                error("ProjectionViewerState:invalidScene", ...
+                    "Scene must contain a nonempty struct array of layers.");
+            end
+
+            for layerIndex = 1:numel(scene.layers)
+                layer = scene.layers(layerIndex);
+                if ~isfield(layer, "BaseProjectionPlane") || ...
+                        ~isfield(layer, "CurrentProjectionPlane")
+                    error("ProjectionViewerState:invalidScene", ...
+                        "Scene layers must contain base and current projection planes.");
+                end
+                PlanarProjection.validatePlane(layer.BaseProjectionPlane);
+                PlanarProjection.validatePlane(layer.CurrentProjectionPlane);
+            end
+        end
+
+        function validateSceneCompatibility(scene, state)
+            for layerIndex = 1:numel(scene.layers)
+                layer = scene.layers(layerIndex);
+                layerState = state.Layers(layerIndex);
+                ProjectionViewerState.validateLayerIdentity(layer, layerState, layerIndex);
+                ProjectionViewerState.validateLayerImagePath(layer, layerState, layerIndex);
+            end
+        end
+
+        function validateLayerIdentity(layer, layerState, layerIndex)
+            sceneName = string(ProjectionViewerState.fieldOrDefault(layer, ...
+                "Name", ""));
+            stateName = string(layerState.Name);
+            if strlength(sceneName) > 0 && strlength(stateName) > 0 && ...
+                    sceneName ~= stateName
+                error("ProjectionViewerState:layerOrderMismatch", ...
+                    "Viewer state layer %d does not match the scene layer order.", ...
+                    layerIndex);
+            end
+        end
+
+        function validateLayerImagePath(layer, layerState, layerIndex)
+            scenePath = string(ProjectionViewerState.fieldOrDefault(layer, ...
+                "ImagePath", ""));
+            statePath = string(layerState.ImagePath);
+            if strlength(scenePath) > 0 && strlength(statePath) > 0 && ...
+                    scenePath ~= statePath
+                error("ProjectionViewerState:imagePathMismatch", ...
+                    "Viewer state layer %d ImagePath does not match the scene layer.", ...
+                    layerIndex);
+            end
+        end
+
         function state = validateTopLevel(state)
             state.Format = ProjectionViewerState.Format;
             state.Version = ProjectionViewerState.Version;
