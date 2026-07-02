@@ -160,8 +160,8 @@ classdef ProjectionViewerApp < handle
             app.AlphaSlider.Layout.Column = 5;
             app.AlphaSlider.MajorTicks = 0:0.25:1;
             app.AlphaSlider.ValueChangingFcn = @(source, event) ...
-                app.sliderChanging(source, event, "alpha");
-            app.AlphaSlider.ValueChangedFcn = @(~, ~) app.updateFromSliderValues();
+                app.alphaChanging(source, event);
+            app.AlphaSlider.ValueChangedFcn = @(~, ~) app.updateAlphaFromSlider();
 
             app.VisibleCheckBox = uicheckbox(app.ControlGrid, Text="Visible", ...
                 Value=true, ValueChangedFcn=@(~, event) app.visibleChanged(event));
@@ -514,8 +514,9 @@ classdef ProjectionViewerApp < handle
                     tipDegrees = event.Value;
                 case "tilt"
                     tiltDegrees = event.Value;
-                case "alpha"
-                    alpha = event.Value;
+                otherwise
+                    error("ProjectionViewerApp:invalidSlider", ...
+                        "Projection slider name must be ""tip"" or ""tilt"".");
             end
 
             source.Value = event.Value;
@@ -533,6 +534,33 @@ classdef ProjectionViewerApp < handle
             app.updateProjection(app.TipSlider.Value, app.TiltSlider.Value, ...
                 app.AlphaSlider.Value, app.DefaultMeshSampling);
             app.PreviewTimer = tic;
+        end
+
+        function alphaChanging(app, source, event)
+            alpha = app.validateSliderAlpha(event.Value);
+            source.Value = alpha;
+            app.updateSelectedLayerAlpha(alpha);
+        end
+
+        function updateAlphaFromSlider(app)
+            alpha = app.validateSliderAlpha(app.AlphaSlider.Value);
+            app.AlphaSlider.Value = alpha;
+            app.updateSelectedLayerAlpha(alpha);
+            app.PreviewTimer = tic;
+        end
+
+        function updateSelectedLayerAlpha(app, alpha)
+            layerIndex = app.SelectedLayerIndex;
+            layer = app.Scene.layers(layerIndex);
+            layer.Alpha = alpha;
+            app.Scene.layers(layerIndex) = layer;
+            app.Surfaces{layerIndex}.FaceAlpha = alpha;
+            if ~isempty(app.CurrentMesh)
+                app.CurrentMesh.Alpha = alpha;
+            end
+            app.updateLabels(app.ProjectionTipDegrees, ...
+                app.ProjectionTiltDegrees, app.ViewTwistDegrees, alpha);
+            drawnow limitrate
         end
 
         function updateProjection(app, tipDegrees, tiltDegrees, alpha, meshSamplings)
@@ -649,6 +677,17 @@ classdef ProjectionViewerApp < handle
             app.TiltLabel.Text = sprintf("Tilt %.1f deg", tiltDegrees);
             app.TwistLabel.Text = sprintf("Twist %.1f deg", twistDegrees);
             app.AlphaLabel.Text = sprintf("Alpha %.2f", alpha);
+        end
+
+        function alpha = validateSliderAlpha(app, alpha)
+            alpha = double(alpha);
+            if ~isscalar(alpha) || ~isfinite(alpha)
+                error("ProjectionViewerApp:invalidAlpha", ...
+                    "Alpha must be a finite scalar.");
+            end
+
+            limits = app.AlphaSlider.Limits;
+            alpha = min(max(alpha, limits(1)), limits(2));
         end
 
         function resetView(app)

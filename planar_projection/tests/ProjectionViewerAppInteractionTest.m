@@ -167,7 +167,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
-        function testLayerSpecificAlphaDragUsesSelectedLayerSampling(testCase)
+        function testLayerSpecificAlphaDragUpdatesSelectedLayerOnly(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
@@ -194,8 +194,14 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             hasLayer2Texture = any(arrayfun( ...
                 @(surfaceHandle) isequal(surfaceHandle.CData, ...
                 scene.layers(2).DisplayTexture), surfaceHandles));
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
             testCase.verifyTrue(hasLayer2Texture);
             testCase.verifyEqual(alphaSlider.Value, 0.4, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerSurfaces(1).FaceAlpha, 1, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerSurfaces(2).FaceAlpha, 0.4, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
@@ -256,6 +262,57 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(layer1Change, 0, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
             testCase.verifyEqual(layer2Delta, [0; 0; 0.5], AbsTol=1e-9);
+        end
+
+        function testAlphaChangeDoesNotMoveNudgedLayer(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            alphaSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 5);
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("w"));
+            drawnow
+
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            layer2X = layerSurfaces(2).XData;
+            layer2Y = layerSurfaces(2).YData;
+            layer2Z = layerSurfaces(2).ZData;
+
+            alphaSlider.ValueChangingFcn(alphaSlider, struct("Value", 0.4));
+            drawnow
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+
+            testCase.verifyEqual(layerSurfaces(2).XData, layer2X, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerSurfaces(2).YData, layer2Y, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerSurfaces(2).ZData, layer2Z, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerSurfaces(2).FaceAlpha, 0.4, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+
+            alphaSlider.Value = 0.7;
+            alphaSlider.ValueChangedFcn(alphaSlider, struct());
+            drawnow
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+
+            testCase.verifyEqual(layerSurfaces(2).XData, layer2X, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerSurfaces(2).YData, layer2Y, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerSurfaces(2).ZData, layer2Z, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerSurfaces(2).FaceAlpha, 0.7, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
         function testTipTiltControlsSharedProjectionPlane(testCase)
