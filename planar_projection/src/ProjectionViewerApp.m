@@ -12,11 +12,13 @@ classdef ProjectionViewerApp < handle
         ViewTwistDegrees double = 0
         SelectedLayerIndex double = 1
         IsPanning logical = false
+        IsControlDown logical = false
         LastPointerLocation double = [NaN NaN]
         PreviewTimer
         MinPreviewInterval double = 1 / 30
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
+        TwistWheelStepDegrees double = 1
         UIFigure matlab.ui.Figure
         GridLayout matlab.ui.container.GridLayout
         Axes matlab.ui.control.UIAxes
@@ -74,7 +76,9 @@ classdef ProjectionViewerApp < handle
         function createComponents(app)
             app.UIFigure = uifigure(Name="Projection Viewer Prototype", ...
                 Position=[100 100 1100 760], ...
-                WindowScrollWheelFcn=@(~, event) app.scrollZoom(event), ...
+                WindowScrollWheelFcn=@(~, event) app.scrollWheel(event), ...
+                WindowKeyPressFcn=@(~, event) app.keyPressed(event), ...
+                WindowKeyReleaseFcn=@(~, event) app.keyReleased(event), ...
                 WindowButtonDownFcn=@(~, ~) app.beginPan(), ...
                 WindowButtonMotionFcn=@(~, ~) app.updatePan(), ...
                 WindowButtonUpFcn=@(~, ~) app.endPan());
@@ -242,11 +246,42 @@ classdef ProjectionViewerApp < handle
         end
 
         function applyViewTwist(app)
+            cameraViewAngle = app.Axes.CameraViewAngle;
             baseUpVector = app.Scene.frameCamera.focalPlane.basis(:, 2);
             viewDirection = camtarget(app.Axes).' - campos(app.Axes).';
             upVector = app.rotateVectorAboutAxis( ...
                 baseUpVector, viewDirection, deg2rad(app.ViewTwistDegrees));
             camup(app.Axes, upVector.');
+            app.Axes.CameraViewAngle = cameraViewAngle;
+        end
+
+        function keyPressed(app, event)
+            if app.eventHasControl(event)
+                app.IsControlDown = true;
+            end
+        end
+
+        function keyReleased(app, event)
+            if app.eventKeyIs(event, "control")
+                app.IsControlDown = false;
+            end
+        end
+
+        function scrollWheel(app, event)
+            if app.IsControlDown || app.eventHasControl(event)
+                app.scrollTwist(event);
+                return
+            end
+            app.scrollZoom(event);
+        end
+
+        function scrollTwist(app, event)
+            twistDegrees = app.TwistSlider.Value - ...
+                event.VerticalScrollCount * app.TwistWheelStepDegrees;
+            limits = app.TwistSlider.Limits;
+            twistDegrees = min(max(twistDegrees, limits(1)), limits(2));
+            app.TwistSlider.Value = twistDegrees;
+            app.updateViewTwist(twistDegrees);
         end
 
         function scrollZoom(app, event)
@@ -470,6 +505,29 @@ classdef ProjectionViewerApp < handle
             else
                 value = "off";
             end
+        end
+
+        function tf = eventHasControl(app, event)
+            tf = app.eventKeyIs(event, "control") || ...
+                any(app.eventStringValue(event, "Modifier") == "control");
+        end
+
+        function tf = eventKeyIs(app, event, key)
+            tf = any(app.eventStringValue(event, "Key") == string(key));
+        end
+
+        function value = eventStringValue(~, event, propertyName)
+            propertyName = char(propertyName);
+            if isstruct(event) && isfield(event, propertyName)
+                rawValue = event.(propertyName);
+            elseif isobject(event) && isprop(event, propertyName)
+                rawValue = event.(propertyName);
+            else
+                value = strings(1, 0);
+                return
+            end
+
+            value = lower(string(rawValue));
         end
     end
 end
