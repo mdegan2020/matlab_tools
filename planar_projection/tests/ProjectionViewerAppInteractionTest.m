@@ -259,8 +259,40 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             layer2Depth = ProjectionViewerAppInteractionTest.meanSurfaceDepth( ...
                 layerSurfaces(2), viewDirection);
 
-            testCase.verifyEqual(layer2Depth - layer1Depth, -0.05, ...
+            testCase.verifyEqual(layer2Depth - layer1Depth, -1, ...
                 AbsTol=1e-8);
+        end
+
+        function testFirstTipChangePreservesAxesScale(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
+            initialCameraViewAngle = ax.CameraViewAngle;
+            initialXLim = ax.XLim;
+            initialYLim = ax.YLim;
+            initialZLim = ax.ZLim;
+            initialPlotBoxAspectRatio = ax.PlotBoxAspectRatio;
+
+            tipSlider.Value = 1;
+            tipSlider.ValueChangedFcn(tipSlider, struct());
+            drawnow
+
+            testCase.verifyEqual(ax.CameraViewAngle, initialCameraViewAngle, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(ax.XLim, initialXLim, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(ax.YLim, initialYLim, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(ax.ZLim, initialZLim, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(ax.PlotBoxAspectRatio, initialPlotBoxAspectRatio, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
     end
 

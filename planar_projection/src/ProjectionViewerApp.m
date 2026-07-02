@@ -21,7 +21,8 @@ classdef ProjectionViewerApp < handle
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
         ModifierWheelStepDegrees double = 1
-        PreviewLayerDepthStepMeters double = 0.05
+        PreviewLayerDepthStepFraction double = 1e-4
+        PreviewLayerDepthMinimumStepMeters double = 0.5
         UIFigure matlab.ui.Figure
         GridLayout matlab.ui.container.GridLayout
         Axes matlab.ui.control.UIAxes
@@ -206,6 +207,7 @@ classdef ProjectionViewerApp < handle
             axis(app.Axes, "equal");
             axis(app.Axes, "tight");
             grid(app.Axes, "off");
+            app.stabilizeAxesLimits();
             app.hideImageAxesDecorations();
         end
 
@@ -502,14 +504,20 @@ classdef ProjectionViewerApp < handle
 
         function offset = previewLayerDepthOffset(app, layerIndex)
             layerCount = numel(app.Scene.layers);
-            if layerCount < 2 || app.PreviewLayerDepthStepMeters == 0
+            depthStep = app.previewLayerDepthStepMeters();
+            if layerCount < 2 || depthStep == 0
                 offset = [0; 0; 0];
                 return
             end
 
             centeredLayerIndex = double(layerIndex) - (double(layerCount) + 1) / 2;
-            offset = -centeredLayerIndex * app.PreviewLayerDepthStepMeters * ...
+            offset = -centeredLayerIndex * depthStep * ...
                 app.frameCameraViewDirection();
+        end
+
+        function depthStep = previewLayerDepthStepMeters(app)
+            depthStep = max(app.PreviewLayerDepthMinimumStepMeters, ...
+                app.PreviewLayerDepthStepFraction * app.frameCameraRange());
         end
 
         function viewDirection = frameCameraViewDirection(app)
@@ -517,6 +525,38 @@ classdef ProjectionViewerApp < handle
             target = app.Scene.layers(1).BaseProjectionPlane.P0 - app.Scene.renderOrigin;
             viewDirection = target - cameraPosition;
             viewDirection = viewDirection / norm(viewDirection);
+        end
+
+        function range = frameCameraRange(app)
+            cameraPosition = app.Scene.frameCamera.G0 - app.Scene.renderOrigin;
+            target = app.Scene.layers(1).BaseProjectionPlane.P0 - app.Scene.renderOrigin;
+            range = norm(target - cameraPosition);
+        end
+
+        function stabilizeAxesLimits(app)
+            radius = 0;
+            for layerIndex = 1:numel(app.Surfaces)
+                surfaceHandle = app.Surfaces{layerIndex};
+                points = [surfaceHandle.XData(:).'; ...
+                    surfaceHandle.YData(:).'; surfaceHandle.ZData(:).'];
+                radius = max(radius, max(vecnorm(points, 2, 1)));
+            end
+
+            if ~isfinite(radius) || radius <= 0
+                radius = 1;
+            end
+
+            limit = 1.02 * radius + ...
+                numel(app.Scene.layers) * app.previewLayerDepthStepMeters();
+            app.Axes.XLim = [-limit limit];
+            app.Axes.YLim = [-limit limit];
+            app.Axes.ZLim = [-limit limit];
+            app.Axes.XLimMode = "manual";
+            app.Axes.YLimMode = "manual";
+            app.Axes.ZLimMode = "manual";
+            app.Axes.DataAspectRatio = [1 1 1];
+            app.Axes.DataAspectRatioMode = "manual";
+            app.Axes.PlotBoxAspectRatioMode = "auto";
         end
 
         function updateLabels(app, tipDegrees, tiltDegrees, twistDegrees, alpha)
