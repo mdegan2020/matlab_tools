@@ -22,6 +22,7 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
             testCase.verifyEqual(job.Format, ProjectionBackendJob.Format);
             testCase.verifyEqual(job.Version, ProjectionBackendJob.Version);
             testCase.verifyEmpty(job.RenderOptions.OutputSize);
+            testCase.verifyEmpty(job.RenderOptions.TileSize);
             testCase.verifyEqual(job.RenderOptions.Interpolation, "bilinear");
             testCase.verifyFalse(job.RenderOptions.UseGPU);
             testCase.verifyEqual(job.RenderOptions.InvalidIntersectionPolicy, "error");
@@ -44,6 +45,16 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
             testCase.verifyError( ...
                 @() ProjectionBackendJob.validate(job), ...
                 "ProjectionBackendJob:invalidExecution");
+        end
+
+        function testValidationAcceptsThreadPoolExecution(testCase)
+            scene = ProjectionBackendJobTest.makeScene();
+            job = struct(Scene=scene, Execution=struct(Mode="threads"));
+
+            job = ProjectionBackendJob.validate(job);
+
+            testCase.verifyEqual(job.Execution.Mode, "threads");
+            testCase.verifyFalse(job.Execution.UseGPU);
         end
 
         function testLiveJobInvocationReturnsValidatedContract(testCase)

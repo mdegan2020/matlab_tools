@@ -2,17 +2,26 @@ classdef ProjectionBackendTiledRenderer
     %ProjectionBackendTiledRenderer Serial tiled CPU backend renderer.
 
     methods (Static)
-        function readback = renderScene(scene, options)
+        function readback = renderScene(scene, options, execution)
             %renderScene Render a scene in bounded row/column tiles.
             if nargin < 2
                 options = struct();
             end
+            if nargin < 3
+                execution = struct();
+            end
 
-            options = ProjectionBackendTiledRenderer.mergeOptions(scene, options);
+            options = ProjectionBackendTiledRenderer.mergeOptions(scene, options, execution);
             outputGrid = options.OutputGrid;
             outputSize = outputGrid.OutputSize;
             tiles = ProjectionBackendTiledRenderer.tileRanges( ...
                 outputSize, options.TileSize);
+            if options.ExecutionMode == "threads"
+                tileResults = ProjectionBackendTiledRenderer.renderTilesInThreads( ...
+                    scene, options, outputGrid, tiles);
+            else
+                tileResults = {};
+            end
 
             compositeImage = [];
             validMask = false(outputSize);
@@ -23,15 +32,16 @@ classdef ProjectionBackendTiledRenderer
             tileReportIndex = 0;
 
             for tileIndex = 1:numel(tiles)
-                tile = tiles(tileIndex);
-                tileOptions = options;
-                tileOptions.OutputGrid = ProjectionBackendTiledRenderer.tileOutputGrid( ...
-                    outputGrid, tile.RowRange, tile.ColumnRange);
-                tileOptions.OutputSize = tileOptions.OutputGrid.OutputSize;
-
-                tileTimer = tic;
-                tileReadback = ProjectionReadbackRenderer.renderScene(scene, tileOptions);
-                renderSeconds = toc(tileTimer);
+                if options.ExecutionMode == "threads"
+                    tileResult = tileResults{tileIndex};
+                    tile = tileResult.Tile;
+                    tileReadback = tileResult.Readback;
+                    report = tileResult.Report;
+                else
+                    tile = tiles(tileIndex);
+                    [tileReadback, report] = ProjectionBackendTiledRenderer.renderTile( ...
+                        scene, options, outputGrid, tile);
+                end
 
                 if isempty(layerIndices)
                     layerIndex = tileReadback.LayerIndex;
@@ -57,8 +67,7 @@ classdef ProjectionBackendTiledRenderer
                 end
 
                 tileReportIndex = tileReportIndex + 1;
-                tileReports(tileReportIndex) = ProjectionBackendTiledRenderer.tileReport( ...
-                    tile, tileReadback, renderSeconds);
+                tileReports(tileReportIndex) = report;
             end
 
             readback = struct();
@@ -77,6 +86,7 @@ classdef ProjectionBackendTiledRenderer
             readback.LayerReadbacks = layerReadbacks;
             readback.OutputGrid = outputGrid;
             readback.Tiled = true;
+            readback.ExecutionMode = options.ExecutionMode;
             readback.TileSize = options.TileSize;
             readback.TileCount = numel(tileReports);
             readback.TileReports = tileReports;
@@ -84,7 +94,7 @@ classdef ProjectionBackendTiledRenderer
     end
 
     methods (Static, Access = private)
-        function options = mergeOptions(scene, options)
+        function options = mergeOptions(scene, options, execution)
             if isempty(options)
                 options = struct();
             end
@@ -99,12 +109,20 @@ classdef ProjectionBackendTiledRenderer
             defaults.TileSize = [256 256];
             defaults.Interpolation = "bilinear";
             defaults.IncludeLayerReadbacks = true;
+            defaults.ExecutionMode = "serial";
 
             names = fieldnames(options);
             for k = 1:numel(names)
                 defaults.(names{k}) = options.(names{k});
             end
 
+            defaults.ExecutionMode = ...
+                ProjectionBackendTiledRenderer.validateExecutionMode( ...
+                ProjectionBackendTiledRenderer.fieldOrDefault( ...
+                execution, "Mode", defaults.ExecutionMode));
+            if isempty(defaults.TileSize)
+                defaults.TileSize = [256 256];
+            end
             defaults.TileSize = ProjectionBackendTiledRenderer.validateTileSize( ...
                 defaults.TileSize);
             if isempty(defaults.OutputGrid)
@@ -126,6 +144,47 @@ classdef ProjectionBackendTiledRenderer
             end
 
             options = defaults;
+        end
+
+        function tileResults = renderTilesInThreads(scene, options, outputGrid, tiles)
+            ProjectionBackendTiledRenderer.ensureThreadPool();
+            tileResults = cell(1, numel(tiles));
+            parfor tileIndex = 1:numel(tiles)
+                tile = tiles(tileIndex);
+                [tileReadback, report] = ProjectionBackendTiledRenderer.renderTile( ...
+                    scene, options, outputGrid, tile);
+                tileResults{tileIndex} = struct(Tile=tile, Readback=tileReadback, ...
+                    Report=report);
+            end
+        end
+
+        function pool = ensureThreadPool()
+            pool = gcp("nocreate");
+            if isempty(pool)
+                pool = parpool("threads");
+                return
+            end
+            if ~ProjectionBackendTiledRenderer.isThreadPool(pool)
+                error("ProjectionBackendTiledRenderer:processPoolActive", ...
+                    "Execution.Mode=""threads"" requires a thread pool. Delete the active process-based pool or use Execution.Mode=""serial"".");
+            end
+        end
+
+        function tf = isThreadPool(pool)
+            tf = contains(string(class(pool)), "ThreadPool");
+        end
+
+        function [tileReadback, report] = renderTile(scene, options, outputGrid, tile)
+            tileOptions = options;
+            tileOptions.OutputGrid = ProjectionBackendTiledRenderer.tileOutputGrid( ...
+                outputGrid, tile.RowRange, tile.ColumnRange);
+            tileOptions.OutputSize = tileOptions.OutputGrid.OutputSize;
+
+            tileTimer = tic;
+            tileReadback = ProjectionReadbackRenderer.renderScene(scene, tileOptions);
+            renderSeconds = toc(tileTimer);
+            report = ProjectionBackendTiledRenderer.tileReport( ...
+                tile, tileReadback, renderSeconds);
         end
 
         function tiles = tileRanges(outputSize, tileSize)
@@ -301,6 +360,22 @@ classdef ProjectionBackendTiledRenderer
                     "%s must be a scalar logical value.", name);
             end
             value = logical(value);
+        end
+
+        function mode = validateExecutionMode(mode)
+            mode = lower(string(mode));
+            if ~isscalar(mode) || ~ismember(mode, ["serial", "threads"])
+                error("ProjectionBackendTiledRenderer:invalidOptions", ...
+                    "Execution mode must be serial or threads.");
+            end
+        end
+
+        function value = fieldOrDefault(value, fieldName, defaultValue)
+            if isstruct(value) && isscalar(value) && isfield(value, fieldName)
+                value = value.(fieldName);
+            else
+                value = defaultValue;
+            end
         end
 
         function value = firstLayerField(layerReadbacks, fieldName)

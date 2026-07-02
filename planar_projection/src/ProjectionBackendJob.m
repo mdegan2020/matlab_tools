@@ -350,9 +350,10 @@ classdef ProjectionBackendJob
 
             execution = ProjectionBackendJob.mergeStruct(defaults, execution, "Execution");
             execution.Mode = lower(string(execution.Mode));
-            if ~isscalar(execution.Mode) || execution.Mode ~= "serial"
+            if ~isscalar(execution.Mode) || ...
+                    ~ismember(execution.Mode, ["serial", "threads"])
                 error("ProjectionBackendJob:invalidExecution", ...
-                    "Backend Milestone 1 supports only Execution.Mode=""serial"".");
+                    "Execution.Mode must be serial or threads.");
             end
             execution.UseGPU = ProjectionBackendJob.validateLogicalScalar( ...
                 execution.UseGPU, "Execution.UseGPU");

@@ -20,6 +20,7 @@ classdef ProjectionBackendTiledRendererTest < matlab.unittest.TestCase
                 ProjectionBackendTiledRendererTest.renderUntiledAndTiled(scene);
 
             testCase.verifyTrue(tiled.Tiled);
+            testCase.verifyEqual(tiled.ExecutionMode, "serial");
             testCase.verifyEqual(tiled.OutputSize, [5 7]);
             testCase.verifyEqual(tiled.Image, untiled.Image, ...
                 AbsTol=ProjectionBackendTiledRendererTest.Tol);
@@ -74,6 +75,33 @@ classdef ProjectionBackendTiledRendererTest < matlab.unittest.TestCase
             testCase.verifySize(result.Readback.Image, [5 7]);
         end
 
+        function testThreadModeMatchesSerialTiledOutput(testCase)
+            testCase.addTeardown( ...
+                @ProjectionBackendTiledRendererTest.deleteActiveThreadPool);
+            scene = ProjectionBackendTiledRendererTest.makeTwoLayerScene();
+            serialJob = struct(Scene=scene, ...
+                RenderOptions=struct(OutputSize=[5 7], TileSize=[2 3]));
+            threadsJob = struct(Scene=scene, ...
+                RenderOptions=struct(OutputSize=[5 7], TileSize=[2 3]), ...
+                Execution=struct(Mode="threads"));
+
+            serialResult = ProjectionBackendProcessor.run(serialJob);
+            threadsResult = ProjectionBackendProcessor.run(threadsJob);
+            pool = gcp("nocreate");
+
+            testCase.verifyEqual(threadsResult.Execution.Mode, "threads");
+            testCase.verifyTrue(threadsResult.Readback.Tiled);
+            testCase.verifyEqual(threadsResult.Readback.ExecutionMode, "threads");
+            testCase.verifyEqual(threadsResult.Readback.Image, ...
+                serialResult.Readback.Image, ...
+                AbsTol=ProjectionBackendTiledRendererTest.Tol);
+            testCase.verifyEqual(threadsResult.Readback.ValidMask, ...
+                serialResult.Readback.ValidMask);
+            testCase.verifyEqual(threadsResult.Readback.TileCount, ...
+                serialResult.Readback.TileCount);
+            testCase.verifyTrue(contains(string(class(pool)), "ThreadPool"));
+        end
+
         function testLayerReadbacksCanBeDisabledForTiledRendering(testCase)
             scene = ProjectionBackendTiledRendererTest.makeTwoLayerScene();
             outputGrid = ProjectionBackendTiledRendererTest.makeOutputGrid(scene);
@@ -123,6 +151,13 @@ classdef ProjectionBackendTiledRendererTest < matlab.unittest.TestCase
                 {imageData1, imageData2}, ["layer1.tif", "layer2.tif"], ...
                 options);
             scene.layers(2).Alpha = 0.5;
+        end
+
+        function deleteActiveThreadPool()
+            pool = gcp("nocreate");
+            if ~isempty(pool) && contains(string(class(pool)), "ThreadPool")
+                delete(pool);
+            end
         end
     end
 end
