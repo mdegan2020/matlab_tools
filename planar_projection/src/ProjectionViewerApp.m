@@ -152,6 +152,30 @@ classdef ProjectionViewerApp < handle
             state = ProjectionViewerState.read(filePath, numel(app.Scene.layers));
             app.importState(state);
         end
+
+        function job = exportBackendJob(app, options)
+            %exportBackendJob Return a backend job for the current app state.
+            if nargin < 2
+                options = struct();
+            end
+            if isempty(options)
+                options = struct();
+            end
+            if ~isstruct(options) || ~isscalar(options)
+                error("ProjectionViewerApp:invalidBackendJobOptions", ...
+                    "Backend job options must be a scalar struct.");
+            end
+            options.ViewerState = app.exportState();
+            job = ProjectionBackendJob.create(app.Scene, options);
+        end
+
+        function writeBackendJob(app, filePath, options)
+            %writeBackendJob Write the current app state as a backend job.
+            if nargin < 3
+                options = struct();
+            end
+            ProjectionBackendJob.write(filePath, app.exportBackendJob(options));
+        end
     end
 
     methods (Access = private)

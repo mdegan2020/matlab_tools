@@ -29,6 +29,7 @@ src/ProjectionBackendTiledRenderer.m Backend serial tiled CPU renderer
 src/ProjectionBackendProcessor.m Backend job invocation facade
 tests/PlanarProjectionTest.m    Class-based unit tests
 runProjectionViewerPrototype.m  Launcher for the local prototype TIFF
+validateProjectionBackendJob.m  Validate backend jobs without rendering
 runTests.m                      Simple test runner
 buildfile.m                     MATLAB buildtool tasks
 ```

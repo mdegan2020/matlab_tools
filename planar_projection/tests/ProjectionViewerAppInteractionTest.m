@@ -9,6 +9,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
         function addSourceToPath(testCase)
             projectRoot = fileparts(fileparts(mfilename("fullpath")));
             srcFolder = fullfile(projectRoot, "src");
+            testCase.applyFixture(matlab.unittest.fixtures.PathFixture(projectRoot));
             testCase.applyFixture(matlab.unittest.fixtures.PathFixture(srcFolder));
         end
     end
@@ -649,6 +650,33 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 [1.25 -1.5], AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
+        function testExportBackendJobFromCurrentViewerState(testCase)
+            tempFolder = string(tempname);
+            mkdir(tempFolder);
+            testCase.addTeardown(@() ...
+                ProjectionViewerAppInteractionTest.removeFolder(tempFolder));
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            state = ProjectionViewerAppInteractionTest.makeViewerState(scene);
+            app = ProjectionViewerApp(scene, [], state);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            options = struct(RenderOptions=struct(OutputSize=[3 4], ...
+                TileSize=[2 2]));
+            jobPath = fullfile(tempFolder, "viewer_backend_job.json");
+
+            job = app.exportBackendJob(options);
+            validation = ProjectionBackendProcessor.validate(job);
+            app.writeBackendJob(jobPath, options);
+            pathValidation = validateProjectionBackendJob(jobPath);
+
+            testCase.verifyEqual(job.ViewerState.SelectedLayerIndex, 2);
+            testCase.verifyEqual(job.RenderOptions.OutputSize, [3 4]);
+            testCase.verifyEqual(validation.Status, "valid");
+            testCase.verifyTrue(validation.StateApplied);
+            testCase.verifyTrue(isfile(jobPath));
+            testCase.verifyEqual(pathValidation.OutputGrid.OutputSize, [3 4]);
+        end
+
         function testConstructorAcceptsViewerState(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             state = ProjectionViewerAppInteractionTest.makeViewerState(scene);
@@ -787,6 +815,12 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             scene = ProjectionViewerHarness.createSceneFromImages( ...
                 {imageData1, imageData2}, ["layer1.tif", "layer2.tif"], ...
                 options);
+        end
+
+        function removeFolder(folder)
+            if isfolder(folder)
+                rmdir(folder, "s");
+            end
         end
 
         function dropdown = findLayerDropDown(fig)

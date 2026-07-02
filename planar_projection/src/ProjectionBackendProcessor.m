@@ -57,6 +57,39 @@ classdef ProjectionBackendProcessor
             end
             result.Timing.TotalSeconds = toc(totalTimer);
         end
+
+        function validation = validate(jobInput)
+            %validate Resolve and plan a backend job without rendering.
+            validationTimer = tic;
+            job = ProjectionBackendJob.resolvePayloads(jobInput);
+            stateApplied = false;
+            if isfield(job, "ViewerState")
+                [job.Scene, job.ViewerState] = ProjectionViewerState.applyToScene( ...
+                    job.Scene, job.ViewerState);
+                stateApplied = true;
+            end
+            outputGrid = ProjectionBackendOutputGrid.plan(job.Scene, ...
+                ProjectionBackendProcessor.viewerStateForGrid(job), job.RenderOptions);
+            renderOptions = ProjectionBackendProcessor.renderOptionsWithGrid( ...
+                job.RenderOptions, outputGrid);
+            renderOptions = ProjectionBackendProcessor.renderOptionsWithExecution( ...
+                renderOptions, job.Execution);
+            gpuInfo = ProjectionBackendGpuSupport.resolve(renderOptions.UseGPU);
+
+            validation = struct();
+            validation.Format = "ProjectionBackendValidation";
+            validation.Version = 1;
+            validation.Status = "valid";
+            validation.StateApplied = stateApplied;
+            validation.Job = job;
+            validation.RenderOptions = renderOptions;
+            validation.Output = job.Output;
+            validation.Execution = job.Execution;
+            validation.OutputGrid = outputGrid;
+            validation.GpuInfo = gpuInfo;
+            validation.Timing = struct(ValidationSeconds=toc(validationTimer));
+            validation.Message = "Backend job resolved and planned successfully.";
+        end
     end
 
     methods (Static, Access = private)
