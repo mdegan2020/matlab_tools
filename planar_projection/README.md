@@ -13,7 +13,11 @@ plane = PlanarProjection.definePlane(G0, V0, V1, R0);
 
 ```text
 src/PlanarProjection.m          Static class library
+src/ProjectionViewerHarness.m   Synthetic scene and source-geometry harness
+src/ProjectionMeshBuilder.m     Pure sampled projection mesh builder
+src/ProjectionViewerApp.m       Programmatic interactive preview app
 tests/PlanarProjectionTest.m    Class-based unit tests
+runProjectionViewerPrototype.m  Launcher for the local prototype TIFF
 runTests.m                      Simple test runner
 buildfile.m                     MATLAB buildtool tasks
 ```
@@ -129,3 +133,13 @@ buildtool coverage
 ```
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise the public API with deterministic numeric examples.
+
+## Projection Viewer Prototype
+
+The interactive prototype is programmatic MATLAB app code, not an `.mlapp` file. From MATLAB:
+
+```matlab
+app = runProjectionViewerPrototype;
+```
+
+The default launcher expects the local ignored prototype image at `test_data/10.tif`.
