@@ -11,6 +11,8 @@ classdef ProjectionBackendProcessor
                     job.Scene, job.ViewerState);
                 stateApplied = true;
             end
+            outputGrid = ProjectionBackendOutputGrid.plan(job.Scene, ...
+                ProjectionBackendProcessor.viewerStateForGrid(job), job.RenderOptions);
 
             result = struct();
             if stateApplied
@@ -25,6 +27,7 @@ classdef ProjectionBackendProcessor
             result.RenderOptions = job.RenderOptions;
             result.Output = job.Output;
             result.Execution = job.Execution;
+            result.OutputGrid = outputGrid;
             result.Readback = [];
             result.Message = "Backend job is resolved and ready for later rendering milestones.";
 
@@ -32,6 +35,16 @@ classdef ProjectionBackendProcessor
                 result.ViewerState = job.ViewerState;
             else
                 result.ViewerState = [];
+            end
+        end
+    end
+
+    methods (Static, Access = private)
+        function viewerState = viewerStateForGrid(job)
+            if isfield(job, "ViewerState")
+                viewerState = job.ViewerState;
+            else
+                viewerState = [];
             end
         end
     end
