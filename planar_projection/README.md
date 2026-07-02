@@ -15,6 +15,7 @@ plane = PlanarProjection.definePlane(G0, V0, V1, R0);
 src/PlanarProjection.m          Static class library
 src/ProjectionViewerHarness.m   Synthetic scene and source-geometry harness
 src/ProjectionMeshBuilder.m     Pure sampled projection mesh builder
+src/ProjectionReadbackRenderer.m Headless frame-camera readback prototype
 src/ProjectionViewerApp.m       Programmatic interactive preview app
 tests/PlanarProjectionTest.m    Class-based unit tests
 runProjectionViewerPrototype.m  Launcher for the local prototype TIFF
