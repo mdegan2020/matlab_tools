@@ -420,6 +420,7 @@ classdef ProjectionViewerHarness
             layer.BaseProjectionPlane = basePlane;
             layer.CurrentProjectionPlane = basePlane;
             layer.MeshSampling = meshSampling;
+            layer.ProjectionOffsetMeters = [0; 0];
             layer.Alpha = 1.0;
             layer.BlendMode = "alpha";
             layer.Visible = true;

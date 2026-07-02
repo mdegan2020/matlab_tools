@@ -225,6 +225,39 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
+        function testWasdNudgesSelectedLayerOnly(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            layer1X0 = layerSurfaces(1).XData;
+            layer1Y0 = layerSurfaces(1).YData;
+            layer1Z0 = layerSurfaces(1).ZData;
+            layer2Center0 = ProjectionViewerAppInteractionTest.surfaceCenter( ...
+                layerSurfaces(2));
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("w"));
+            drawnow
+
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+            layer1Change = ProjectionViewerAppInteractionTest.surfaceChange( ...
+                layerSurfaces(1), layer1X0, layer1Y0, layer1Z0);
+            layer2Delta = ProjectionViewerAppInteractionTest.surfaceCenter( ...
+                layerSurfaces(2)) - layer2Center0;
+
+            testCase.verifyEqual(layer1Change, 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layer2Delta, [0; 0; 0.5], AbsTol=1e-9);
+        end
+
         function testTipTiltControlsSharedProjectionPlane(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             app = ProjectionViewerApp(scene);
@@ -379,6 +412,12 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             points = [surfaceHandle.XData(:).'; ...
                 surfaceHandle.YData(:).'; surfaceHandle.ZData(:).'];
             depth = mean(viewDirection(:).' * points);
+        end
+
+        function center = surfaceCenter(surfaceHandle)
+            center = [mean(surfaceHandle.XData, "all"); ...
+                mean(surfaceHandle.YData, "all"); ...
+                mean(surfaceHandle.ZData, "all")];
         end
 
         function event = makeKeyEvent(key)

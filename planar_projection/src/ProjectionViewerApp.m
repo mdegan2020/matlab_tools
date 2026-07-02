@@ -23,6 +23,7 @@ classdef ProjectionViewerApp < handle
         ModifierWheelStepDegrees double = 1
         PreviewLayerDepthStepFraction double = 1e-4
         PreviewLayerDepthMinimumStepMeters double = 0.5
+        MinProjectedNudgeNorm double = 1e-9
         UIFigure matlab.ui.Figure
         GridLayout matlab.ui.container.GridLayout
         Axes matlab.ui.control.UIAxes
@@ -269,6 +270,85 @@ classdef ProjectionViewerApp < handle
             app.Axes.CameraViewAngle = cameraViewAngle;
         end
 
+        function nudgeSelectedLayerFromKey(app, event)
+            key = app.eventStringValue(event, "Key");
+            if isempty(key)
+                return
+            end
+
+            key = key(1);
+            if ~any(key == ["w", "a", "s", "d"])
+                return
+            end
+
+            layerIndex = app.SelectedLayerIndex;
+            layer = app.Scene.layers(layerIndex);
+            plane = layer.CurrentProjectionPlane;
+            [worldDirection, stepMeters] = app.layerNudgeWorldDirection(key, layer, plane);
+            projectionDelta = plane.basis.' * (stepMeters * worldDirection);
+            layer.ProjectionOffsetMeters = app.layerProjectionOffset(layer) + projectionDelta;
+            app.Scene.layers(layerIndex) = layer;
+            app.updateProjection(app.ProjectionTipDegrees, app.ProjectionTiltDegrees, ...
+                layer.Alpha, app.DefaultMeshSampling);
+            app.PreviewTimer = tic;
+        end
+
+        function [worldDirection, stepMeters] = layerNudgeWorldDirection(app, key, layer, plane)
+            upVector = camup(app.Axes).';
+            upVector = upVector / norm(upVector);
+            viewDirection = camtarget(app.Axes).' - campos(app.Axes).';
+            viewDirection = viewDirection / norm(viewDirection);
+            rightVector = cross(viewDirection, upVector);
+            rightVector = rightVector / norm(rightVector);
+
+            switch key
+                case "w"
+                    worldDirection = app.projectDirectionToPlane(upVector, plane, plane.basis(:, 2));
+                    stepMeters = app.layerVerticalNudgeStepMeters(layer);
+                case "s"
+                    worldDirection = app.projectDirectionToPlane(-upVector, plane, -plane.basis(:, 2));
+                    stepMeters = app.layerVerticalNudgeStepMeters(layer);
+                case "a"
+                    worldDirection = app.projectDirectionToPlane(-rightVector, plane, -plane.basis(:, 1));
+                    stepMeters = app.layerHorizontalNudgeStepMeters(layer);
+                case "d"
+                    worldDirection = app.projectDirectionToPlane(rightVector, plane, plane.basis(:, 1));
+                    stepMeters = app.layerHorizontalNudgeStepMeters(layer);
+            end
+        end
+
+        function projectedDirection = projectDirectionToPlane(app, direction, plane, fallback)
+            projectedDirection = direction - plane.VN * (plane.VN.' * direction);
+            directionNorm = norm(projectedDirection);
+            if directionNorm <= app.MinProjectedNudgeNorm
+                projectedDirection = fallback;
+                directionNorm = norm(projectedDirection);
+            end
+            projectedDirection = projectedDirection / directionNorm;
+        end
+
+        function stepMeters = layerVerticalNudgeStepMeters(~, layer)
+            stepMeters = 1;
+            if isfield(layer.SourceGeometry, "GSD")
+                stepMeters = layer.SourceGeometry.GSD;
+            end
+        end
+
+        function stepMeters = layerHorizontalNudgeStepMeters(~, layer)
+            stepMeters = 1;
+            if isfield(layer.SourceGeometry, "PlatformStepMeters")
+                stepMeters = layer.SourceGeometry.PlatformStepMeters;
+            end
+        end
+
+        function offset = layerProjectionOffset(~, layer)
+            if isfield(layer, "ProjectionOffsetMeters")
+                offset = double(layer.ProjectionOffsetMeters(:));
+            else
+                offset = [0; 0];
+            end
+        end
+
         function keyPressed(app, event)
             if app.eventHasControl(event)
                 app.IsControlDown = true;
@@ -279,6 +359,10 @@ classdef ProjectionViewerApp < handle
             if app.eventHasAlt(event)
                 app.IsAltDown = true;
             end
+            if app.IsControlDown || app.IsShiftDown || app.IsAltDown
+                return
+            end
+            app.nudgeSelectedLayerFromKey(event);
         end
 
         function keyReleased(app, event)

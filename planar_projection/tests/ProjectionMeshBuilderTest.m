@@ -84,6 +84,30 @@ classdef ProjectionMeshBuilderTest < matlab.unittest.TestCase
             testCase.verifyGreaterThan(vertexDifference, 1e-3);
         end
 
+        function testProjectionOffsetShiftsMeshWithoutMovingSamples(testCase)
+            scene = ProjectionMeshBuilderTest.makeScene();
+            layer = scene.layers;
+            plane = layer.CurrentProjectionPlane;
+            baseMesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                layer, plane, scene.renderOrigin);
+            layer.ProjectionOffsetMeters = [2; -3];
+
+            shiftedMesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                layer, plane, scene.renderOrigin);
+            expectedWorldOffset = plane.basis * layer.ProjectionOffsetMeters;
+            expectedWorldOffset = reshape(expectedWorldOffset, 3, 1, 1);
+
+            testCase.verifyEqual(shiftedMesh.WorldPoints - baseMesh.WorldPoints, ...
+                repmat(expectedWorldOffset, 1, size(baseMesh.WorldPoints, 2), ...
+                size(baseMesh.WorldPoints, 3)), AbsTol=ProjectionMeshBuilderTest.Tol);
+            testCase.verifyEqual(shiftedMesh.SampledOrigins, baseMesh.SampledOrigins, ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
+            testCase.verifyEqual(shiftedMesh.SampledVectors, baseMesh.SampledVectors, ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
+            testCase.verifyEqual(shiftedMesh.Ranges, baseMesh.Ranges, ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
+        end
+
         function testBehindSourceIntersectionsError(testCase)
             scene = ProjectionMeshBuilderTest.makeScene();
             layer = scene.layers;

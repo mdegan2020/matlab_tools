@@ -29,6 +29,9 @@ classdef ProjectionMeshBuilder
 
             [worldPoints, ranges] = ProjectionMeshBuilder.intersectSampledRays( ...
                 G, V, plane, options);
+            projectionOffsetMeters = ProjectionMeshBuilder.layerProjectionOffset(layer);
+            projectionOffsetWorld = plane.basis * projectionOffsetMeters;
+            worldPoints = worldPoints + reshape(projectionOffsetWorld, 3, 1, 1);
             renderPoints = worldPoints - reshape(renderOrigin, 3, 1, 1);
 
             mesh = struct();
@@ -44,6 +47,8 @@ classdef ProjectionMeshBuilder
             mesh.RenderOrigin = renderOrigin;
             mesh.WorldPoints = worldPoints;
             mesh.RenderPoints = renderPoints;
+            mesh.ProjectionOffsetMeters = projectionOffsetMeters;
+            mesh.ProjectionOffsetWorld = projectionOffsetWorld;
             mesh.Ranges = ranges;
             mesh.SampledOrigins = G;
             mesh.SampledVectors = V;
@@ -125,6 +130,7 @@ classdef ProjectionMeshBuilder
             ProjectionMeshBuilder.validateIndices(meshSampling.RowIndices, "RowIndices");
             ProjectionMeshBuilder.validateIndices(meshSampling.ColumnIndices, "ColumnIndices");
             ProjectionMeshBuilder.validateAlpha(layer.Alpha);
+            ProjectionMeshBuilder.layerProjectionOffset(layer);
         end
 
         function validateIndices(indices, name)
@@ -179,6 +185,20 @@ classdef ProjectionMeshBuilder
                     "Layer alpha must be a finite scalar in the range [0, 1].");
             end
             value = double(value);
+        end
+
+        function offset = layerProjectionOffset(layer)
+            if ~isfield(layer, "ProjectionOffsetMeters")
+                offset = [0; 0];
+                return
+            end
+
+            offset = layer.ProjectionOffsetMeters;
+            if ~isnumeric(offset) || numel(offset) ~= 2 || any(~isfinite(offset), "all")
+                error("ProjectionMeshBuilder:invalidProjectionOffset", ...
+                    "Layer ProjectionOffsetMeters must be a finite numeric 2-vector.");
+            end
+            offset = double(offset(:));
         end
 
         function P = validatePoint(P, name)
