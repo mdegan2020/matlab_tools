@@ -14,6 +14,7 @@ plane = PlanarProjection.definePlane(G0, V0, V1, R0);
 ```text
 src/PlanarProjection.m          Static class library
 src/ProjectionViewerHarness.m   Synthetic scene and source-geometry harness
+src/ProjectionLayerManager.m    Multi-layer visibility and change-workflow helpers
 src/ProjectionMeshBuilder.m     Pure sampled projection mesh builder
 src/ProjectionReadbackRenderer.m Headless frame-camera readback prototype
 src/ProjectionViewerApp.m       Programmatic interactive preview app

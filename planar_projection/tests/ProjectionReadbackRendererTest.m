@@ -75,6 +75,30 @@ classdef ProjectionReadbackRendererTest < matlab.unittest.TestCase
                 struct(Interpolation="bicubic")), ...
                 "ProjectionReadbackRenderer:invalidOptions");
         end
+
+        function testAlphaCompositesVisibleLayers(testCase)
+            scene = ProjectionReadbackRendererTest.makeTwoLayerScene("alpha");
+            scene.layers(1).Alpha = 0.25;
+            scene.layers(2).Alpha = 0.5;
+
+            readback = ProjectionReadbackRenderer.renderScene(scene, struct(OutputSize=[3 4]));
+
+            testCase.verifyEqual(readback.LayerIndices, [1 2]);
+            testCase.verifyNumElements(readback.LayerReadbacks, 2);
+            testCase.verifySize(readback.Image, [3 4]);
+            testCase.verifyEqual(readback.Image, 11.25 * ones(3, 4), AbsTol=1e-9);
+        end
+
+        function testRedBlueAnaglyphCompositesStereoLayers(testCase)
+            scene = ProjectionReadbackRendererTest.makeTwoLayerScene("redBlueAnaglyph");
+
+            readback = ProjectionReadbackRenderer.renderScene(scene, struct(OutputSize=[3 4]));
+
+            testCase.verifySize(readback.Image, [3 4 3]);
+            testCase.verifyEqual(readback.Image(:, :, 1), 10 * ones(3, 4), AbsTol=1e-9);
+            testCase.verifyEqual(readback.Image(:, :, 2), zeros(3, 4), AbsTol=1e-9);
+            testCase.verifyEqual(readback.Image(:, :, 3), 20 * ones(3, 4), AbsTol=1e-9);
+        end
     end
 
     methods (Static, Access = private)
@@ -91,6 +115,19 @@ classdef ProjectionReadbackRendererTest < matlab.unittest.TestCase
             imageData = cat(3, red, green, blue);
             scene = ProjectionViewerHarness.createSceneFromImage( ...
                 imageData, "synthetic.tif", ProjectionReadbackRendererTest.makeOptions());
+        end
+
+        function scene = makeTwoLayerScene(blendMode)
+            imageData = 10 * ones(4, 5);
+            scene = ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "layer1.tif", ProjectionReadbackRendererTest.makeOptions());
+            scene.layers(1).BlendMode = blendMode;
+            secondLayer = scene.layers(1);
+            secondLayer.Name = "Layer 2";
+            secondLayer.Image = 20 * ones(4, 5);
+            secondLayer.DisplayTexture = ProjectionViewerHarness.prepareDisplayTexture(secondLayer.Image);
+            secondLayer.BlendMode = blendMode;
+            scene.layers = [scene.layers secondLayer];
         end
 
         function options = makeOptions()
