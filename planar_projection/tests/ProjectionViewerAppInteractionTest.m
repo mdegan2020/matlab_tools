@@ -53,7 +53,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Projection Viewer Prototype");
             ax = findall(fig, "Type", "axes");
-            twistSlider = ProjectionViewerAppInteractionTest.findTwistSlider(fig);
+            twistSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 4);
             surfaceHandle = findall(ax, "Type", "surface");
             x0 = surfaceHandle(1).XData;
             y0 = surfaceHandle(1).YData;
@@ -88,6 +88,84 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(twistSlider.Value, 3, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
+
+        function testShiftScrollAdjustsTipWithoutZoom(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
+            surfaceHandle = findall(ax, "Type", "surface");
+            initialXData = surfaceHandle(1).XData;
+            initialYData = surfaceHandle(1).YData;
+            initialZData = surfaceHandle(1).ZData;
+            initialCameraViewAngle = ax.CameraViewAngle;
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("shift"));
+            fig.WindowScrollWheelFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeScrollEvent(-4));
+            drawnow
+
+            testCase.verifyEqual(tipSlider.Value, 4, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(ax.CameraViewAngle, initialCameraViewAngle, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyGreaterThan(ProjectionViewerAppInteractionTest.surfaceChange( ...
+                surfaceHandle(1), initialXData, initialYData, initialZData), 1e-9);
+
+            fig.WindowKeyReleaseFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("shift"));
+            fig.WindowScrollWheelFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeScrollEvent(-2));
+            drawnow
+
+            testCase.verifyEqual(tipSlider.Value, 4, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
+
+        function testAltScrollAdjustsTiltWithoutZoom(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
+            surfaceHandle = findall(ax, "Type", "surface");
+            initialXData = surfaceHandle(1).XData;
+            initialYData = surfaceHandle(1).YData;
+            initialZData = surfaceHandle(1).ZData;
+            initialCameraViewAngle = ax.CameraViewAngle;
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("alt"));
+            fig.WindowScrollWheelFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeScrollEvent(-5));
+            drawnow
+
+            testCase.verifyEqual(tiltSlider.Value, 5, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(ax.CameraViewAngle, initialCameraViewAngle, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyGreaterThan(ProjectionViewerAppInteractionTest.surfaceChange( ...
+                surfaceHandle(1), initialXData, initialYData, initialZData), 1e-9);
+
+            fig.WindowKeyReleaseFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("alt"));
+            fig.WindowScrollWheelFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeScrollEvent(-2));
+            drawnow
+
+            testCase.verifyEqual(tiltSlider.Value, 5, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
     end
 
     methods (Static, Access = private)
@@ -100,10 +178,10 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 imageData, "synthetic.tif", options);
         end
 
-        function twistSlider = findTwistSlider(fig)
+        function slider = findSliderInColumn(fig, column)
             sliders = findall(fig, "-isa", "matlab.ui.control.Slider");
             sliderColumns = arrayfun(@(slider) slider.Layout.Column, sliders);
-            twistSlider = sliders(sliderColumns == 4);
+            slider = sliders(sliderColumns == column);
         end
 
         function event = makeKeyEvent(key)
@@ -115,6 +193,12 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
         function event = makeScrollEvent(verticalScrollCount)
             event = struct();
             event.VerticalScrollCount = verticalScrollCount;
+        end
+
+        function change = surfaceChange(surfaceHandle, x0, y0, z0)
+            change = max([max(abs(surfaceHandle.XData - x0), [], "all"), ...
+                max(abs(surfaceHandle.YData - y0), [], "all"), ...
+                max(abs(surfaceHandle.ZData - z0), [], "all")]);
         end
     end
 end

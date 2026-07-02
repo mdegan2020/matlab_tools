@@ -145,8 +145,8 @@ app = runProjectionViewerPrototype;
 ```
 
 The default launcher expects the local ignored prototype image at `test_data/10.tif`.
-Use the mouse wheel over the view to zoom, and hold Control while spinning the
-mouse wheel to adjust the Twist camera-roll control.
+Use the mouse wheel over the view to zoom. Hold Shift while spinning the mouse
+wheel to adjust Tip, Alt/Option for Tilt, and Control for Twist camera roll.
 
 Projection scenes can choose how the initial projection plane is built:
 

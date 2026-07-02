@@ -13,12 +13,14 @@ classdef ProjectionViewerApp < handle
         SelectedLayerIndex double = 1
         IsPanning logical = false
         IsControlDown logical = false
+        IsShiftDown logical = false
+        IsAltDown logical = false
         LastPointerLocation double = [NaN NaN]
         PreviewTimer
         MinPreviewInterval double = 1 / 30
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
-        TwistWheelStepDegrees double = 1
+        ModifierWheelStepDegrees double = 1
         UIFigure matlab.ui.Figure
         GridLayout matlab.ui.container.GridLayout
         Axes matlab.ui.control.UIAxes
@@ -269,11 +271,23 @@ classdef ProjectionViewerApp < handle
             if app.eventHasControl(event)
                 app.IsControlDown = true;
             end
+            if app.eventHasShift(event)
+                app.IsShiftDown = true;
+            end
+            if app.eventHasAlt(event)
+                app.IsAltDown = true;
+            end
         end
 
         function keyReleased(app, event)
             if app.eventKeyIs(event, "control")
                 app.IsControlDown = false;
+            end
+            if app.eventKeyIs(event, "shift")
+                app.IsShiftDown = false;
+            end
+            if app.eventKeyIs(event, ["alt", "option"])
+                app.IsAltDown = false;
             end
         end
 
@@ -282,16 +296,44 @@ classdef ProjectionViewerApp < handle
                 app.scrollTwist(event);
                 return
             end
+            if app.IsShiftDown || app.eventHasShift(event)
+                app.scrollTip(event);
+                return
+            end
+            if app.IsAltDown || app.eventHasAlt(event)
+                app.scrollTilt(event);
+                return
+            end
             app.scrollZoom(event);
         end
 
         function scrollTwist(app, event)
-            twistDegrees = app.TwistSlider.Value - ...
-                event.VerticalScrollCount * app.TwistWheelStepDegrees;
-            limits = app.TwistSlider.Limits;
-            twistDegrees = min(max(twistDegrees, limits(1)), limits(2));
+            twistDegrees = app.sliderWheelValue(app.TwistSlider, event);
             app.TwistSlider.Value = twistDegrees;
             app.updateViewTwist(twistDegrees);
+        end
+
+        function scrollTip(app, event)
+            tipDegrees = app.sliderWheelValue(app.TipSlider, event);
+            app.TipSlider.Value = tipDegrees;
+            app.updateProjection(tipDegrees, app.TiltSlider.Value, ...
+                app.AlphaSlider.Value, app.DefaultMeshSampling);
+            app.PreviewTimer = tic;
+        end
+
+        function scrollTilt(app, event)
+            tiltDegrees = app.sliderWheelValue(app.TiltSlider, event);
+            app.TiltSlider.Value = tiltDegrees;
+            app.updateProjection(app.TipSlider.Value, tiltDegrees, ...
+                app.AlphaSlider.Value, app.DefaultMeshSampling);
+            app.PreviewTimer = tic;
+        end
+
+        function value = sliderWheelValue(app, slider, event)
+            value = slider.Value - ...
+                event.VerticalScrollCount * app.ModifierWheelStepDegrees;
+            limits = slider.Limits;
+            value = min(max(value, limits(1)), limits(2));
         end
 
         function scrollZoom(app, event)
@@ -519,11 +561,25 @@ classdef ProjectionViewerApp < handle
 
         function tf = eventHasControl(app, event)
             tf = app.eventKeyIs(event, "control") || ...
-                any(app.eventStringValue(event, "Modifier") == "control");
+                app.eventModifierIs(event, "control");
+        end
+
+        function tf = eventHasShift(app, event)
+            tf = app.eventKeyIs(event, "shift") || ...
+                app.eventModifierIs(event, "shift");
+        end
+
+        function tf = eventHasAlt(app, event)
+            tf = app.eventKeyIs(event, ["alt", "option"]) || ...
+                app.eventModifierIs(event, ["alt", "option"]);
         end
 
         function tf = eventKeyIs(app, event, key)
-            tf = any(app.eventStringValue(event, "Key") == string(key));
+            tf = any(ismember(app.eventStringValue(event, "Key"), string(key)));
+        end
+
+        function tf = eventModifierIs(app, event, modifier)
+            tf = any(ismember(app.eventStringValue(event, "Modifier"), string(modifier)));
         end
 
         function value = eventStringValue(~, event, propertyName)
