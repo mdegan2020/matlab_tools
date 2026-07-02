@@ -343,6 +343,7 @@ classdef ProjectionBackendJob
             defaults = struct();
             defaults.Mode = "serial";
             defaults.UseGPU = false;
+            defaults.UseCustomGpuKernels = false;
 
             execution = ProjectionBackendJob.mergeStruct(defaults, execution, "Execution");
             execution.Mode = lower(string(execution.Mode));
@@ -353,6 +354,10 @@ classdef ProjectionBackendJob
             end
             execution.UseGPU = ProjectionBackendJob.validateLogicalScalar( ...
                 execution.UseGPU, "Execution.UseGPU");
+            execution.UseCustomGpuKernels = ProjectionBackendJob.validateLogicalScalar( ...
+                execution.UseCustomGpuKernels, ...
+                "Execution.UseCustomGpuKernels");
+            ProjectionBackendCustomGpuKernelPlan.validateExecution(execution);
         end
 
         function validateScene(scene)

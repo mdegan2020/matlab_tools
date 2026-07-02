@@ -30,6 +30,7 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
             testCase.verifyFalse(job.Output.WriteFiles);
             testCase.verifyEqual(job.Execution.Mode, "serial");
             testCase.verifyFalse(job.Execution.UseGPU);
+            testCase.verifyFalse(job.Execution.UseCustomGpuKernels);
         end
 
         function testValidationRejectsMissingScene(testCase)

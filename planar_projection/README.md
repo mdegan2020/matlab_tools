@@ -22,6 +22,7 @@ src/ProjectionViewerApp.m       Programmatic interactive preview app
 src/ProjectionViewerState.m     JSON-serializable viewer state and scene-apply helpers
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionBackendGpuSupport.m Backend optional gpuArray capability checks
+src/ProjectionBackendCustomGpuKernelPlan.m Backend custom GPU kernel assessment
 src/ProjectionBackendOutputGrid.m Backend full-extent output grid planner
 src/ProjectionBackendOutputWriter.m Backend image/mask/metadata writers
 src/ProjectionBackendTiledRenderer.m Backend serial tiled CPU renderer
