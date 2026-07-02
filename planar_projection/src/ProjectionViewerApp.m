@@ -54,7 +54,7 @@ classdef ProjectionViewerApp < handle
             numLayers = numel(app.Scene.layers);
             app.LayerTipDegrees = zeros(1, numLayers);
             app.LayerTiltDegrees = zeros(1, numLayers);
-            app.DefaultMeshSampling = app.Scene.layers(1).MeshSampling;
+            app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
             app.PreviewTimer = tic;
             app.createComponents();
@@ -317,7 +317,7 @@ classdef ProjectionViewerApp < handle
             tipDegrees = app.sliderWheelValue(app.TipSlider, event);
             app.TipSlider.Value = tipDegrees;
             app.updateProjection(tipDegrees, app.TiltSlider.Value, ...
-                app.AlphaSlider.Value, app.DefaultMeshSampling);
+                app.AlphaSlider.Value, app.selectedDefaultMeshSampling());
             app.PreviewTimer = tic;
         end
 
@@ -325,7 +325,7 @@ classdef ProjectionViewerApp < handle
             tiltDegrees = app.sliderWheelValue(app.TiltSlider, event);
             app.TiltSlider.Value = tiltDegrees;
             app.updateProjection(app.TipSlider.Value, tiltDegrees, ...
-                app.AlphaSlider.Value, app.DefaultMeshSampling);
+                app.AlphaSlider.Value, app.selectedDefaultMeshSampling());
             app.PreviewTimer = tic;
         end
 
@@ -439,21 +439,22 @@ classdef ProjectionViewerApp < handle
             end
 
             app.PreviewTimer = tic;
-            app.updateProjection(tipDegrees, tiltDegrees, alpha, app.DragMeshSampling);
+            app.updateProjection(tipDegrees, tiltDegrees, alpha, ...
+                app.selectedDragMeshSampling());
         end
 
         function updateFromSliderValues(app)
             app.updateProjection(app.TipSlider.Value, app.TiltSlider.Value, ...
-                app.AlphaSlider.Value, app.DefaultMeshSampling);
+                app.AlphaSlider.Value, app.selectedDefaultMeshSampling());
             app.PreviewTimer = tic;
         end
 
         function updateProjection(app, tipDegrees, tiltDegrees, alpha, meshSampling)
+            layerIndex = app.SelectedLayerIndex;
             if nargin < 5
-                meshSampling = app.DefaultMeshSampling;
+                meshSampling = app.DefaultMeshSampling(layerIndex);
             end
 
-            layerIndex = app.SelectedLayerIndex;
             layer = app.Scene.layers(layerIndex);
             plane = ProjectionMeshBuilder.applyPlaneTipTilt( ...
                 layer.BaseProjectionPlane, deg2rad(tipDegrees), deg2rad(tiltDegrees));
@@ -470,6 +471,7 @@ classdef ProjectionViewerApp < handle
             app.Surface.XData = app.CurrentMesh.X;
             app.Surface.YData = app.CurrentMesh.Y;
             app.Surface.ZData = app.CurrentMesh.Z;
+            app.Surface.CData = app.CurrentMesh.Texture;
             app.Surface.FaceAlpha = app.CurrentMesh.Alpha;
             app.Surface.Visible = app.onOff(layer.Visible);
             app.updateLabels(tipDegrees, tiltDegrees, app.ViewTwistDegrees, alpha);
@@ -489,16 +491,32 @@ classdef ProjectionViewerApp < handle
             app.TwistSlider.Value = 0;
             app.AlphaSlider.Value = 1;
             app.ViewTwistDegrees = 0;
-            app.updateProjection(0, 0, 1, app.DefaultMeshSampling);
+            app.updateProjection(0, 0, 1, app.selectedDefaultMeshSampling());
             app.configureFrameCamera();
         end
 
-        function meshSampling = createDragMeshSampling(app)
-            imageSize = app.Scene.layers(app.SelectedLayerIndex).SourceGeometry.ImageSize;
-            rowStride = max(1, app.DefaultMeshSampling.RowStride * 2);
-            columnStride = max(1, app.DefaultMeshSampling.ColumnStride * 2);
-            meshSampling = ProjectionViewerHarness.createMeshSampling( ...
-                imageSize, rowStride, columnStride);
+        function meshSamplings = createDragMeshSampling(app)
+            for layerIndex = 1:numel(app.Scene.layers)
+                imageSize = app.Scene.layers(layerIndex).SourceGeometry.ImageSize;
+                layerSampling = app.DefaultMeshSampling(layerIndex);
+                rowStride = max(1, layerSampling.RowStride * 2);
+                columnStride = max(1, layerSampling.ColumnStride * 2);
+                meshSampling = ProjectionViewerHarness.createMeshSampling( ...
+                    imageSize, rowStride, columnStride);
+                if layerIndex == 1
+                    meshSamplings = meshSampling;
+                else
+                    meshSamplings(layerIndex) = meshSampling;
+                end
+            end
+        end
+
+        function meshSampling = selectedDefaultMeshSampling(app)
+            meshSampling = app.DefaultMeshSampling(app.SelectedLayerIndex);
+        end
+
+        function meshSampling = selectedDragMeshSampling(app)
+            meshSampling = app.DragMeshSampling(app.SelectedLayerIndex);
         end
 
         function layerSelectionChanged(app, event)

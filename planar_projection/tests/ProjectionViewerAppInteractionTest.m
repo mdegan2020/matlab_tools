@@ -166,6 +166,38 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(tiltSlider.Value, 5, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
+
+        function testLayerSpecificAlphaDragUsesSelectedLayerSampling(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
+            alphaSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 5);
+
+            layerDropDown.Value = 2;
+            layerDropDown.ValueChangedFcn(layerDropDown, struct("Value", 2));
+            drawnow
+            pause(0.04)
+
+            alphaSlider.ValueChangingFcn(alphaSlider, struct("Value", 0.4));
+            drawnow
+            alphaSlider.Value = 0.4;
+            alphaSlider.ValueChangedFcn(alphaSlider, struct());
+            drawnow
+
+            surfaceHandles = findall(ax, "Type", "surface");
+            hasLayer2Texture = any(arrayfun( ...
+                @(surfaceHandle) isequal(surfaceHandle.CData, ...
+                scene.layers(2).DisplayTexture), surfaceHandles));
+            testCase.verifyTrue(hasLayer2Texture);
+            testCase.verifyEqual(alphaSlider.Value, 0.4, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
     end
 
     methods (Static, Access = private)
@@ -176,6 +208,27 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             options.ColumnStride = 2;
             scene = ProjectionViewerHarness.createSceneFromImage( ...
                 imageData, "synthetic.tif", options);
+        end
+
+        function scene = makeTwoImageScene()
+            imageData1 = uint8(reshape(1:60, 4, 5, 3));
+            imageData2 = uint8(reshape(1:72, 6, 4, 3));
+            options = struct();
+            options.RowStride = 2;
+            options.ColumnStride = 2;
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                {imageData1, imageData2}, ["layer1.tif", "layer2.tif"], ...
+                options);
+        end
+
+        function dropdown = findLayerDropDown(fig)
+            dropdowns = findall(fig, "-isa", "matlab.ui.control.DropDown");
+            isLayerDropDown = false(size(dropdowns));
+            for k = 1:numel(dropdowns)
+                isLayerDropDown(k) = isnumeric(dropdowns(k).ItemsData) && ...
+                    isequal(dropdowns(k).ItemsData, 1:numel(dropdowns(k).Items));
+            end
+            dropdown = dropdowns(isLayerDropDown);
         end
 
         function slider = findSliderInColumn(fig, column)
