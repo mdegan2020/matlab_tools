@@ -35,7 +35,7 @@ classdef ProjectionViewerHarness
             sourceGeometry = ProjectionViewerHarness.createSyntheticSourceGeometry(imageSize, options);
             meshSampling = ProjectionViewerHarness.createMeshSampling( ...
                 imageSize, options.RowStride, options.ColumnStride);
-            basePlane = ProjectionViewerHarness.createBaseProjectionPlane(sourceGeometry);
+            basePlane = ProjectionViewerHarness.createBaseProjectionPlane(sourceGeometry, options);
             frameCamera = PlanarProjection.defineFrameCamera( ...
                 sourceGeometry.ReferenceOrigin, sourceGeometry.OpticalAxis, ...
                 options.FrameFocalLength, basePlane);
@@ -58,6 +58,22 @@ classdef ProjectionViewerHarness
             scene.preview = preview;
             scene.renderOptions = renderOptions;
             scene.layers = layer;
+        end
+
+        function scene = applyProjectionPlane(scene, projectionPlane)
+            %applyProjectionPlane Rebase every scene layer onto an explicit plane.
+            projectionPlane = ProjectionViewerHarness.validateProjectionPlane(projectionPlane);
+            ProjectionViewerHarness.validateProjectionScene(scene);
+
+            for layerIndex = 1:numel(scene.layers)
+                scene.layers(layerIndex).BaseProjectionPlane = projectionPlane;
+                scene.layers(layerIndex).CurrentProjectionPlane = projectionPlane;
+            end
+
+            scene.renderOrigin = projectionPlane.P0;
+            scene.frameCamera = PlanarProjection.defineFrameCamera( ...
+                scene.frameCamera.G0, scene.frameCamera.V0, ...
+                scene.frameCamera.F, projectionPlane);
         end
 
         function sourceGeometry = createSyntheticSourceGeometry(imageSize, options)
@@ -168,6 +184,8 @@ classdef ProjectionViewerHarness
             defaults.PlatformStepMeters = [];
             defaults.FrameFocalLength = 1;
             defaults.CoordinateFrame = "synthetic-world";
+            defaults.ProjectionPlaneMode = "current";
+            defaults.ProjectionPlane = [];
 
             names = fieldnames(options);
             for k = 1:numel(names)
@@ -215,11 +233,67 @@ classdef ProjectionViewerHarness
             layer.Visible = true;
         end
 
-        function plane = createBaseProjectionPlane(sourceGeometry)
+        function plane = createBaseProjectionPlane(sourceGeometry, options)
+            if ~isempty(options.ProjectionPlane)
+                plane = ProjectionViewerHarness.validateProjectionPlane(options.ProjectionPlane);
+                return
+            end
+
+            mode = ProjectionViewerHarness.validateProjectionPlaneMode( ...
+                options.ProjectionPlaneMode);
+            if any(mode == ["current", "default", "basis"])
+                plane = ProjectionViewerHarness.createCurrentProjectionPlane(sourceGeometry);
+            elseif any(mode == ["fit", "fitplane"])
+                plane = ProjectionViewerHarness.createFitProjectionPlane(sourceGeometry);
+            elseif any(mode == ["stereo", "stereoplane"])
+                plane = ProjectionViewerHarness.createStereoProjectionPlane(sourceGeometry);
+            end
+        end
+
+        function plane = createCurrentProjectionPlane(sourceGeometry)
             planeOrigin = sourceGeometry.ReferenceOrigin + ...
                 sourceGeometry.NominalRange * sourceGeometry.OpticalAxis;
             plane = PlanarProjection.definePlaneFromBasis( ...
                 planeOrigin, sourceGeometry.RowAxis, sourceGeometry.PlatformDirection);
+        end
+
+        function plane = createFitProjectionPlane(sourceGeometry)
+            currentPlane = ProjectionViewerHarness.createCurrentProjectionPlane(sourceGeometry);
+            [P1, P2, P3, P4] = ProjectionViewerHarness.fitPlaneCornerPoints( ...
+                currentPlane, sourceGeometry);
+            plane = PlanarProjection.defineFitPlane( ...
+                sourceGeometry.ReferenceOrigin, sourceGeometry.OpticalAxis, ...
+                P1, P2, P3, P4);
+        end
+
+        function plane = createStereoProjectionPlane(sourceGeometry)
+            if sourceGeometry.ImageSize(2) > 1
+                G1 = sourceGeometry.Origins(:, 1);
+                G2 = sourceGeometry.Origins(:, end);
+            else
+                halfStep = 0.5 * sourceGeometry.PlatformStepMeters;
+                G1 = sourceGeometry.ReferenceOrigin - halfStep * sourceGeometry.PlatformDirection;
+                G2 = sourceGeometry.ReferenceOrigin + halfStep * sourceGeometry.PlatformDirection;
+            end
+
+            plane = PlanarProjection.defineStereoPlane( ...
+                G1, sourceGeometry.OpticalAxis, sourceGeometry.NominalRange, ...
+                G2, sourceGeometry.OpticalAxis, sourceGeometry.NominalRange);
+        end
+
+        function [P1, P2, P3, P4] = fitPlaneCornerPoints(plane, sourceGeometry)
+            rowHalfSpan = max(0.5 * (sourceGeometry.ImageSize(1) - 1) * ...
+                sourceGeometry.GSD, 0.5 * sourceGeometry.GSD);
+            columnHalfSpan = max(0.5 * (sourceGeometry.ImageSize(2) - 1) * ...
+                sourceGeometry.PlatformStepMeters, ...
+                0.5 * sourceGeometry.PlatformStepMeters);
+
+            rowAxis = plane.basis(:, 1);
+            columnAxis = plane.basis(:, 2);
+            P1 = plane.P0 - rowHalfSpan * rowAxis - columnHalfSpan * columnAxis;
+            P2 = plane.P0 + rowHalfSpan * rowAxis - columnHalfSpan * columnAxis;
+            P3 = plane.P0 + rowHalfSpan * rowAxis + columnHalfSpan * columnAxis;
+            P4 = plane.P0 - rowHalfSpan * rowAxis + columnHalfSpan * columnAxis;
         end
 
         function metadata = createSourceMetadata(imageSize, options)
@@ -291,6 +365,45 @@ classdef ProjectionViewerHarness
                     "%s must be a positive integer scalar.", name);
             end
             value = double(value);
+        end
+
+        function mode = validateProjectionPlaneMode(mode)
+            if ~(ischar(mode) || isstring(mode)) || ~isscalar(string(mode)) || ...
+                    strlength(string(mode)) == 0
+                error("ProjectionViewerHarness:invalidProjectionPlaneMode", ...
+                    "ProjectionPlaneMode must be current, fit, or stereo.");
+            end
+
+            mode = lower(string(mode));
+            validModes = ["current", "default", "basis", "fit", ...
+                "fitplane", "stereo", "stereoplane"];
+            if ~any(mode == validModes)
+                error("ProjectionViewerHarness:invalidProjectionPlaneMode", ...
+                    "ProjectionPlaneMode must be current, fit, or stereo.");
+            end
+        end
+
+        function plane = validateProjectionPlane(plane)
+            if ~isstruct(plane) || ~isscalar(plane)
+                error("ProjectionViewerHarness:invalidProjectionPlane", ...
+                    "ProjectionPlane must be a scalar plane struct.");
+            end
+            PlanarProjection.validatePlane(plane);
+        end
+
+        function validateProjectionScene(scene)
+            if ~isstruct(scene) || ~isscalar(scene) || ...
+                    ~isfield(scene, "layers") || ~isfield(scene, "frameCamera") || ...
+                    ~isfield(scene, "renderOrigin") || isempty(scene.layers)
+                error("ProjectionViewerHarness:invalidScene", ...
+                    "Scene must contain layers, frameCamera, and renderOrigin.");
+            end
+
+            if ~isstruct(scene.layers)
+                error("ProjectionViewerHarness:invalidScene", ...
+                    "Scene layers must be a struct array.");
+            end
+            PlanarProjection.validateCamera(scene.frameCamera);
         end
 
         function V = unitVector(V, name)

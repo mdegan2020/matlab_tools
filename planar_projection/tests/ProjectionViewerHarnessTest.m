@@ -84,6 +84,89 @@ classdef ProjectionViewerHarnessTest < matlab.unittest.TestCase
             testCase.verifyEqual(meshSampling.ColumnIndices, [1 8 15 19]);
         end
 
+        function testProjectionPlaneModeStereoUsesStereoPlane(testCase)
+            imageData = zeros(4, 5, "uint8");
+            options = ProjectionViewerHarnessTest.makeOptions();
+            options.ProjectionPlaneMode = "stereo";
+            expectedPlane = PlanarProjection.defineStereoPlane( ...
+                [0; 0; -1], [1; 0; 0], options.NominalRange, ...
+                [0; 0; 1], [1; 0; 0], options.NominalRange);
+
+            scene = ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "synthetic.tif", options);
+
+            testCase.verifyEqual(scene.layers.BaseProjectionPlane.P0, ...
+                expectedPlane.P0, AbsTol=ProjectionViewerHarnessTest.Tol);
+            testCase.verifyEqual(scene.layers.BaseProjectionPlane.basis, ...
+                expectedPlane.basis, AbsTol=ProjectionViewerHarnessTest.Tol);
+            testCase.verifyEqual(scene.layers.BaseProjectionPlane.VN, ...
+                expectedPlane.VN, AbsTol=ProjectionViewerHarnessTest.Tol);
+            testCase.verifyEqual(scene.layers.CurrentProjectionPlane, ...
+                scene.layers.BaseProjectionPlane);
+        end
+
+        function testProjectionPlaneModeFitBuildsValidPlane(testCase)
+            imageData = zeros(4, 5, "uint8");
+            options = ProjectionViewerHarnessTest.makeOptions();
+            options.ProjectionPlaneMode = "fit";
+
+            scene = ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "synthetic.tif", options);
+
+            testCase.verifyTrue(PlanarProjection.validatePlane( ...
+                scene.layers.BaseProjectionPlane));
+            testCase.verifyEqual(scene.layers.BaseProjectionPlane.P0, ...
+                [options.NominalRange; 0; 0], AbsTol=ProjectionViewerHarnessTest.Tol);
+            testCase.verifyEqual(scene.renderOrigin, scene.layers.BaseProjectionPlane.P0);
+        end
+
+        function testExplicitProjectionPlaneOverridesMode(testCase)
+            imageData = zeros(4, 5, "uint8");
+            customPlane = ProjectionViewerHarnessTest.makeCustomPlane();
+            options = ProjectionViewerHarnessTest.makeOptions();
+            options.ProjectionPlaneMode = "stereo";
+            options.ProjectionPlane = customPlane;
+
+            scene = ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "synthetic.tif", options);
+
+            testCase.verifyEqual(scene.layers.BaseProjectionPlane, customPlane);
+            testCase.verifyEqual(scene.layers.CurrentProjectionPlane, customPlane);
+            testCase.verifyEqual(scene.renderOrigin, customPlane.P0);
+        end
+
+        function testApplyProjectionPlaneUpdatesLayersAndFrameCamera(testCase)
+            imageData = ones(4, 5);
+            scene = ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "layer1.tif", ProjectionViewerHarnessTest.makeOptions());
+            secondLayer = scene.layers;
+            secondLayer.Name = "Layer 2";
+            scene.layers = [scene.layers secondLayer];
+            customPlane = ProjectionViewerHarnessTest.makeCustomPlane();
+
+            scene = ProjectionViewerHarness.applyProjectionPlane(scene, customPlane);
+
+            testCase.verifyEqual(scene.layers(1).BaseProjectionPlane, customPlane);
+            testCase.verifyEqual(scene.layers(2).BaseProjectionPlane, customPlane);
+            testCase.verifyEqual(scene.layers(1).CurrentProjectionPlane, customPlane);
+            testCase.verifyEqual(scene.layers(2).CurrentProjectionPlane, customPlane);
+            testCase.verifyEqual(scene.renderOrigin, customPlane.P0);
+            testCase.verifyTrue(PlanarProjection.validateCamera(scene.frameCamera));
+            testCase.verifyEqual(scene.frameCamera.focalPlane.basis(:, 1), ...
+                customPlane.basis(:, 1), AbsTol=ProjectionViewerHarnessTest.Tol);
+        end
+
+        function testInvalidProjectionPlaneModeErrors(testCase)
+            imageData = zeros(4, 5, "uint8");
+            options = ProjectionViewerHarnessTest.makeOptions();
+            options.ProjectionPlaneMode = "banana";
+
+            testCase.verifyError( ...
+                @() ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "synthetic.tif", options), ...
+                "ProjectionViewerHarness:invalidProjectionPlaneMode");
+        end
+
         function testPrepareDisplayTexturePreservesRgbTexture(testCase)
             imageData = uint8(reshape(1:36, 3, 4, 3));
 
@@ -117,6 +200,11 @@ classdef ProjectionViewerHarnessTest < matlab.unittest.TestCase
             options.PlatformDirection = [0; 0; 1];
             options.PlatformStepMeters = 0.5;
             options.FrameFocalLength = 1;
+        end
+
+        function plane = makeCustomPlane()
+            plane = PlanarProjection.definePlaneFromBasis( ...
+                [9000; 10; 20], [0; 1; 0], [0; 0; 1]);
         end
     end
 end

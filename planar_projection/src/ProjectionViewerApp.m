@@ -38,9 +38,12 @@ classdef ProjectionViewerApp < handle
     end
 
     methods
-        function app = ProjectionViewerApp(scene)
+        function app = ProjectionViewerApp(scene, projectionPlane)
             if nargin < 1
                 scene = ProjectionViewerHarness.createDefaultScene();
+            end
+            if nargin >= 2 && ~isempty(projectionPlane)
+                scene = ProjectionViewerHarness.applyProjectionPlane(scene, projectionPlane);
             end
 
             app.Scene = scene;

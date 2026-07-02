@@ -145,3 +145,21 @@ app = runProjectionViewerPrototype;
 ```
 
 The default launcher expects the local ignored prototype image at `test_data/10.tif`.
+
+Projection scenes can choose how the initial projection plane is built:
+
+```matlab
+options = struct(ProjectionPlaneMode="fit");      % "current", "fit", or "stereo"
+scene = ProjectionViewerHarness.createDefaultScene("test_data/10.tif", options);
+app = ProjectionViewerApp(scene);
+```
+
+You can also pass an explicit plane, either while creating the scene or when
+constructing the app from an existing scene:
+
+```matlab
+plane = PlanarProjection.defineFitPlane(G0, V0, P1, P2, P3, P4);
+scene = ProjectionViewerHarness.createDefaultScene("test_data/10.tif", ...
+    struct(ProjectionPlane=plane));
+app = ProjectionViewerApp(scene, plane);
+```
