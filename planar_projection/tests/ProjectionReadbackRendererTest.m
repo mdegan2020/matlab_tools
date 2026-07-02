@@ -99,6 +99,49 @@ classdef ProjectionReadbackRendererTest < matlab.unittest.TestCase
             testCase.verifyEqual(readback.Image(:, :, 2), zeros(3, 4), AbsTol=1e-9);
             testCase.verifyEqual(readback.Image(:, :, 3), 20 * ones(3, 4), AbsTol=1e-9);
         end
+
+        function testFiniteInvalidFillPreservesInvalidMask(testCase)
+            scene = ProjectionReadbackRendererTest.makeSingleBandScene();
+            outputGrid = ProjectionBackendOutputGrid.plan(scene, ...
+                struct(ResolutionMetersPerPixel=0.5));
+            outputGrid.Bounds.X = outputGrid.Bounds.X + [-5 5];
+            outputGrid.Bounds.Y = outputGrid.Bounds.Y + [-5 5];
+            outputGrid.OutputSize = [7 9];
+            options = struct(OutputGrid=outputGrid, InvalidFillValue=0, ...
+                Interpolation="nearest");
+
+            readback = ProjectionReadbackRenderer.renderScene(scene, options);
+
+            testCase.verifySize(readback.Image, [7 9]);
+            testCase.verifyGreaterThan(nnz(readback.ValidMask), 0);
+            testCase.verifyGreaterThan(nnz(~readback.ValidMask), 0);
+            testCase.verifyEqual(readback.Image(~readback.ValidMask), ...
+                zeros(nnz(~readback.ValidMask), 1), AbsTol=1e-12);
+        end
+
+        function testArbitraryBandReadbackPreservesBandCount(testCase)
+            scene = ProjectionReadbackRendererTest.makeSingleBandScene();
+            baseImage = scene.layers.Image;
+            scene.layers.Image = cat(3, baseImage, baseImage + 100, ...
+                baseImage + 200, baseImage + 300);
+
+            readback = ProjectionReadbackRenderer.renderScene(scene, struct(OutputSize=[4 5]));
+
+            testCase.verifySize(readback.Image, [4 5 4]);
+            testCase.verifySize(readback.ValidMask, [4 5]);
+        end
+
+        function testLayerReadbacksCanBeDisabled(testCase)
+            scene = ProjectionReadbackRendererTest.makeTwoLayerScene("alpha");
+
+            readback = ProjectionReadbackRenderer.renderScene(scene, ...
+                struct(OutputSize=[3 4], IncludeLayerReadbacks=false));
+
+            testCase.verifySize(readback.Image, [3 4]);
+            testCase.verifyEmpty(readback.LayerReadbacks);
+            testCase.verifyEmpty(readback.QueryPlaneCoordinates);
+            testCase.verifyEmpty(readback.Mesh);
+        end
     end
 
     methods (Static, Access = private)

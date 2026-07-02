@@ -16,8 +16,8 @@ classdef ProjectionReadbackRenderer
             firstPlane = firstLayer.CurrentProjectionPlane;
             firstMesh = ProjectionMeshBuilder.buildLayerMesh( ...
                 firstLayer, firstPlane, scene.renderOrigin);
-            cameraGrid = ProjectionReadbackRenderer.createCameraGrid( ...
-                scene.frameCamera, firstMesh, options.OutputSize);
+            samplingGrid = ProjectionReadbackRenderer.createSamplingGrid( ...
+                scene.frameCamera, firstMesh, options);
 
             compositeImage = [];
             validMask = false(options.OutputSize);
@@ -31,18 +31,20 @@ classdef ProjectionReadbackRenderer
                 mesh = ProjectionMeshBuilder.buildLayerMesh(layer, plane, scene.renderOrigin);
                 [layerImage, layerValidMask, queryPlaneCoordinates] = ...
                     ProjectionReadbackRenderer.renderLayer( ...
-                    scene.frameCamera, layer, plane, mesh, cameraGrid, options);
+                    scene.frameCamera, layer, plane, mesh, samplingGrid, options);
 
                 [compositeImage, validMask, anaglyphOrdinal] = ...
                     ProjectionReadbackRenderer.blendLayer( ...
                     compositeImage, validMask, layerImage, layerValidMask, ...
                     layer, options, anaglyphOrdinal);
 
-                layerReadbacks(outputIndex).Image = layerImage;
-                layerReadbacks(outputIndex).ValidMask = layerValidMask;
-                layerReadbacks(outputIndex).LayerIndex = layerIndex;
-                layerReadbacks(outputIndex).QueryPlaneCoordinates = queryPlaneCoordinates;
-                layerReadbacks(outputIndex).Mesh = mesh;
+                if options.IncludeLayerReadbacks
+                    layerReadbacks(outputIndex).Image = layerImage;
+                    layerReadbacks(outputIndex).ValidMask = layerValidMask;
+                    layerReadbacks(outputIndex).LayerIndex = layerIndex;
+                    layerReadbacks(outputIndex).QueryPlaneCoordinates = queryPlaneCoordinates;
+                    layerReadbacks(outputIndex).Mesh = mesh;
+                end
             end
 
             readback = struct();
@@ -52,10 +54,18 @@ classdef ProjectionReadbackRenderer
             readback.Interpolation = options.Interpolation;
             readback.LayerIndex = layerIndices(1);
             readback.LayerIndices = layerIndices;
-            readback.CameraGrid = cameraGrid;
-            readback.QueryPlaneCoordinates = layerReadbacks(1).QueryPlaneCoordinates;
-            readback.Mesh = layerReadbacks(1).Mesh;
+            readback.CameraGrid = samplingGrid;
+            readback.QueryPlaneCoordinates = ...
+                ProjectionReadbackRenderer.firstLayerField(layerReadbacks, ...
+                "QueryPlaneCoordinates");
+            readback.Mesh = ProjectionReadbackRenderer.firstLayerField( ...
+                layerReadbacks, "Mesh");
             readback.LayerReadbacks = layerReadbacks;
+            if isfield(options, "OutputGrid")
+                readback.OutputGrid = options.OutputGrid;
+            else
+                readback.OutputGrid = [];
+            end
         end
     end
 
@@ -95,22 +105,45 @@ classdef ProjectionReadbackRenderer
             defaults = struct();
             defaults.OutputSize = [numel(layer.MeshSampling.RowIndices), ...
                 numel(layer.MeshSampling.ColumnIndices)];
+            defaults.OutputGrid = [];
             defaults.Interpolation = "bilinear";
             defaults.InvalidFillValue = NaN;
+            defaults.IncludeLayerReadbacks = true;
 
             names = fieldnames(options);
             for k = 1:numel(names)
                 defaults.(names{k}) = options.(names{k});
             end
 
-            defaults.OutputSize = ProjectionReadbackRenderer.validateOutputSize( ...
-                defaults.OutputSize);
+            defaults.OutputGrid = ProjectionReadbackRenderer.validateOutputGrid( ...
+                defaults.OutputGrid);
+            if ~isempty(defaults.OutputGrid)
+                defaults.OutputSize = ProjectionReadbackRenderer.validateOutputSize( ...
+                    defaults.OutputGrid.OutputSize);
+            else
+                defaults.OutputSize = ProjectionReadbackRenderer.validateOutputSize( ...
+                    defaults.OutputSize);
+            end
             defaults.Interpolation = ProjectionReadbackRenderer.validateInterpolation( ...
                 defaults.Interpolation);
             defaults.InvalidFillValue = ProjectionReadbackRenderer.validateFillValue( ...
                 defaults.InvalidFillValue, "InvalidFillValue");
+            defaults.IncludeLayerReadbacks = ...
+                ProjectionReadbackRenderer.validateLogicalScalar( ...
+                defaults.IncludeLayerReadbacks, "IncludeLayerReadbacks");
 
             options = defaults;
+        end
+
+        function samplingGrid = createSamplingGrid(frameCamera, mesh, options)
+            if ~isempty(options.OutputGrid)
+                samplingGrid = ProjectionReadbackRenderer.createOutputSamplingGrid( ...
+                    frameCamera, options.OutputGrid);
+                return
+            end
+
+            samplingGrid = ProjectionReadbackRenderer.createCameraGrid( ...
+                frameCamera, mesh, options.OutputSize);
         end
 
         function cameraGrid = createCameraGrid(frameCamera, mesh, outputSize)
@@ -126,28 +159,54 @@ classdef ProjectionReadbackRenderer
             queryY = linspace(max(cameraY, [], "all"), min(cameraY, [], "all"), ...
                 outputSize(1));
             [cameraGrid.X, cameraGrid.Y] = meshgrid(queryX, queryY);
+            cameraGrid.QueryCameraCoordinates = [cameraGrid.X(:).'; cameraGrid.Y(:).'];
+            cameraGrid.QueryWorldPoints = [];
+        end
+
+        function outputGrid = createOutputSamplingGrid(frameCamera, outputGrid)
+            bounds = outputGrid.Bounds;
+            queryX = linspace(bounds.X(1), bounds.X(2), outputGrid.OutputSize(2));
+            queryY = linspace(bounds.Y(2), bounds.Y(1), outputGrid.OutputSize(1));
+            [outputGrid.X, outputGrid.Y] = meshgrid(queryX, queryY);
+            outputGrid.QueryWorldPoints = outputGrid.Origin + ...
+                outputGrid.XAxis * outputGrid.X(:).' + ...
+                outputGrid.YAxis * outputGrid.Y(:).';
+            [queryCameraCoordinates, ~] = PlanarProjection.projectToCamera( ...
+                outputGrid.QueryWorldPoints, frameCamera);
+            outputGrid.QueryCameraCoordinates = queryCameraCoordinates;
         end
 
         function [outputImage, validMask, queryPlaneCoordinates] = renderLayer( ...
-                frameCamera, layer, plane, mesh, cameraGrid, options)
-            queryCameraCoordinates = [cameraGrid.X(:).'; cameraGrid.Y(:).'];
-
-            [queryPlaneCoordinates, ~] = PlanarProjection.projectCameraToPlane( ...
-                queryCameraCoordinates, frameCamera, plane);
+                frameCamera, layer, plane, mesh, samplingGrid, options)
+            queryPlaneCoordinates = ProjectionReadbackRenderer.queryPlaneCoordinates( ...
+                frameCamera, samplingGrid, plane);
 
             worldPoints = reshape(mesh.WorldPoints, 3, []);
             meshPlaneCoordinates = PlanarProjection.worldToPlane(worldPoints, plane);
             sampledImage = layer.Image(mesh.RowIndices, mesh.ColumnIndices, :);
-            outputImage = ProjectionReadbackRenderer.interpolateImage( ...
+            [outputImage, validMask] = ProjectionReadbackRenderer.interpolateImage( ...
                 meshPlaneCoordinates, sampledImage, queryPlaneCoordinates, options);
-            validMask = ProjectionReadbackRenderer.createValidMask(outputImage);
         end
 
-        function outputImage = interpolateImage(meshPlaneCoordinates, sampledImage, ...
+        function queryPlaneCoordinates = queryPlaneCoordinates( ...
+                frameCamera, samplingGrid, plane)
+            if isfield(samplingGrid, "QueryWorldPoints") && ...
+                    ~isempty(samplingGrid.QueryWorldPoints)
+                queryPlaneCoordinates = PlanarProjection.worldToPlane( ...
+                    samplingGrid.QueryWorldPoints, plane);
+                return
+            end
+
+            [queryPlaneCoordinates, ~] = PlanarProjection.projectCameraToPlane( ...
+                samplingGrid.QueryCameraCoordinates, frameCamera, plane);
+        end
+
+        function [outputImage, validMask] = interpolateImage(meshPlaneCoordinates, sampledImage, ...
                 queryPlaneCoordinates, options)
             bandCount = size(sampledImage, 3);
             outputSize = options.OutputSize;
             outputImage = zeros([outputSize bandCount]);
+            validMask = true(outputSize);
             method = ProjectionReadbackRenderer.scatteredMethod(options.Interpolation);
 
             for bandIndex = 1:bandCount
@@ -158,20 +217,14 @@ classdef ProjectionReadbackRenderer
                 renderedBand = reshape(interpolant( ...
                     queryPlaneCoordinates(1, :).', queryPlaneCoordinates(2, :).'), ...
                     outputSize);
-                renderedBand(isnan(renderedBand)) = options.InvalidFillValue;
+                bandValidMask = isfinite(renderedBand);
+                validMask = validMask & bandValidMask;
+                renderedBand(~bandValidMask) = options.InvalidFillValue;
                 outputImage(:, :, bandIndex) = renderedBand;
             end
 
             if bandCount == 1
                 outputImage = outputImage(:, :, 1);
-            end
-        end
-
-        function validMask = createValidMask(outputImage)
-            if ismatrix(outputImage)
-                validMask = isfinite(outputImage);
-            else
-                validMask = all(isfinite(outputImage), 3);
             end
         end
 
@@ -252,13 +305,25 @@ classdef ProjectionReadbackRenderer
         end
 
         function outputSize = validateOutputSize(outputSize)
-            if ~isnumeric(outputSize) || ~isequal(size(outputSize), [1 2]) || ...
+            if ~isnumeric(outputSize) || ~isvector(outputSize) || numel(outputSize) ~= 2 || ...
                     any(~isfinite(outputSize)) || any(outputSize < 1) || ...
                     any(fix(outputSize) ~= outputSize)
                 error("ProjectionReadbackRenderer:invalidOptions", ...
                     "OutputSize must be a finite positive 1x2 integer vector.");
             end
-            outputSize = double(outputSize);
+            outputSize = double(outputSize(:).');
+        end
+
+        function outputGrid = validateOutputGrid(outputGrid)
+            if isempty(outputGrid)
+                return
+            end
+            requiredFields = ["OutputSize", "Bounds", "Origin", "XAxis", "YAxis"];
+            if ~isstruct(outputGrid) || ~isscalar(outputGrid) || ...
+                    any(~isfield(outputGrid, requiredFields))
+                error("ProjectionReadbackRenderer:invalidOptions", ...
+                    "OutputGrid must be a scalar output-grid struct.");
+            end
         end
 
         function interpolation = validateInterpolation(interpolation)
@@ -284,6 +349,22 @@ classdef ProjectionReadbackRenderer
                     "%s must be a numeric scalar.", name);
             end
             value = double(value);
+        end
+
+        function value = validateLogicalScalar(value, name)
+            if ~(islogical(value) || isnumeric(value)) || ~isscalar(value)
+                error("ProjectionReadbackRenderer:invalidOptions", ...
+                    "%s must be a scalar logical value.", name);
+            end
+            value = logical(value);
+        end
+
+        function value = firstLayerField(layerReadbacks, fieldName)
+            if isempty(layerReadbacks)
+                value = [];
+            else
+                value = layerReadbacks(1).(fieldName);
+            end
         end
     end
 end

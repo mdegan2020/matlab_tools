@@ -65,6 +65,22 @@ classdef ProjectionBackendProcessorOutputTest < matlab.unittest.TestCase
                 string(result.OutputFiles.Metadata));
             testCase.verifyEqual(metadata.LayerIndices(:).', [1 2]);
         end
+
+        function testRunRendersAppliedViewerState(testCase)
+            scene = ProjectionBackendProcessorOutputTest.makeTwoLayerScene();
+            state = ProjectionBackendProcessorOutputTest.makeViewerState(scene);
+            job = struct(Scene=scene, ViewerState=state, ...
+                RenderOptions=struct(OutputSize=[3 4]));
+
+            result = ProjectionBackendProcessor.run(job);
+
+            testCase.verifyEqual(result.Status, "stateApplied");
+            testCase.verifyEqual( ...
+                result.Readback.LayerReadbacks(2).Mesh.ProjectionOffsetMeters, ...
+                [-0.75; 1.25], AbsTol=ProjectionBackendProcessorOutputTest.Tol);
+            testCase.verifyEqual(result.Scene.layers(2).Alpha, 0.45, ...
+                AbsTol=ProjectionBackendProcessorOutputTest.Tol);
+        end
     end
 
     methods (Static, Access = private)
@@ -75,6 +91,34 @@ classdef ProjectionBackendProcessorOutputTest < matlab.unittest.TestCase
             scene = ProjectionViewerHarness.createSceneFromImages( ...
                 {imageData1, imageData2}, ["layer1.tif", "layer2.tif"], ...
                 options);
+        end
+
+        function state = makeViewerState(scene)
+            state = struct();
+            state.Format = ProjectionViewerState.Format;
+            state.Version = ProjectionViewerState.Version;
+            state.LayerCount = numel(scene.layers);
+            state.SelectedLayerIndex = 2;
+            state.Projection = struct(TipDegrees=2.5, TiltDegrees=-1.5);
+            state.View = struct(TwistDegrees=0);
+            state.Layers = [ ...
+                ProjectionBackendProcessorOutputTest.makeLayerState( ...
+                scene.layers(1), 1, 1, [0 0]), ...
+                ProjectionBackendProcessorOutputTest.makeLayerState( ...
+                scene.layers(2), 2, 0.45, [-0.75 1.25])];
+        end
+
+        function layerState = makeLayerState(layer, index, alpha, projectionOffsetMeters)
+            layerState = struct();
+            layerState.Index = index;
+            layerState.Name = layer.Name;
+            layerState.ImagePath = layer.ImagePath;
+            layerState.Alpha = alpha;
+            layerState.Visible = layer.Visible;
+            layerState.BlendMode = layer.BlendMode;
+            layerState.ProjectionOffsetMeters = projectionOffsetMeters;
+            layerState.ViewVectorAngularOffsetsDegrees = ...
+                layer.ViewVectorAngularOffsetsDegrees.';
         end
 
         function removeFolder(folder)

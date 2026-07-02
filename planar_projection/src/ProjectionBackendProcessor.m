@@ -60,6 +60,7 @@ classdef ProjectionBackendProcessor
             if isempty(renderOptions.OutputSize)
                 renderOptions.OutputSize = outputGrid.OutputSize;
             end
+            renderOptions.OutputGrid = outputGrid;
         end
 
         function viewerState = viewerStateForGrid(job)
