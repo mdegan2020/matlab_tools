@@ -31,12 +31,21 @@ classdef ProjectionViewerApp < handle
         PreviewLayerDepthMinimumStepMeters double = 0.5
         MinProjectedNudgeNorm double = 1e-9
         UIFigure matlab.ui.Figure
+        HelpFigure matlab.ui.Figure
         GridLayout matlab.ui.container.GridLayout
         Axes matlab.ui.control.UIAxes
         Surface
         ControlGrid matlab.ui.container.GridLayout
         LayerStyleGrid matlab.ui.container.GridLayout
-        CommandGrid matlab.ui.container.GridLayout
+        ImageContextMenu
+        SaveMenuItem
+        LoadMenuItem
+        CycleMenuItem
+        ResetMenuItem
+        HelpMenuItem
+        CrosshairMenuItem
+        CrosshairHorizontal
+        CrosshairVertical
         TipSlider matlab.ui.control.Slider
         TiltSlider matlab.ui.control.Slider
         TwistSlider matlab.ui.control.Slider
@@ -49,10 +58,7 @@ classdef ProjectionViewerApp < handle
         LayerDropDown matlab.ui.control.DropDown
         VisibleCheckBox matlab.ui.control.CheckBox
         BlendModeDropDown matlab.ui.control.DropDown
-        SaveButton matlab.ui.control.Button
-        LoadButton matlab.ui.control.Button
-        CycleButton matlab.ui.control.Button
-        ResetButton matlab.ui.control.Button
+        IsCrosshairEnabled logical = false
     end
 
     methods
@@ -100,6 +106,9 @@ classdef ProjectionViewerApp < handle
         function delete(app)
             if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
                 delete(app.UIFigure);
+            end
+            if ~isempty(app.HelpFigure) && isvalid(app.HelpFigure)
+                delete(app.HelpFigure);
             end
         end
 
@@ -186,7 +195,7 @@ classdef ProjectionViewerApp < handle
                 WindowKeyPressFcn=@(~, event) app.keyPressed(event), ...
                 WindowKeyReleaseFcn=@(~, event) app.keyReleased(event), ...
                 WindowButtonDownFcn=@(~, event) app.beginPan(event), ...
-                WindowButtonMotionFcn=@(~, ~) app.updatePan(), ...
+                WindowButtonMotionFcn=@(~, ~) app.pointerMoved(), ...
                 WindowButtonUpFcn=@(~, ~) app.endPan());
 
             app.GridLayout = uigridlayout(app.UIFigure, [2 1]);
@@ -201,13 +210,15 @@ classdef ProjectionViewerApp < handle
             app.Axes.Toolbar.Visible = "off";
             app.Axes.Interactions = [];
             app.hideImageAxesDecorations();
+            app.createImageContextMenu();
+            app.createCrosshairOverlay();
 
-            app.ControlGrid = uigridlayout(app.GridLayout, [2 8]);
+            app.ControlGrid = uigridlayout(app.GridLayout, [2 7]);
             app.ControlGrid.Layout.Row = 2;
             app.ControlGrid.Layout.Column = 1;
             app.ControlGrid.RowHeight = {"fit", "fit"};
-            app.ControlGrid.ColumnWidth = {"1.2x", "1x", "1x", "1x", "1x", ...
-                "fit", "fit", "fit"};
+            app.ControlGrid.ColumnWidth = {420, "1x", "1x", "1x", "1x", ...
+                "fit", "fit"};
             app.ControlGrid.Padding = [0 0 0 0];
             app.ControlGrid.ColumnSpacing = 12;
 
@@ -225,10 +236,10 @@ classdef ProjectionViewerApp < handle
             app.TipLabel = uilabel(app.ControlGrid, Text="Tip 0.0 deg");
             app.TipLabel.Layout.Row = 1;
             app.TipLabel.Layout.Column = 2;
-            app.TipSlider = uislider(app.ControlGrid, Limits=[-30 30], Value=0);
+            app.TipSlider = uislider(app.ControlGrid, Limits=[-45 45], Value=0);
             app.TipSlider.Layout.Row = 2;
             app.TipSlider.Layout.Column = 2;
-            app.TipSlider.MajorTicks = -30:10:30;
+            app.TipSlider.MajorTicks = -45:15:45;
             app.TipSlider.ValueChangingFcn = @(source, event) ...
                 app.sliderChanging(source, event, "tip");
             app.TipSlider.ValueChangedFcn = @(~, ~) app.updateFromSliderValues();
@@ -236,10 +247,10 @@ classdef ProjectionViewerApp < handle
             app.TiltLabel = uilabel(app.ControlGrid, Text="Tilt 0.0 deg");
             app.TiltLabel.Layout.Row = 1;
             app.TiltLabel.Layout.Column = 3;
-            app.TiltSlider = uislider(app.ControlGrid, Limits=[-30 30], Value=0);
+            app.TiltSlider = uislider(app.ControlGrid, Limits=[-45 45], Value=0);
             app.TiltSlider.Layout.Row = 2;
             app.TiltSlider.Layout.Column = 3;
-            app.TiltSlider.MajorTicks = -30:10:30;
+            app.TiltSlider.MajorTicks = -45:15:45;
             app.TiltSlider.ValueChangingFcn = @(source, event) ...
                 app.sliderChanging(source, event, "tilt");
             app.TiltSlider.ValueChangedFcn = @(~, ~) app.updateFromSliderValues();
@@ -247,10 +258,10 @@ classdef ProjectionViewerApp < handle
             app.TwistLabel = uilabel(app.ControlGrid, Text="Twist 0.0 deg");
             app.TwistLabel.Layout.Row = 1;
             app.TwistLabel.Layout.Column = 4;
-            app.TwistSlider = uislider(app.ControlGrid, Limits=[-30 30], Value=0);
+            app.TwistSlider = uislider(app.ControlGrid, Limits=[-45 45], Value=0);
             app.TwistSlider.Layout.Row = 2;
             app.TwistSlider.Layout.Column = 4;
-            app.TwistSlider.MajorTicks = -30:10:30;
+            app.TwistSlider.MajorTicks = -45:15:45;
             app.TwistSlider.ValueChangingFcn = @(source, event) ...
                 app.twistChanging(source, event);
             app.TwistSlider.ValueChangedFcn = @(~, ~) app.updateViewTwistFromSlider();
@@ -290,35 +301,39 @@ classdef ProjectionViewerApp < handle
                 ValueChangedFcn=@(~, event) app.blendModeChanged(event));
             app.BlendModeDropDown.Layout.Row = 2;
             app.BlendModeDropDown.Layout.Column = 1;
+        end
 
-            app.CommandGrid = uigridlayout(app.ControlGrid, [2 2]);
-            app.CommandGrid.Layout.Row = [1 2];
-            app.CommandGrid.Layout.Column = 8;
-            app.CommandGrid.RowHeight = {"fit", "fit"};
-            app.CommandGrid.ColumnWidth = {"fit", "fit"};
-            app.CommandGrid.Padding = [0 0 0 0];
-            app.CommandGrid.RowSpacing = 4;
-            app.CommandGrid.ColumnSpacing = 4;
+        function createImageContextMenu(app)
+            app.ImageContextMenu = uicontextmenu(app.UIFigure);
+            app.SaveMenuItem = uimenu(app.ImageContextMenu, Text="Save", ...
+                MenuSelectedFcn=@(~, ~) app.saveStateFromDialog(), ...
+                Tag="ProjectionViewerSaveMenuItem");
+            app.LoadMenuItem = uimenu(app.ImageContextMenu, Text="Load", ...
+                MenuSelectedFcn=@(~, ~) app.loadStateFromDialog(), ...
+                Tag="ProjectionViewerLoadMenuItem");
+            app.CycleMenuItem = uimenu(app.ImageContextMenu, Text="Cycle", ...
+                MenuSelectedFcn=@(~, ~) app.cycleLayer(), ...
+                Tag="ProjectionViewerCycleMenuItem");
+            app.ResetMenuItem = uimenu(app.ImageContextMenu, Text="Reset", ...
+                MenuSelectedFcn=@(~, ~) app.resetView(), ...
+                Tag="ProjectionViewerResetMenuItem");
+            app.HelpMenuItem = uimenu(app.ImageContextMenu, Text="Help", ...
+                Separator="on", MenuSelectedFcn=@(~, ~) app.showHelpDialog(), ...
+                Tag="ProjectionViewerHelpMenuItem");
+            app.CrosshairMenuItem = uimenu(app.ImageContextMenu, ...
+                Text="Crosshair", Checked="off", ...
+                MenuSelectedFcn=@(~, ~) app.toggleCrosshair(), ...
+                Tag="ProjectionViewerCrosshairMenuItem");
+            app.Axes.ContextMenu = app.ImageContextMenu;
+        end
 
-            app.SaveButton = uibutton(app.CommandGrid, Text="Save", ...
-                ButtonPushedFcn=@(~, ~) app.saveStateFromDialog());
-            app.SaveButton.Layout.Row = 1;
-            app.SaveButton.Layout.Column = 1;
-
-            app.LoadButton = uibutton(app.CommandGrid, Text="Load", ...
-                ButtonPushedFcn=@(~, ~) app.loadStateFromDialog());
-            app.LoadButton.Layout.Row = 1;
-            app.LoadButton.Layout.Column = 2;
-
-            app.CycleButton = uibutton(app.CommandGrid, Text="Cycle", ...
-                ButtonPushedFcn=@(~, ~) app.cycleLayer());
-            app.CycleButton.Layout.Row = 2;
-            app.CycleButton.Layout.Column = 1;
-
-            app.ResetButton = uibutton(app.CommandGrid, Text="Reset", ...
-                ButtonPushedFcn=@(~, ~) app.resetView());
-            app.ResetButton.Layout.Row = 2;
-            app.ResetButton.Layout.Column = 2;
+        function createCrosshairOverlay(app)
+            app.CrosshairHorizontal = annotation(app.UIFigure, "line", ...
+                [0 0], [0 0], Color=[0 1 1], LineWidth=1, ...
+                Visible="off", Tag="ProjectionViewerCrosshairHorizontal");
+            app.CrosshairVertical = annotation(app.UIFigure, "line", ...
+                [0 0], [0 0], Color=[0 1 1], LineWidth=1, ...
+                Visible="off", Tag="ProjectionViewerCrosshairVertical");
         end
 
         function layerState = exportLayerState(app, layerIndex)
@@ -426,7 +441,8 @@ classdef ProjectionViewerApp < handle
                 [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
                 app.Surfaces{layerIndex} = surface(app.Axes, X, Y, ...
                     Z, mesh.Texture, FaceColor="texturemap", EdgeColor="none", ...
-                    FaceAlpha=mesh.Alpha, Visible=app.onOff(layer.Visible));
+                    FaceAlpha=mesh.Alpha, Visible=app.onOff(layer.Visible), ...
+                    ContextMenu=app.ImageContextMenu);
                 if layerIndex == app.SelectedLayerIndex
                     app.Surface = app.Surfaces{layerIndex};
                     app.CurrentMesh = mesh;
@@ -757,6 +773,10 @@ classdef ProjectionViewerApp < handle
             if app.IsControlDown || app.IsShiftDown || app.IsAltDown
                 return
             end
+            if app.eventKeyIs(event, "space")
+                app.setSelectedLayerVisible(false);
+                return
+            end
             if app.nudgeSelectedLayerFromKey(event)
                 return
             end
@@ -773,6 +793,14 @@ classdef ProjectionViewerApp < handle
             if app.eventKeyIs(event, ["alt", "option"])
                 app.IsAltDown = false;
             end
+            if app.eventKeyIs(event, "space")
+                app.setSelectedLayerVisible(true);
+            end
+        end
+
+        function pointerMoved(app)
+            app.updateCrosshair();
+            app.updatePan();
         end
 
         function scrollWheel(app, event)
@@ -841,6 +869,10 @@ classdef ProjectionViewerApp < handle
             end
 
             selectionType = string(app.UIFigure.SelectionType);
+            if selectionType == "open"
+                app.cycleLayer();
+                return
+            end
             hasControl = app.IsControlDown || app.eventHasControl(event);
             if hasControl && selectionType == "normal"
                 app.DragMode = "translateLayer";
@@ -1319,10 +1351,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function visibleChanged(app, event)
-            layer = app.Scene.layers(app.SelectedLayerIndex);
-            layer.Visible = logical(event.Value);
-            app.Scene.layers(app.SelectedLayerIndex) = layer;
-            app.Surfaces{app.SelectedLayerIndex}.Visible = app.onOff(layer.Visible);
+            app.setSelectedLayerVisible(logical(event.Value));
         end
 
         function blendModeChanged(app, event)
@@ -1361,6 +1390,114 @@ classdef ProjectionViewerApp < handle
             for layerIndex = 1:numel(layers)
                 names(layerIndex) = sprintf("%d: %s", layerIndex, layers(layerIndex).Name);
             end
+        end
+
+        function setSelectedLayerVisible(app, isVisible)
+            layerIndex = app.SelectedLayerIndex;
+            layer = app.Scene.layers(layerIndex);
+            layer.Visible = logical(isVisible);
+            app.Scene.layers(layerIndex) = layer;
+            app.Surfaces{layerIndex}.Visible = app.onOff(layer.Visible);
+            app.VisibleCheckBox.Value = layer.Visible;
+        end
+
+        function toggleCrosshair(app)
+            app.setCrosshairEnabled(~app.IsCrosshairEnabled);
+        end
+
+        function setCrosshairEnabled(app, isEnabled)
+            app.IsCrosshairEnabled = logical(isEnabled);
+            app.CrosshairMenuItem.Checked = app.onOff(app.IsCrosshairEnabled);
+            app.updateCrosshair();
+        end
+
+        function updateCrosshair(app)
+            if isempty(app.CrosshairHorizontal) || ...
+                    ~isvalid(app.CrosshairHorizontal) || ...
+                    isempty(app.CrosshairVertical) || ...
+                    ~isvalid(app.CrosshairVertical)
+                return
+            end
+
+            if ~app.IsCrosshairEnabled || ~app.isPointerInAxes()
+                app.hideCrosshair();
+                return
+            end
+
+            pointer = app.UIFigure.CurrentPoint;
+            axesPosition = app.Axes.InnerPosition;
+            figurePosition = app.UIFigure.Position;
+            figureWidth = max(figurePosition(3), 1);
+            figureHeight = max(figurePosition(4), 1);
+            x = min(max(pointer(1), axesPosition(1)), ...
+                axesPosition(1) + axesPosition(3));
+            y = min(max(pointer(2), axesPosition(2)), ...
+                axesPosition(2) + axesPosition(4));
+            app.CrosshairHorizontal.Position = [ ...
+                axesPosition(1) / figureWidth, ...
+                y / figureHeight, ...
+                axesPosition(3) / figureWidth, 0];
+            app.CrosshairVertical.Position = [ ...
+                x / figureWidth, ...
+                axesPosition(2) / figureHeight, ...
+                0, axesPosition(4) / figureHeight];
+            app.CrosshairHorizontal.Visible = "on";
+            app.CrosshairVertical.Visible = "on";
+        end
+
+        function hideCrosshair(app)
+            app.CrosshairHorizontal.Visible = "off";
+            app.CrosshairVertical.Visible = "off";
+        end
+
+        function showHelpDialog(app)
+            if ~isempty(app.HelpFigure) && isvalid(app.HelpFigure)
+                app.HelpFigure.Visible = "on";
+                return
+            end
+
+            app.HelpFigure = uifigure(Name="Projection Viewer Help", ...
+                Position=[160 160 560 430], ...
+                CloseRequestFcn=@(~, ~) app.closeHelpDialog());
+            grid = uigridlayout(app.HelpFigure, [1 1]);
+            grid.Padding = [12 12 12 12];
+            textArea = uitextarea(grid, Editable="off", ...
+                Value=app.helpText());
+            textArea.Layout.Row = 1;
+            textArea.Layout.Column = 1;
+        end
+
+        function closeHelpDialog(app)
+            if ~isempty(app.HelpFigure) && isvalid(app.HelpFigure)
+                delete(app.HelpFigure);
+            end
+            app.HelpFigure = [];
+        end
+
+        function text = helpText(~)
+            text = [
+                "Mouse controls"
+                "Mouse wheel: zoom the view"
+                "Shift + wheel: adjust Tip"
+                "Alt/Option + wheel: adjust Tilt"
+                "Control + wheel: adjust Twist"
+                "Left drag: pan the camera"
+                "Control + left drag: translate the selected layer"
+                "Control + right drag: adjust selected-layer omega and phi"
+                "Double left click: cycle the active layer"
+                ""
+                "Keyboard"
+                "W/A/S/D: nudge the selected layer"
+                "I/K: adjust phi"
+                "J/L: adjust omega"
+                "U/O: adjust kappa"
+                "Space down: hide the selected layer"
+                "Space up: show the selected layer"
+                ""
+                "Context menu"
+                "Right click inside the image for Save, Load, Cycle, Reset, Help, and Crosshair."
+                "Crosshair overlays cyan screen-space guide lines across the viewport."
+                ];
         end
 
         function value = onOff(~, isVisible)

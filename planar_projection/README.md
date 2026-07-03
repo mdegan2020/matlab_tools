@@ -30,6 +30,8 @@ src/ProjectionBackendProcessor.m Backend job invocation facade
 tests/PlanarProjectionTest.m    Class-based unit tests
 runProjectionViewerPrototype.m  Launcher for the local prototype TIFF
 validateProjectionBackendJob.m  Validate backend jobs without rendering
+scripts/backend_interactive_evaluation.m Sectioned backend evaluation script
+artifacts/backend_evaluation/ Ignored backend evaluation output directory
 runTests.m                      Simple test runner
 buildfile.m                     MATLAB buildtool tasks
 ```
@@ -241,3 +243,7 @@ backend records the fallback reason in `GpuInfo` and continues on CPU.
 See `docs/backend_app_workflow.md` for the complete app-to-backend workflow and
 `docs/backend_milestone_9_custom_gpu_kernel_assessment.md` for the current
 custom GPU kernel decision record.
+
+For interactive timing and output-size experiments, run
+`scripts/backend_interactive_evaluation.m` section-by-section. It writes jobs,
+rendered products, logs, and summary tables under `artifacts/backend_evaluation/`.

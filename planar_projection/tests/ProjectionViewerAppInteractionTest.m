@@ -18,8 +18,12 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
         function closeExistingViewer(testCase)
             delete(findall(groot, "Type", "figure", ...
                 "Name", "Projection Viewer Prototype"));
+            delete(findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Help"));
             testCase.addTeardown(@() delete(findall(groot, "Type", "figure", ...
                 "Name", "Projection Viewer Prototype")));
+            testCase.addTeardown(@() delete(findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Help")));
         end
     end
 
@@ -45,7 +49,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(ax.Visible), "off");
         end
 
-        function testCommandButtonsUseCompactGrid(testCase)
+        function testImageContextMenuContainsViewerCommands(testCase)
             scene = ProjectionViewerAppInteractionTest.makeScene();
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
@@ -53,22 +57,195 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
 
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Projection Viewer Prototype");
-            saveButton = ProjectionViewerAppInteractionTest.findButton(fig, "Save");
-            loadButton = ProjectionViewerAppInteractionTest.findButton(fig, "Load");
-            cycleButton = ProjectionViewerAppInteractionTest.findButton(fig, "Cycle");
-            resetButton = ProjectionViewerAppInteractionTest.findButton(fig, "Reset");
+            ax = findall(fig, "Type", "axes");
+            surfaceHandle = findall(ax, "Type", "surface");
+            saveMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerSaveMenuItem");
+            loadMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerLoadMenuItem");
+            cycleMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerCycleMenuItem");
+            resetMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerResetMenuItem");
+            helpMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerHelpMenuItem");
+            crosshairMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerCrosshairMenuItem");
 
-            testCase.verifyEqual(saveButton.Parent, loadButton.Parent);
-            testCase.verifyEqual(saveButton.Parent, cycleButton.Parent);
-            testCase.verifyEqual(saveButton.Parent, resetButton.Parent);
             testCase.verifyEqual( ...
-                ProjectionViewerAppInteractionTest.layoutPosition(saveButton), [1 1]);
-            testCase.verifyEqual( ...
-                ProjectionViewerAppInteractionTest.layoutPosition(loadButton), [1 2]);
-            testCase.verifyEqual( ...
-                ProjectionViewerAppInteractionTest.layoutPosition(cycleButton), [2 1]);
-            testCase.verifyEqual( ...
-                ProjectionViewerAppInteractionTest.layoutPosition(resetButton), [2 2]);
+                [string(saveMenu.Text) string(loadMenu.Text) ...
+                string(cycleMenu.Text) string(resetMenu.Text) ...
+                string(helpMenu.Text) string(crosshairMenu.Text)], ...
+                ["Save" "Load" "Cycle" "Reset" "Help" "Crosshair"]);
+            testCase.verifyEqual(ax.ContextMenu, saveMenu.Parent);
+            testCase.verifyEqual(surfaceHandle(1).ContextMenu, saveMenu.Parent);
+            testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Save"));
+            testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Load"));
+            testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Cycle"));
+            testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Reset"));
+            testCase.verifyEqual(string(crosshairMenu.Checked), "off");
+        end
+
+        function testHelpContextMenuOpensNonModalDialog(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            helpMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerHelpMenuItem");
+
+            helpMenu.MenuSelectedFcn(helpMenu, struct());
+            drawnow
+
+            helpFig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Help");
+            helpTextArea = findall(helpFig, "-isa", "matlab.ui.control.TextArea");
+
+            testCase.verifyNotEmpty(helpFig);
+            testCase.verifyNotEqual(helpFig, fig);
+            testCase.verifyEqual(string(fig.Visible), "on");
+            testCase.verifyEqual(string(helpFig.Visible), "on");
+            testCase.verifyTrue(any(contains(string(helpTextArea.Value), ...
+                "Space down: hide the selected layer")));
+        end
+
+        function testCrosshairContextMenuToggleTracksPointer(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            crosshairMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerCrosshairMenuItem");
+            pointer = ProjectionViewerAppInteractionTest.axesCenterPoint(ax);
+            axesPosition = ax.InnerPosition;
+            figurePosition = fig.Position;
+            figureSize = figurePosition(3:4);
+
+            fig.CurrentPoint = pointer;
+            crosshairMenu.MenuSelectedFcn(crosshairMenu, struct());
+            fig.WindowButtonMotionFcn(fig, struct());
+            drawnow
+
+            horizontal = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                fig, "ProjectionViewerCrosshairHorizontal");
+            vertical = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                fig, "ProjectionViewerCrosshairVertical");
+
+            testCase.verifyEqual(string(crosshairMenu.Checked), "on");
+            testCase.verifyEqual(string(horizontal.Visible), "on");
+            testCase.verifyEqual(string(vertical.Visible), "on");
+            testCase.verifyEqual(horizontal.Color, [0 1 1]);
+            testCase.verifyEqual(vertical.Color, [0 1 1]);
+            testCase.verifyEqual(horizontal.Position, ...
+                [axesPosition(1) / figureSize(1), pointer(2) / figureSize(2), ...
+                axesPosition(3) / figureSize(1), 0], AbsTol=1e-9);
+            testCase.verifyEqual(vertical.Position, ...
+                [pointer(1) / figureSize(1), axesPosition(2) / figureSize(2), ...
+                0, axesPosition(4) / figureSize(2)], AbsTol=1e-9);
+
+            crosshairMenu.MenuSelectedFcn(crosshairMenu, struct());
+            drawnow
+
+            testCase.verifyEqual(string(crosshairMenu.Checked), "off");
+            testCase.verifyEqual(string(horizontal.Visible), "off");
+            testCase.verifyEqual(string(vertical.Visible), "off");
+        end
+
+        function testLayerDropDownIsWideForLongLayerNames(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            scene.layers(2).Name = ...
+                "this_is_a_deliberately_long_50_character_layer_file.tif";
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
+            controlGrid = layerDropDown.Parent;
+
+            testCase.verifyGreaterThanOrEqual(controlGrid.ColumnWidth{1}, 420);
+            testCase.verifyTrue(contains(string(layerDropDown.Items{2}), ...
+                string(scene.layers(2).Name)));
+        end
+
+        function testTipTiltTwistRangesAreFortyFiveDegrees(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
+            tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
+            twistSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 4);
+
+            testCase.verifyEqual(tipSlider.Limits, [-45 45]);
+            testCase.verifyEqual(tiltSlider.Limits, [-45 45]);
+            testCase.verifyEqual(twistSlider.Limits, [-45 45]);
+            testCase.verifyEqual(tipSlider.MajorTicks, -45:15:45);
+            testCase.verifyEqual(tiltSlider.MajorTicks, -45:15:45);
+            testCase.verifyEqual(twistSlider.MajorTicks, -45:15:45);
+        end
+
+        function testDoubleLeftClickCyclesLayer(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            [scene, ~] = ProjectionLayerManager.setActiveLayer(scene, 2);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
+
+            fig.CurrentPoint = ProjectionViewerAppInteractionTest.axesCenterPoint(ax);
+            fig.SelectionType = "open";
+            fig.WindowButtonDownFcn(fig, struct());
+            drawnow
+
+            testCase.verifyEqual(layerDropDown.Value, 1);
+        end
+
+        function testSpacebarHoldTogglesSelectedLayerVisibility(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            visibleCheckBox = findall(fig, "-isa", "matlab.ui.control.CheckBox");
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("space"));
+            drawnow
+            hiddenState = app.exportState();
+
+            testCase.verifyFalse(visibleCheckBox.Value);
+            testCase.verifyEqual(string(layerSurfaces(2).Visible), "off");
+            testCase.verifyFalse(hiddenState.Layers(2).Visible);
+
+            fig.WindowKeyReleaseFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("space"));
+            drawnow
+            shownState = app.exportState();
+
+            testCase.verifyTrue(visibleCheckBox.Value);
+            testCase.verifyEqual(string(layerSurfaces(2).Visible), "on");
+            testCase.verifyTrue(shownState.Layers(2).Visible);
         end
 
         function testLayerStyleControlsAreStacked(testCase)
@@ -821,6 +998,16 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             if isfolder(folder)
                 rmdir(folder, "s");
             end
+        end
+
+        function menuItem = findMenuItem(tag)
+            menuItems = findall(groot, "Tag", tag);
+            menuItem = menuItems(1);
+        end
+
+        function component = findTaggedComponent(parent, tag)
+            components = findall(parent, "Tag", tag);
+            component = components(1);
         end
 
         function dropdown = findLayerDropDown(fig)
