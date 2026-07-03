@@ -491,11 +491,6 @@ classdef ProjectionViewerApp < handle
                     app.setAlignmentStatus("Choose different reference and moving layers.");
                     return
                 end
-                if options.LossMode ~= "projectionPlane2D"
-                    app.setAlignmentStatus( ...
-                        "Ray-to-ray loss is planned for a later milestone.");
-                    return
-                end
 
                 app.setAlignmentStatus("Rendering working images...");
                 app.throwIfAlignmentCancelled();

@@ -144,6 +144,40 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
                 AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
         end
 
+        function testRayToRayLossReportsComparisonDiagnostics(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+
+            result = ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, ProjectionAlignmentOpkSolverTest.rayOptions());
+
+            testCase.verifyTrue(result.Convergence.Success);
+            testCase.verifyEqual(result.Residuals.LossMode, "rayToRay3D");
+            testCase.verifyEqual(result.RequestSummary.LossMode, "rayToRay3D");
+            testCase.verifyNumElements(result.Residuals.Before, ...
+                matchResult.Matches.Count);
+            testCase.verifyNumElements(result.Residuals.PerPair, 1);
+            testCase.verifyLessThanOrEqual(result.Diagnostics.RmsAfter, ...
+                result.Diagnostics.RmsBefore + ProjectionAlignmentOpkSolverTest.Tol);
+            testCase.verifyTrue(isfield(result.Diagnostics.Comparison, ...
+                "ProjectionPlaneRmsBefore"));
+            testCase.verifyTrue(isfield(result.Diagnostics.Comparison, ...
+                "ProjectionPlaneRmsAfter"));
+        end
+
+        function testRayToRayLossHandlesParallelRays(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makeBaseTwoLayerScene();
+            scene.layers(2).SourceGeometry = scene.layers(1).SourceGeometry;
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+
+            result = ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, ProjectionAlignmentOpkSolverTest.rayOptions());
+
+            testCase.verifyTrue(result.Convergence.Success);
+            testCase.verifyTrue(all(isfinite(result.Residuals.Before)));
+            testCase.verifyTrue(all(isfinite(result.Residuals.After)));
+        end
+
         function testInsufficientMatchesError(testCase)
             scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
             matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
@@ -270,6 +304,12 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
                 KappaDegrees=0, SharedScale=[0.8 1.2]);
             options.Regularization = struct(OverallWeight=1e-8, ...
                 SharedScaleWeight=1e-6, RobustLoss="none");
+        end
+
+        function options = rayOptions()
+            options = ProjectionAlignmentOpkSolverTest.looseOptions();
+            options.LossMode = "rayToRay3D";
+            options.Regularization.RobustLoss = "none";
         end
     end
 end

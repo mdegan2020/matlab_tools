@@ -196,9 +196,9 @@ Manual auto-alignment validation loop:
 app = runSyntheticAlignmentPrototype("test_data/10.tif");
 ```
 
-In the viewer, keep `projectionPlane2D` selected, run alignment, inspect the
-match overlays and RMS summary, preview the solved OPK corrections, apply them,
-revert them, and save the viewer state from the context menu.
+In the viewer, run alignment with `projectionPlane2D` or `rayToRay3D`, inspect
+the match overlays and RMS summary, preview the solved OPK corrections, apply
+them, revert them, and save the viewer state from the context menu.
 
 Projection scenes can choose how the initial projection plane is built:
 

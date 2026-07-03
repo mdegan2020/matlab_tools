@@ -136,13 +136,19 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 AbsTol=ProjectionViewerAlignmentWorkflowTest.Tol);
         end
 
-        function testUnsupportedLossReportsStatusWithoutRunning(testCase)
-            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(false);
+        function testRayToRayLossRunsThroughControls(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(true);
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
             drawnow
 
             fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
             lossDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentLossDropDown");
             runButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -152,13 +158,14 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             statusLabel = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentStatusLabel");
 
+            detectorDropDown.Value = "sift";
             lossDropDown.Value = "rayToRay3D";
             runButton.ButtonPushedFcn(runButton, struct());
             drawnow
 
-            testCase.verifyTrue(contains(string(statusLabel.Text), "later milestone"));
+            testCase.verifyTrue(contains(string(statusLabel.Text), "RMS"));
             testCase.verifyEqual(string(runButton.Enable), "on");
-            testCase.verifyEqual(string(previewButton.Enable), "off");
+            testCase.verifyEqual(string(previewButton.Enable), "on");
         end
     end
 
