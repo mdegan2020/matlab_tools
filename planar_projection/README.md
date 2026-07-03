@@ -185,6 +185,20 @@ Core controls:
   to one estimated IFOV per key press; kappa defaults to 0.1 degrees.
 - Save and Load write/read a human-readable JSON viewer state containing camera,
   layer, alpha, blend, projection offset, OPK, tip, tilt, and twist settings.
+- The alignment row can run the current two-image auto-alignment prototype.
+  Choose a reference layer, a moving layer, detector, and loss mode, then use
+  Run, Preview, Apply, and Revert. Run reports stage progress and residual/OPK
+  summaries in the status text and draws match/inlier overlays in the viewer.
+
+Manual auto-alignment validation loop:
+
+```matlab
+app = runSyntheticAlignmentPrototype("test_data/10.tif");
+```
+
+In the viewer, keep `projectionPlane2D` selected, run alignment, inspect the
+match overlays and RMS summary, preview the solved OPK corrections, apply them,
+revert them, and save the viewer state from the context menu.
 
 Projection scenes can choose how the initial projection plane is built:
 
