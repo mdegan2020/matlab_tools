@@ -71,12 +71,20 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 "ProjectionViewerHelpMenuItem");
             crosshairMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerCrosshairMenuItem");
+            blendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerBlendModeMenu");
+            alphaBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAlphaBlendMenuItem");
+            anaglyphBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAnaglyphBlendMenuItem");
 
             testCase.verifyEqual( ...
                 [string(saveMenu.Text) string(loadMenu.Text) ...
                 string(cycleMenu.Text) string(resetMenu.Text) ...
-                string(helpMenu.Text) string(crosshairMenu.Text)], ...
-                ["Save" "Load" "Cycle" "Reset" "Help" "Crosshair"]);
+                string(helpMenu.Text) string(crosshairMenu.Text) ...
+                string(blendMenu.Text)], ...
+                ["Save" "Load" "Cycle" "Reset" "Help" "Crosshair" ...
+                "Blend mode"]);
             testCase.verifyEqual(ax.ContextMenu, saveMenu.Parent);
             testCase.verifyEqual(surfaceHandle(1).ContextMenu, saveMenu.Parent);
             testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Save"));
@@ -84,6 +92,10 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Cycle"));
             testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Reset"));
             testCase.verifyEqual(string(crosshairMenu.Checked), "off");
+            testCase.verifyEqual(alphaBlendMenu.Parent, blendMenu);
+            testCase.verifyEqual(anaglyphBlendMenu.Parent, blendMenu);
+            testCase.verifyEqual(string(alphaBlendMenu.Checked), "on");
+            testCase.verifyEqual(string(anaglyphBlendMenu.Checked), "off");
         end
 
         function testHelpContextMenuOpensNonModalDialog(testCase)
@@ -109,7 +121,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(fig.Visible), "on");
             testCase.verifyEqual(string(helpFig.Visible), "on");
             testCase.verifyTrue(any(contains(string(helpTextArea.Value), ...
-                "Space down: hide the selected layer")));
+                "Alt/Option + left drag: adjust selected-layer omega and phi")));
         end
 
         function testCrosshairContextMenuToggleTracksPointer(testCase)
@@ -124,9 +136,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             crosshairMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerCrosshairMenuItem");
             pointer = ProjectionViewerAppInteractionTest.axesCenterPoint(ax);
-            axesPosition = ax.InnerPosition;
-            figurePosition = fig.Position;
-            figureSize = figurePosition(3:4);
+            [rightVector, upVector] = ProjectionViewerAppInteractionTest.cameraScreenBasis(ax);
 
             fig.CurrentPoint = pointer;
             crosshairMenu.MenuSelectedFcn(crosshairMenu, struct());
@@ -143,12 +153,16 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(vertical.Visible), "on");
             testCase.verifyEqual(horizontal.Color, [0 1 1]);
             testCase.verifyEqual(vertical.Color, [0 1 1]);
-            testCase.verifyEqual(horizontal.Position, ...
-                [axesPosition(1) / figureSize(1), pointer(2) / figureSize(2), ...
-                axesPosition(3) / figureSize(1), 0], AbsTol=1e-9);
-            testCase.verifyEqual(vertical.Position, ...
-                [pointer(1) / figureSize(1), axesPosition(2) / figureSize(2), ...
-                0, axesPosition(4) / figureSize(2)], AbsTol=1e-9);
+            testCase.verifyGreaterThan( ...
+                ProjectionViewerAppInteractionTest.lineLength(horizontal), 0);
+            testCase.verifyGreaterThan( ...
+                ProjectionViewerAppInteractionTest.lineLength(vertical), 0);
+            testCase.verifyGreaterThan(abs(dot( ...
+                ProjectionViewerAppInteractionTest.lineDelta(horizontal), ...
+                rightVector)), 0);
+            testCase.verifyGreaterThan(abs(dot( ...
+                ProjectionViewerAppInteractionTest.lineDelta(vertical), ...
+                upVector)), 0);
 
             crosshairMenu.MenuSelectedFcn(crosshairMenu, struct());
             drawnow
@@ -196,9 +210,38 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(twistSlider.MajorTicks, -45:15:45);
         end
 
+        function testExtremeTipTiltMeshesStayInsideStabilizedAxesLimits(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
+            tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
+
+            tipSlider.Value = 45;
+            tipSlider.ValueChangedFcn(tipSlider, struct());
+            tiltSlider.Value = -45;
+            tiltSlider.ValueChangedFcn(tiltSlider, struct());
+            drawnow
+            surfaceHandles = findall(ax, "Type", "surface");
+            bounds = ProjectionViewerAppInteractionTest.surfaceBounds(surfaceHandles);
+
+            testCase.verifyGreaterThanOrEqual(bounds.Minimum(1), ax.XLim(1));
+            testCase.verifyLessThanOrEqual(bounds.Maximum(1), ax.XLim(2));
+            testCase.verifyGreaterThanOrEqual(bounds.Minimum(2), ax.YLim(1));
+            testCase.verifyLessThanOrEqual(bounds.Maximum(2), ax.YLim(2));
+            testCase.verifyGreaterThanOrEqual(bounds.Minimum(3), ax.ZLim(1));
+            testCase.verifyLessThanOrEqual(bounds.Maximum(3), ax.ZLim(2));
+        end
+
         function testDoubleLeftClickCyclesLayer(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
-            [scene, ~] = ProjectionLayerManager.setActiveLayer(scene, 2);
+            scene.layers(1).Alpha = 0.35;
+            scene.layers(2).Alpha = 0.65;
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
             drawnow
@@ -212,8 +255,15 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             fig.SelectionType = "open";
             fig.WindowButtonDownFcn(fig, struct());
             drawnow
+            state = app.exportState();
 
             testCase.verifyEqual(layerDropDown.Value, 1);
+            testCase.verifyTrue(state.Layers(1).Visible);
+            testCase.verifyFalse(state.Layers(2).Visible);
+            testCase.verifyEqual(state.Layers(1).Alpha, 0.35, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(state.Layers(2).Alpha, 0.65, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
         function testSpacebarHoldTogglesSelectedLayerVisibility(testCase)
@@ -248,7 +298,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyTrue(shownState.Layers(2).Visible);
         end
 
-        function testLayerStyleControlsAreStacked(testCase)
+        function testLayerHeaderContainsOrderingAndVisibilityControls(testCase)
             scene = ProjectionViewerAppInteractionTest.makeScene();
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
@@ -257,13 +307,83 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Projection Viewer Prototype");
             visibleCheckBox = findall(fig, "-isa", "matlab.ui.control.CheckBox");
-            blendDropDown = ProjectionViewerAppInteractionTest.findBlendDropDown(fig);
+            moveUpButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                fig, "ProjectionViewerMoveLayerUpButton");
+            moveDownButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                fig, "ProjectionViewerMoveLayerDownButton");
 
-            testCase.verifyEqual(visibleCheckBox.Parent, blendDropDown.Parent);
+            testCase.verifyEqual(moveUpButton.Parent, moveDownButton.Parent);
+            testCase.verifyEqual(moveUpButton.Parent, visibleCheckBox.Parent);
             testCase.verifyEqual( ...
-                ProjectionViewerAppInteractionTest.layoutPosition(visibleCheckBox), [1 1]);
+                ProjectionViewerAppInteractionTest.layoutPosition(moveUpButton), [1 2]);
             testCase.verifyEqual( ...
-                ProjectionViewerAppInteractionTest.layoutPosition(blendDropDown), [2 1]);
+                ProjectionViewerAppInteractionTest.layoutPosition(moveDownButton), [1 3]);
+            testCase.verifyEqual( ...
+                ProjectionViewerAppInteractionTest.layoutPosition(visibleCheckBox), [1 6]);
+            testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findBlendDropDown(fig));
+        end
+
+        function testBlendModeContextMenuUpdatesSelectedLayer(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            anaglyphBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAnaglyphBlendMenuItem");
+            alphaBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAlphaBlendMenuItem");
+
+            anaglyphBlendMenu.MenuSelectedFcn(anaglyphBlendMenu, struct());
+            drawnow
+            state = app.exportState();
+
+            testCase.verifyEqual(state.Layers(2).BlendMode, "redBlueAnaglyph");
+            testCase.verifyEqual(string(anaglyphBlendMenu.Checked), "on");
+            testCase.verifyEqual(string(alphaBlendMenu.Checked), "off");
+
+            alphaBlendMenu.MenuSelectedFcn(alphaBlendMenu, struct());
+            drawnow
+            state = app.exportState();
+
+            testCase.verifyEqual(state.Layers(2).BlendMode, "alpha");
+            testCase.verifyEqual(string(anaglyphBlendMenu.Checked), "off");
+            testCase.verifyEqual(string(alphaBlendMenu.Checked), "on");
+        end
+
+        function testLayerOrderButtonsSwapAdjacentLayers(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeThreeImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
+            moveUpButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                fig, "ProjectionViewerMoveLayerUpButton");
+            moveDownButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                fig, "ProjectionViewerMoveLayerDownButton");
+
+            layerDropDown.Value = 2;
+            layerDropDown.ValueChangedFcn(layerDropDown, struct("Value", 2));
+            moveUpButton.ButtonPushedFcn(moveUpButton, struct());
+            drawnow
+            movedUpState = app.exportState();
+
+            testCase.verifyEqual(layerDropDown.Value, 3);
+            testCase.verifyEqual([movedUpState.Layers.Name], ...
+                ["layer1.tif" "layer3.tif" "layer2.tif"]);
+            testCase.verifyTrue(contains(string(layerDropDown.Items{3}), "layer2.tif"));
+
+            moveDownButton.ButtonPushedFcn(moveDownButton, struct());
+            drawnow
+            movedDownState = app.exportState();
+
+            testCase.verifyEqual(layerDropDown.Value, 2);
+            testCase.verifyEqual([movedDownState.Layers.Name], ...
+                ["layer1.tif" "layer2.tif" "layer3.tif"]);
+            testCase.verifyTrue(contains(string(layerDropDown.Items{2}), "layer2.tif"));
         end
 
         function testControlScrollAdjustsTwistWithoutZoomOrMeshChange(testCase)
@@ -683,7 +803,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 ProjectionViewerAppInteractionTest.opkText([0; 0; 0]));
         end
 
-        function testControlRightDragAdjustsOmegaPhiSelectedLayerOnly(testCase)
+        function testAltLeftDragAdjustsOmegaPhiSelectedLayerOnly(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
@@ -704,11 +824,11 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 layerSurfaces(2));
 
             fig.WindowKeyPressFcn(fig, ...
-                ProjectionViewerAppInteractionTest.makeKeyEvent("control"));
+                ProjectionViewerAppInteractionTest.makeKeyEvent("alt"));
             ProjectionViewerAppInteractionTest.dragFigurePointer( ...
-                fig, ax, "alt", [60 36]);
+                fig, ax, "normal", [60 36], "alt");
             fig.WindowKeyReleaseFcn(fig, ...
-                ProjectionViewerAppInteractionTest.makeKeyEvent("control"));
+                ProjectionViewerAppInteractionTest.makeKeyEvent("alt"));
             drawnow
 
             layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
@@ -738,6 +858,31 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyGreaterThan(screenDelta(2), 0);
             testCase.verifyEqual(string(opkLabel.Text), ...
                 ProjectionViewerAppInteractionTest.opkText(offsets));
+        end
+
+        function testControlRightDragDoesNotAdjustOmegaPhi(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("control"));
+            ProjectionViewerAppInteractionTest.dragFigurePointer( ...
+                fig, ax, "alt", [60 36], "control");
+            fig.WindowKeyReleaseFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("control"));
+            drawnow
+            state = app.exportState();
+
+            testCase.verifyEqual(state.Layers(2).ViewVectorAngularOffsetsDegrees, ...
+                [0 0 0], AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(state.Layers(2).ProjectionOffsetMeters, [0 0], ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
         function testExportImportStateRestoresViewerConfiguration(testCase)
@@ -825,6 +970,77 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
             testCase.verifyEqual(actual.Layers(2).ProjectionOffsetMeters, ...
                 [1.25 -1.5], AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
+
+        function testResetRestoresNeutralViewerAndLayerState(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeThreeImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
+            tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
+            tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
+            twistSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 4);
+            alphaSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 5);
+            visibleCheckBox = findall(fig, "-isa", "matlab.ui.control.CheckBox");
+            moveUpButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                fig, "ProjectionViewerMoveLayerUpButton");
+            anaglyphBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAnaglyphBlendMenuItem");
+            resetMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerResetMenuItem");
+
+            layerDropDown.Value = 2;
+            layerDropDown.ValueChangedFcn(layerDropDown, struct("Value", 2));
+            moveUpButton.ButtonPushedFcn(moveUpButton, struct());
+            tipSlider.Value = 30;
+            tipSlider.ValueChangedFcn(tipSlider, struct());
+            tiltSlider.Value = -25;
+            tiltSlider.ValueChangedFcn(tiltSlider, struct());
+            twistSlider.Value = 12;
+            twistSlider.ValueChangedFcn(twistSlider, struct());
+            alphaSlider.Value = 0.35;
+            alphaSlider.ValueChangedFcn(alphaSlider, struct());
+            visibleCheckBox.Value = false;
+            visibleCheckBox.ValueChangedFcn(visibleCheckBox, struct("Value", false));
+            anaglyphBlendMenu.MenuSelectedFcn(anaglyphBlendMenu, struct());
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("w"));
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("i"));
+            drawnow
+
+            resetMenu.MenuSelectedFcn(resetMenu, struct());
+            drawnow
+            actual = app.exportState();
+
+            testCase.verifyEqual(actual.SelectedLayerIndex, 3);
+            testCase.verifyEqual([actual.Layers.Name], ...
+                ["layer1.tif" "layer2.tif" "layer3.tif"]);
+            testCase.verifyEqual(actual.Projection.TipDegrees, 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.Projection.TiltDegrees, 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(actual.View.TwistDegrees, 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual([actual.Layers.Alpha], [1 1 1], ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual([actual.Layers.Visible], [true true true]);
+            testCase.verifyEqual([actual.Layers.BlendMode], ...
+                ["alpha" "alpha" "alpha"]);
+            testCase.verifyEqual( ...
+                ProjectionViewerAppInteractionTest.layerProjectionOffsets(actual), ...
+                zeros(3, 2), AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual( ...
+                ProjectionViewerAppInteractionTest.layerViewVectorOffsets(actual), ...
+                zeros(3, 3), AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerDropDown.Value, 3);
+            testCase.verifyTrue(contains(string(layerDropDown.Items{2}), "layer2.tif"));
+            testCase.verifyTrue(all(ax.ZLim > [-Inf -Inf]));
         end
 
         function testExportBackendJobFromCurrentViewerState(testCase)
@@ -994,6 +1210,18 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 options);
         end
 
+        function scene = makeThreeImageScene()
+            imageData1 = uint8(reshape(1:60, 4, 5, 3));
+            imageData2 = uint8(reshape(1:72, 6, 4, 3));
+            imageData3 = uint8(reshape(1:90, 5, 6, 3));
+            options = struct();
+            options.RowStride = 2;
+            options.ColumnStride = 2;
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                {imageData1, imageData2, imageData3}, ...
+                ["layer1.tif", "layer2.tif", "layer3.tif"], options);
+        end
+
         function removeFolder(folder)
             if isfolder(folder)
                 rmdir(folder, "s");
@@ -1088,6 +1316,14 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 offsetsDegrees(1), offsetsDegrees(2), offsetsDegrees(3)));
         end
 
+        function offsets = layerProjectionOffsets(state)
+            offsets = reshape([state.Layers.ProjectionOffsetMeters], 2, []).';
+        end
+
+        function offsets = layerViewVectorOffsets(state)
+            offsets = reshape([state.Layers.ViewVectorAngularOffsetsDegrees], 3, []).';
+        end
+
         function state = makeViewerState(scene)
             state = struct();
             state.Format = "ProjectionViewerState";
@@ -1145,12 +1381,15 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 mean(surfaceHandle.ZData, "all")];
         end
 
-        function dragFigurePointer(fig, ax, selectionType, pixelDelta)
+        function dragFigurePointer(fig, ax, selectionType, pixelDelta, modifier)
+            if nargin < 5
+                modifier = "control";
+            end
             startPoint = ProjectionViewerAppInteractionTest.axesCenterPoint(ax);
             fig.SelectionType = selectionType;
             fig.CurrentPoint = startPoint;
             fig.WindowButtonDownFcn(fig, ...
-                ProjectionViewerAppInteractionTest.makeMouseEvent("control"));
+                ProjectionViewerAppInteractionTest.makeMouseEvent(modifier));
             fig.CurrentPoint = startPoint + pixelDelta;
             fig.WindowButtonMotionFcn(fig, struct());
             fig.WindowButtonUpFcn(fig, struct());
@@ -1159,6 +1398,27 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
         function point = axesCenterPoint(ax)
             axesPosition = ax.InnerPosition;
             point = axesPosition(1:2) + axesPosition(3:4) / 2;
+        end
+
+        function delta = lineDelta(lineHandle)
+            delta = [lineHandle.XData(2) - lineHandle.XData(1); ...
+                lineHandle.YData(2) - lineHandle.YData(1); ...
+                lineHandle.ZData(2) - lineHandle.ZData(1)];
+            delta = delta / norm(delta);
+        end
+
+        function length = lineLength(lineHandle)
+            length = norm([lineHandle.XData(2) - lineHandle.XData(1); ...
+                lineHandle.YData(2) - lineHandle.YData(1); ...
+                lineHandle.ZData(2) - lineHandle.ZData(1)]);
+        end
+
+        function [rightVector, upVector] = cameraScreenBasis(ax)
+            viewDirection = ProjectionViewerAppInteractionTest.cameraViewDirection(ax);
+            upVector = camup(ax).';
+            upVector = upVector / norm(upVector);
+            rightVector = cross(viewDirection, upVector);
+            rightVector = rightVector / norm(rightVector);
         end
 
         function screenDelta = screenDeltaComponents(ax, worldDelta)
@@ -1171,6 +1431,21 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             rightVector = cross(viewDirection, upVector);
             rightVector = rightVector / norm(rightVector);
             screenDelta = [rightVector.' * worldDelta; upVector.' * worldDelta];
+        end
+
+        function bounds = surfaceBounds(surfaceHandles)
+            minimums = [Inf; Inf; Inf];
+            maximums = [-Inf; -Inf; -Inf];
+            for k = 1:numel(surfaceHandles)
+                surfaceHandle = surfaceHandles(k);
+                minimums = min(minimums, [min(surfaceHandle.XData, [], "all"); ...
+                    min(surfaceHandle.YData, [], "all"); ...
+                    min(surfaceHandle.ZData, [], "all")]);
+                maximums = max(maximums, [max(surfaceHandle.XData, [], "all"); ...
+                    max(surfaceHandle.YData, [], "all"); ...
+                    max(surfaceHandle.ZData, [], "all")]);
+            end
+            bounds = struct(Minimum=minimums, Maximum=maximums);
         end
 
         function event = makeKeyEvent(key)

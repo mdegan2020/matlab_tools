@@ -30,13 +30,14 @@ classdef ProjectionViewerApp < handle
         PreviewLayerDepthStepFraction double = 1e-4
         PreviewLayerDepthMinimumStepMeters double = 0.5
         MinProjectedNudgeNorm double = 1e-9
+        ResetScene struct
         UIFigure matlab.ui.Figure
         HelpFigure matlab.ui.Figure
         GridLayout matlab.ui.container.GridLayout
         Axes matlab.ui.control.UIAxes
         Surface
         ControlGrid matlab.ui.container.GridLayout
-        LayerStyleGrid matlab.ui.container.GridLayout
+        LayerHeaderGrid matlab.ui.container.GridLayout
         ImageContextMenu
         SaveMenuItem
         LoadMenuItem
@@ -44,6 +45,9 @@ classdef ProjectionViewerApp < handle
         ResetMenuItem
         HelpMenuItem
         CrosshairMenuItem
+        BlendModeMenu
+        AlphaBlendMenuItem
+        AnaglyphBlendMenuItem
         CrosshairHorizontal
         CrosshairVertical
         TipSlider matlab.ui.control.Slider
@@ -57,7 +61,8 @@ classdef ProjectionViewerApp < handle
         ViewVectorLabel matlab.ui.control.Label
         LayerDropDown matlab.ui.control.DropDown
         VisibleCheckBox matlab.ui.control.CheckBox
-        BlendModeDropDown matlab.ui.control.DropDown
+        MoveLayerUpButton matlab.ui.control.Button
+        MoveLayerDownButton matlab.ui.control.Button
         IsCrosshairEnabled logical = false
     end
 
@@ -81,6 +86,7 @@ classdef ProjectionViewerApp < handle
             end
 
             app.Scene = scene;
+            app.ResetScene = app.createResetScene(scene);
             app.SelectedLayerIndex = numel(app.Scene.layers);
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
@@ -213,18 +219,48 @@ classdef ProjectionViewerApp < handle
             app.createImageContextMenu();
             app.createCrosshairOverlay();
 
-            app.ControlGrid = uigridlayout(app.GridLayout, [2 7]);
+            app.ControlGrid = uigridlayout(app.GridLayout, [2 6]);
             app.ControlGrid.Layout.Row = 2;
             app.ControlGrid.Layout.Column = 1;
             app.ControlGrid.RowHeight = {"fit", "fit"};
             app.ControlGrid.ColumnWidth = {420, "1x", "1x", "1x", "1x", ...
-                "fit", "fit"};
+                "fit"};
             app.ControlGrid.Padding = [0 0 0 0];
             app.ControlGrid.ColumnSpacing = 12;
 
-            layerLabel = uilabel(app.ControlGrid, Text="Layer");
+            app.LayerHeaderGrid = uigridlayout(app.ControlGrid, [1 6]);
+            app.LayerHeaderGrid.Layout.Row = 1;
+            app.LayerHeaderGrid.Layout.Column = 1;
+            app.LayerHeaderGrid.RowHeight = {"fit"};
+            app.LayerHeaderGrid.ColumnWidth = {"fit", "fit", "fit", "1x", ...
+                "fit", "fit"};
+            app.LayerHeaderGrid.Padding = [0 0 0 0];
+            app.LayerHeaderGrid.ColumnSpacing = 4;
+
+            layerLabel = uilabel(app.LayerHeaderGrid, Text="Layer");
             layerLabel.Layout.Row = 1;
             layerLabel.Layout.Column = 1;
+            app.MoveLayerUpButton = uibutton(app.LayerHeaderGrid, ...
+                Text="+", Tag="ProjectionViewerMoveLayerUpButton", ...
+                Tooltip="Move selected layer up", ...
+                ButtonPushedFcn=@(~, ~) app.moveSelectedLayerUp());
+            app.MoveLayerUpButton.Layout.Row = 1;
+            app.MoveLayerUpButton.Layout.Column = 2;
+            app.MoveLayerDownButton = uibutton(app.LayerHeaderGrid, ...
+                Text="-", Tag="ProjectionViewerMoveLayerDownButton", ...
+                Tooltip="Move selected layer down", ...
+                ButtonPushedFcn=@(~, ~) app.moveSelectedLayerDown());
+            app.MoveLayerDownButton.Layout.Row = 1;
+            app.MoveLayerDownButton.Layout.Column = 3;
+            visibleLabel = uilabel(app.LayerHeaderGrid, Text="Visible", ...
+                HorizontalAlignment="right");
+            visibleLabel.Layout.Row = 1;
+            visibleLabel.Layout.Column = 5;
+            app.VisibleCheckBox = uicheckbox(app.LayerHeaderGrid, Text="", ...
+                Value=true, ValueChangedFcn=@(~, event) app.visibleChanged(event));
+            app.VisibleCheckBox.Layout.Row = 1;
+            app.VisibleCheckBox.Layout.Column = 6;
+
             app.LayerDropDown = uidropdown(app.ControlGrid, ...
                 Items=cellstr(app.layerDisplayNames()), ...
                 ItemsData=1:numel(app.Scene.layers), ...
@@ -281,26 +317,6 @@ classdef ProjectionViewerApp < handle
                 Text=sprintf("Omega 0.0000 deg\nPhi 0.0000 deg\nKappa 0.000 deg"));
             app.ViewVectorLabel.Layout.Row = [1 2];
             app.ViewVectorLabel.Layout.Column = 6;
-
-            app.LayerStyleGrid = uigridlayout(app.ControlGrid, [2 1]);
-            app.LayerStyleGrid.Layout.Row = [1 2];
-            app.LayerStyleGrid.Layout.Column = 7;
-            app.LayerStyleGrid.RowHeight = {"fit", "fit"};
-            app.LayerStyleGrid.ColumnWidth = {"fit"};
-            app.LayerStyleGrid.Padding = [0 0 0 0];
-            app.LayerStyleGrid.RowSpacing = 4;
-
-            app.VisibleCheckBox = uicheckbox(app.LayerStyleGrid, Text="Visible", ...
-                Value=true, ValueChangedFcn=@(~, event) app.visibleChanged(event));
-            app.VisibleCheckBox.Layout.Row = 1;
-            app.VisibleCheckBox.Layout.Column = 1;
-
-            app.BlendModeDropDown = uidropdown(app.LayerStyleGrid, ...
-                Items=["alpha", "redBlueAnaglyph"], ...
-                Value="alpha", ...
-                ValueChangedFcn=@(~, event) app.blendModeChanged(event));
-            app.BlendModeDropDown.Layout.Row = 2;
-            app.BlendModeDropDown.Layout.Column = 1;
         end
 
         function createImageContextMenu(app)
@@ -324,16 +340,29 @@ classdef ProjectionViewerApp < handle
                 Text="Crosshair", Checked="off", ...
                 MenuSelectedFcn=@(~, ~) app.toggleCrosshair(), ...
                 Tag="ProjectionViewerCrosshairMenuItem");
+            app.BlendModeMenu = uimenu(app.ImageContextMenu, ...
+                Text="Blend mode", Separator="on", ...
+                Tag="ProjectionViewerBlendModeMenu");
+            app.AlphaBlendMenuItem = uimenu(app.BlendModeMenu, ...
+                Text="Alpha", Checked="on", ...
+                MenuSelectedFcn=@(~, ~) app.setSelectedLayerBlendMode("alpha"), ...
+                Tag="ProjectionViewerAlphaBlendMenuItem");
+            app.AnaglyphBlendMenuItem = uimenu(app.BlendModeMenu, ...
+                Text="Red/blue anaglyph", Checked="off", ...
+                MenuSelectedFcn=@(~, ~) app.setSelectedLayerBlendMode("redBlueAnaglyph"), ...
+                Tag="ProjectionViewerAnaglyphBlendMenuItem");
             app.Axes.ContextMenu = app.ImageContextMenu;
         end
 
         function createCrosshairOverlay(app)
-            app.CrosshairHorizontal = annotation(app.UIFigure, "line", ...
-                [0 0], [0 0], Color=[0 1 1], LineWidth=1, ...
-                Visible="off", Tag="ProjectionViewerCrosshairHorizontal");
-            app.CrosshairVertical = annotation(app.UIFigure, "line", ...
-                [0 0], [0 0], Color=[0 1 1], LineWidth=1, ...
-                Visible="off", Tag="ProjectionViewerCrosshairVertical");
+            app.CrosshairHorizontal = line(app.Axes, [NaN NaN], ...
+                [NaN NaN], [NaN NaN], Color=[0 1 1], LineWidth=1, ...
+                Visible="off", Clipping="off", HitTest="off", ...
+                PickableParts="none", Tag="ProjectionViewerCrosshairHorizontal");
+            app.CrosshairVertical = line(app.Axes, [NaN NaN], ...
+                [NaN NaN], [NaN NaN], Color=[0 1 1], LineWidth=1, ...
+                Visible="off", Clipping="off", HitTest="off", ...
+                PickableParts="none", Tag="ProjectionViewerCrosshairVertical");
         end
 
         function layerState = exportLayerState(app, layerIndex)
@@ -377,6 +406,19 @@ classdef ProjectionViewerApp < handle
                     layerState.ViewVectorAngularOffsetsDegrees(:);
                 layer.CurrentProjectionPlane = plane;
                 app.Scene.layers(layerIndex) = layer;
+            end
+        end
+
+        function scene = createResetScene(~, scene)
+            for layerIndex = 1:numel(scene.layers)
+                layer = scene.layers(layerIndex);
+                layer.Alpha = 1.0;
+                layer.Visible = true;
+                layer.BlendMode = "alpha";
+                layer.ProjectionOffsetMeters = [0; 0];
+                layer.ViewVectorAngularOffsetsDegrees = [0; 0; 0];
+                layer.CurrentProjectionPlane = layer.BaseProjectionPlane;
+                scene.layers(layerIndex) = layer;
             end
         end
 
@@ -454,6 +496,26 @@ classdef ProjectionViewerApp < handle
             grid(app.Axes, "off");
             app.stabilizeAxesLimits();
             app.hideImageAxesDecorations();
+            app.raiseCrosshairOverlay();
+        end
+
+        function rebuildSurfaces(app)
+            for layerIndex = 1:numel(app.Surfaces)
+                surfaceHandle = app.Surfaces{layerIndex};
+                if ~isempty(surfaceHandle) && isvalid(surfaceHandle)
+                    delete(surfaceHandle);
+                end
+            end
+            app.createSurface();
+        end
+
+        function raiseCrosshairOverlay(app)
+            if ~isempty(app.CrosshairHorizontal) && isvalid(app.CrosshairHorizontal)
+                uistack(app.CrosshairHorizontal, "top");
+            end
+            if ~isempty(app.CrosshairVertical) && isvalid(app.CrosshairVertical)
+                uistack(app.CrosshairVertical, "top");
+            end
         end
 
         function hideImageAxesDecorations(app)
@@ -799,24 +861,28 @@ classdef ProjectionViewerApp < handle
         end
 
         function pointerMoved(app)
-            app.updateCrosshair();
             app.updatePan();
+            app.updateCrosshair();
         end
 
         function scrollWheel(app, event)
             if app.IsControlDown || app.eventHasControl(event)
                 app.scrollTwist(event);
+                app.updateCrosshair();
                 return
             end
             if app.IsShiftDown || app.eventHasShift(event)
                 app.scrollTip(event);
+                app.updateCrosshair();
                 return
             end
             if app.IsAltDown || app.eventHasAlt(event)
                 app.scrollTilt(event);
+                app.updateCrosshair();
                 return
             end
             app.scrollZoom(event);
+            app.updateCrosshair();
         end
 
         function scrollTwist(app, event)
@@ -874,9 +940,10 @@ classdef ProjectionViewerApp < handle
                 return
             end
             hasControl = app.IsControlDown || app.eventHasControl(event);
+            hasAlt = app.IsAltDown || app.eventHasAlt(event);
             if hasControl && selectionType == "normal"
                 app.DragMode = "translateLayer";
-            elseif hasControl && selectionType == "alt"
+            elseif hasAlt && selectionType == "normal"
                 app.DragMode = "adjustViewVectors";
             elseif selectionType == "normal"
                 app.DragMode = "panCamera";
@@ -1259,29 +1326,60 @@ classdef ProjectionViewerApp < handle
         end
 
         function stabilizeAxesLimits(app)
-            radius = 0;
-            for layerIndex = 1:numel(app.Surfaces)
-                surfaceHandle = app.Surfaces{layerIndex};
-                points = [surfaceHandle.XData(:).'; ...
-                    surfaceHandle.YData(:).'; surfaceHandle.ZData(:).'];
-                radius = max(radius, max(vecnorm(points, 2, 1)));
+            [minimums, maximums] = app.previewBoundsForProjectionRange();
+            spans = maximums - minimums;
+            padding = max(0.05 * max(spans), app.previewLayerDepthStepMeters());
+            if ~isfinite(padding) || padding <= 0
+                padding = 1;
             end
 
-            if ~isfinite(radius) || radius <= 0
-                radius = 1;
-            end
-
-            limit = 1.02 * radius + ...
-                numel(app.Scene.layers) * app.previewLayerDepthStepMeters();
-            app.Axes.XLim = [-limit limit];
-            app.Axes.YLim = [-limit limit];
-            app.Axes.ZLim = [-limit limit];
+            app.Axes.XLim = [minimums(1) - padding, maximums(1) + padding];
+            app.Axes.YLim = [minimums(2) - padding, maximums(2) + padding];
+            app.Axes.ZLim = [minimums(3) - padding, maximums(3) + padding];
             app.Axes.XLimMode = "manual";
             app.Axes.YLimMode = "manual";
             app.Axes.ZLimMode = "manual";
             app.Axes.DataAspectRatio = [1 1 1];
             app.Axes.DataAspectRatioMode = "manual";
             app.Axes.PlotBoxAspectRatioMode = "auto";
+        end
+
+        function [minimums, maximums] = previewBoundsForProjectionRange(app)
+            minimums = [Inf; Inf; Inf];
+            maximums = [-Inf; -Inf; -Inf];
+            tipSamples = unique([0 app.TipSlider.Limits]);
+            tiltSamples = unique([0 app.TiltSlider.Limits]);
+
+            for tipDegrees = tipSamples
+                for tiltDegrees = tiltSamples
+                    plane = ProjectionMeshBuilder.applyPlaneTipTilt( ...
+                        app.Scene.layers(1).BaseProjectionPlane, ...
+                        deg2rad(tipDegrees), deg2rad(tiltDegrees));
+                    for layerIndex = 1:numel(app.Scene.layers)
+                        layer = app.Scene.layers(layerIndex);
+                        layer.CurrentProjectionPlane = plane;
+                        layer.MeshSampling = app.DefaultMeshSampling(layerIndex);
+                        mesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                            layer, plane, app.Scene.renderOrigin);
+                        [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
+                        [minimums, maximums] = app.accumulatePreviewBounds( ...
+                            minimums, maximums, X, Y, Z);
+                    end
+                end
+            end
+
+            if any(~isfinite(minimums)) || any(~isfinite(maximums))
+                minimums = [-1; -1; -1];
+                maximums = [1; 1; 1];
+            end
+        end
+
+        function [minimums, maximums] = accumulatePreviewBounds(~, ...
+                minimums, maximums, X, Y, Z)
+            minimums = min(minimums, [min(X, [], "all"); ...
+                min(Y, [], "all"); min(Z, [], "all")]);
+            maximums = max(maximums, [max(X, [], "all"); ...
+                max(Y, [], "all"); max(Z, [], "all")]);
         end
 
         function updateLabels(app, tipDegrees, tiltDegrees, twistDegrees, alpha)
@@ -1320,13 +1418,29 @@ classdef ProjectionViewerApp < handle
         end
 
         function resetView(app)
+            app.Scene = app.ResetScene;
+            app.SelectedLayerIndex = numel(app.Scene.layers);
+            app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
+            app.DragMeshSampling = app.createDragMeshSampling();
             app.TipSlider.Value = 0;
             app.TiltSlider.Value = 0;
             app.TwistSlider.Value = 0;
             app.AlphaSlider.Value = 1;
+            app.ProjectionTipDegrees = 0;
+            app.ProjectionTiltDegrees = 0;
             app.ViewTwistDegrees = 0;
-            app.updateProjection(0, 0, 1, app.DefaultMeshSampling);
+            app.IsControlDown = false;
+            app.IsShiftDown = false;
+            app.IsAltDown = false;
+            app.DragMode = "none";
+            app.LastPointerLocation = [NaN NaN];
+            app.NeedsDragFinalize = false;
+            app.rebuildSurfaces();
             app.configureFrameCamera();
+            app.updateLayerDropDownItems();
+            app.updateControlsFromSelectedLayer();
+            app.PreviewTimer = tic;
+            app.updateCrosshair();
         end
 
         function meshSamplings = createDragMeshSampling(app)
@@ -1354,34 +1468,69 @@ classdef ProjectionViewerApp < handle
             app.setSelectedLayerVisible(logical(event.Value));
         end
 
-        function blendModeChanged(app, event)
+        function setSelectedLayerBlendMode(app, blendMode)
             layer = app.Scene.layers(app.SelectedLayerIndex);
-            layer.BlendMode = string(event.Value);
+            layer.BlendMode = string(blendMode);
             app.Scene.layers(app.SelectedLayerIndex) = layer;
+            app.updateBlendMenuChecks();
         end
 
         function cycleLayer(app)
-            [app.Scene, app.SelectedLayerIndex] = ProjectionLayerManager.cycleActiveLayer(app.Scene);
+            nextLayerIndex = mod(app.SelectedLayerIndex, numel(app.Scene.layers)) + 1;
             for layerIndex = 1:numel(app.Scene.layers)
                 layer = app.Scene.layers(layerIndex);
-                app.Surfaces{layerIndex}.FaceAlpha = layer.Alpha;
+                layer.Visible = layerIndex == nextLayerIndex;
+                app.Scene.layers(layerIndex) = layer;
                 app.Surfaces{layerIndex}.Visible = app.onOff(layer.Visible);
             end
+            app.SelectedLayerIndex = nextLayerIndex;
+            app.updateControlsFromSelectedLayer();
+        end
+
+        function moveSelectedLayerUp(app)
+            app.swapSelectedLayer(1);
+        end
+
+        function moveSelectedLayerDown(app)
+            app.swapSelectedLayer(-1);
+        end
+
+        function swapSelectedLayer(app, direction)
+            targetIndex = app.SelectedLayerIndex + direction;
+            if targetIndex < 1 || targetIndex > numel(app.Scene.layers)
+                return
+            end
+
+            swapIndices = [app.SelectedLayerIndex targetIndex];
+            app.Scene.layers(swapIndices) = app.Scene.layers(fliplr(swapIndices));
+            app.DefaultMeshSampling(swapIndices) = ...
+                app.DefaultMeshSampling(fliplr(swapIndices));
+            app.DragMeshSampling(swapIndices) = ...
+                app.DragMeshSampling(fliplr(swapIndices));
+            app.SelectedLayerIndex = targetIndex;
+            app.refreshProjectionSurfaces(app.DefaultMeshSampling);
+            app.updateLayerDropDownItems();
             app.updateControlsFromSelectedLayer();
         end
 
         function updateControlsFromSelectedLayer(app)
             layer = app.Scene.layers(app.SelectedLayerIndex);
+            app.updateLayerDropDownItems();
             app.LayerDropDown.Value = app.SelectedLayerIndex;
             app.TipSlider.Value = app.ProjectionTipDegrees;
             app.TiltSlider.Value = app.ProjectionTiltDegrees;
             app.TwistSlider.Value = app.ViewTwistDegrees;
             app.AlphaSlider.Value = layer.Alpha;
             app.VisibleCheckBox.Value = layer.Visible;
-            app.BlendModeDropDown.Value = string(layer.BlendMode);
+            app.updateBlendMenuChecks();
             app.Surface = app.Surfaces{app.SelectedLayerIndex};
             app.updateLabels(app.TipSlider.Value, app.TiltSlider.Value, ...
                 app.TwistSlider.Value, layer.Alpha);
+        end
+
+        function updateLayerDropDownItems(app)
+            app.LayerDropDown.Items = cellstr(app.layerDisplayNames());
+            app.LayerDropDown.ItemsData = 1:numel(app.Scene.layers);
         end
 
         function names = layerDisplayNames(app)
@@ -1399,6 +1548,17 @@ classdef ProjectionViewerApp < handle
             app.Scene.layers(layerIndex) = layer;
             app.Surfaces{layerIndex}.Visible = app.onOff(layer.Visible);
             app.VisibleCheckBox.Value = layer.Visible;
+        end
+
+        function updateBlendMenuChecks(app)
+            if isempty(app.AlphaBlendMenuItem) || ~isvalid(app.AlphaBlendMenuItem)
+                return
+            end
+
+            blendMode = string(app.Scene.layers(app.SelectedLayerIndex).BlendMode);
+            app.AlphaBlendMenuItem.Checked = app.onOff(blendMode == "alpha");
+            app.AnaglyphBlendMenuItem.Checked = ...
+                app.onOff(blendMode == "redBlueAnaglyph");
         end
 
         function toggleCrosshair(app)
@@ -1426,23 +1586,34 @@ classdef ProjectionViewerApp < handle
 
             pointer = app.UIFigure.CurrentPoint;
             axesPosition = app.Axes.InnerPosition;
-            figurePosition = app.UIFigure.Position;
-            figureWidth = max(figurePosition(3), 1);
-            figureHeight = max(figurePosition(4), 1);
-            x = min(max(pointer(1), axesPosition(1)), ...
-                axesPosition(1) + axesPosition(3));
-            y = min(max(pointer(2), axesPosition(2)), ...
-                axesPosition(2) + axesPosition(4));
-            app.CrosshairHorizontal.Position = [ ...
-                axesPosition(1) / figureWidth, ...
-                y / figureHeight, ...
-                axesPosition(3) / figureWidth, 0];
-            app.CrosshairVertical.Position = [ ...
-                x / figureWidth, ...
-                axesPosition(2) / figureHeight, ...
-                0, axesPosition(4) / figureHeight];
+            pointerFraction = (pointer - axesPosition(1:2)) ./ ...
+                max(axesPosition(3:4), 1);
+            pointerFraction = min(max(pointerFraction, 0), 1);
+
+            [rightVector, upVector, viewDirection, viewDistance] = ...
+                app.cameraScreenBasis();
+            axesWidth = max(axesPosition(3), 1);
+            axesHeight = max(axesPosition(4), 1);
+            viewHeight = 2 * viewDistance * tan( ...
+                deg2rad(app.Axes.CameraViewAngle) / 2);
+            viewWidth = viewHeight * axesWidth / axesHeight;
+            center = camtarget(app.Axes).' - 0.25 * viewDistance * viewDirection;
+            xOffset = (pointerFraction(1) - 0.5) * viewWidth;
+            yOffset = (pointerFraction(2) - 0.5) * viewHeight;
+            horizontalPoints = center + yOffset * upVector + ...
+                [-0.5 0.5] .* viewWidth .* rightVector;
+            verticalPoints = center + xOffset * rightVector + ...
+                [-0.5 0.5] .* viewHeight .* upVector;
+
+            app.CrosshairHorizontal.XData = horizontalPoints(1, :);
+            app.CrosshairHorizontal.YData = horizontalPoints(2, :);
+            app.CrosshairHorizontal.ZData = horizontalPoints(3, :);
+            app.CrosshairVertical.XData = verticalPoints(1, :);
+            app.CrosshairVertical.YData = verticalPoints(2, :);
+            app.CrosshairVertical.ZData = verticalPoints(3, :);
             app.CrosshairHorizontal.Visible = "on";
             app.CrosshairVertical.Visible = "on";
+            app.raiseCrosshairOverlay();
         end
 
         function hideCrosshair(app)
@@ -1483,8 +1654,8 @@ classdef ProjectionViewerApp < handle
                 "Control + wheel: adjust Twist"
                 "Left drag: pan the camera"
                 "Control + left drag: translate the selected layer"
-                "Control + right drag: adjust selected-layer omega and phi"
-                "Double left click: cycle the active layer"
+                "Alt/Option + left drag: adjust selected-layer omega and phi"
+                "Double left click: show the next layer and hide the others"
                 ""
                 "Keyboard"
                 "W/A/S/D: nudge the selected layer"
@@ -1495,8 +1666,10 @@ classdef ProjectionViewerApp < handle
                 "Space up: show the selected layer"
                 ""
                 "Context menu"
-                "Right click inside the image for Save, Load, Cycle, Reset, Help, and Crosshair."
+                "Right click inside the image for Save, Load, Cycle, Reset, Help, Crosshair, and Blend mode."
                 "Crosshair overlays cyan screen-space guide lines across the viewport."
+                "Reset restores neutral tip, tilt, twist, layer order, visibility, alpha, blend mode, offsets, and OPK corrections."
+                "+/- beside Layer move the selected layer one step up or down in the stack."
                 ];
         end
 
