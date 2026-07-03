@@ -31,7 +31,7 @@ classdef ProjectionAlignmentWorkingImageRendererTest < matlab.unittest.TestCase
             testCase.verifySize(working.LayerImages(2).Image, [6 7]);
             testCase.verifySize(working.LayerMasks, [6 7 2]);
             testCase.verifySize(working.PixelToPlane.Coordinates, [2 42]);
-            testCase.verifyEqual(working.PairOverlapMasks.Pair, [1 2]);
+            testCase.verifyEqual(working.PairOverlapMasks.Pair, [2 1]);
             testCase.verifyGreaterThan(working.PairOverlapMasks.Count, 0);
         end
 
@@ -87,6 +87,19 @@ classdef ProjectionAlignmentWorkingImageRendererTest < matlab.unittest.TestCase
             testCase.verifyEqual(working.PairOverlapMasks.Count, nnz(expectedMask));
         end
 
+        function testPairOverlapMasksFollowConfiguredSchedule(testCase)
+            scene = ProjectionAlignmentWorkingImageRendererTest.makeMultiLayerScene(5);
+            request = struct();
+            request.Options = struct(Scheduling=struct(Strategy="centerStar"));
+
+            working = ProjectionAlignmentWorkingImageRenderer.render( ...
+                scene, request, struct(OutputSize=[4 5]));
+
+            pairs = reshape([working.PairOverlapMasks.Pair], 2, []).';
+            testCase.verifyEqual(working.Schedule.ReferenceLayerIndex, 3);
+            testCase.verifyEqual(pairs, [2 3; 4 3; 1 3; 5 3]);
+        end
+
         function testWorkingMeshDoesNotUseDisplayDepthStagger(testCase)
             scene = ProjectionAlignmentWorkingImageRendererTest.makeTwoLayerScene();
             request = struct(LayerIndices=[1 2], AnalysisBands=[1 1]);
@@ -132,6 +145,18 @@ classdef ProjectionAlignmentWorkingImageRendererTest < matlab.unittest.TestCase
                 GSD=0.5, PlatformStepMeters=0.5);
             scene = ProjectionViewerHarness.createSceneFromImages( ...
                 {imageData1, imageData2}, ["layer1.tif", "layer2.tif"], options);
+        end
+
+        function scene = makeMultiLayerScene(layerCount)
+            images = cell(1, layerCount);
+            paths = strings(1, layerCount);
+            for k = 1:layerCount
+                images{k} = k * ones(4, 5);
+                paths(k) = sprintf("layer%d.tif", k);
+            end
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                images, paths, struct(RowStride=1, ColumnStride=1, ...
+                GSD=0.5, PlatformStepMeters=0.5));
         end
     end
 end

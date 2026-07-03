@@ -373,10 +373,13 @@ classdef ProjectionAlignmentFeatureMatcher
         end
 
         function diagnostics = diagnostics(features, matches)
+            scored = ProjectionAlignmentScheduler.scoreMatches(struct(Matches=matches));
             diagnostics = struct();
             diagnostics.FeatureCounts = [features.Count];
             diagnostics.MatchCounts = [matches.Count];
             diagnostics.TotalMatches = sum(diagnostics.MatchCounts);
+            diagnostics.PairDiagnostics = scored.PairDiagnostics;
+            diagnostics.MeanConfidence = scored.MeanConfidence;
         end
 
         function validateWorkingImages(workingImages)

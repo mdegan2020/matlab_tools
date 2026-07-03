@@ -19,6 +19,9 @@ classdef ProjectionAlignmentWorkingImageRenderer
             ProjectionAlignmentWorkingImageRenderer.validateScene(scene);
             request = ProjectionAlignmentWorkingImageRenderer.validateRequest(scene, request);
             options = ProjectionAlignmentWorkingImageRenderer.mergeOptions(options);
+            schedule = ProjectionAlignmentScheduler.build(scene, request);
+            request = ProjectionAlignmentWorkingImageRenderer.requestForSchedule( ...
+                request, schedule);
             selectedScene = ProjectionAlignmentWorkingImageRenderer.selectedScene( ...
                 scene, request);
             outputGrid = ProjectionAlignmentWorkingImageRenderer.outputGrid( ...
@@ -38,6 +41,7 @@ classdef ProjectionAlignmentWorkingImageRenderer
             workingImages.LayerIndices = request.LayerIndices;
             workingImages.ReferenceLayerIndex = request.ReferenceLayerIndex;
             workingImages.AnalysisBands = request.AnalysisBands;
+            workingImages.Schedule = schedule;
             workingImages.OutputSize = outputGrid.OutputSize;
             workingImages.Interpolation = options.Interpolation;
             workingImages.ProjectionPlane = outputGrid.ReferencePlane;
@@ -48,7 +52,8 @@ classdef ProjectionAlignmentWorkingImageRenderer
             workingImages.LayerMasks = ProjectionAlignmentWorkingImageRenderer.layerMasks( ...
                 layerImages, outputGrid.OutputSize);
             workingImages.PairOverlapMasks = ...
-                ProjectionAlignmentWorkingImageRenderer.pairOverlapMasks(layerImages);
+                ProjectionAlignmentWorkingImageRenderer.pairOverlapMasks( ...
+                layerImages, schedule.Pairs);
         end
     end
 
@@ -74,6 +79,22 @@ classdef ProjectionAlignmentWorkingImageRenderer
                 error("ProjectionAlignmentWorkingImageRenderer:invalidScene", ...
                     "Scene must contain renderOrigin and a nonempty layer struct array.");
             end
+        end
+
+        function request = requestForSchedule(request, schedule)
+            sourceLayerIndices = request.LayerIndices;
+            sourceBands = request.AnalysisBands;
+            scheduledBands = ones(1, numel(schedule.LayerIndices));
+            for k = 1:numel(schedule.LayerIndices)
+                sourcePosition = find(sourceLayerIndices == schedule.LayerIndices(k), ...
+                    1, "first");
+                if ~isempty(sourcePosition)
+                    scheduledBands(k) = sourceBands(sourcePosition);
+                end
+            end
+            request.LayerIndices = schedule.LayerIndices;
+            request.ReferenceLayerIndex = schedule.ReferenceLayerIndex;
+            request.AnalysisBands = scheduledBands;
         end
 
         function options = mergeOptions(options)
@@ -211,21 +232,28 @@ classdef ProjectionAlignmentWorkingImageRenderer
             end
         end
 
-        function pairMasks = pairOverlapMasks(layerImages)
+        function pairMasks = pairOverlapMasks(layerImages, pairs)
             pairMasks = struct("Pair", {}, "Mask", {}, "Count", {});
-            pairIndex = 0;
-            for firstIndex = 1:numel(layerImages)
-                for secondIndex = firstIndex + 1:numel(layerImages)
-                    pairIndex = pairIndex + 1;
-                    mask = layerImages(firstIndex).ValidMask & ...
-                        layerImages(secondIndex).ValidMask;
-                    pairMasks(pairIndex).Pair = [ ...
-                        layerImages(firstIndex).LayerIndex, ...
-                        layerImages(secondIndex).LayerIndex];
-                    pairMasks(pairIndex).Mask = mask;
-                    pairMasks(pairIndex).Count = nnz(mask);
-                end
+            for pairIndex = 1:numel(pairs)
+                pair = pairs(pairIndex).Pair;
+                movingLayer = ProjectionAlignmentWorkingImageRenderer.layerImageByIndex( ...
+                    layerImages, pair(1));
+                referenceLayer = ProjectionAlignmentWorkingImageRenderer.layerImageByIndex( ...
+                    layerImages, pair(2));
+                mask = movingLayer.ValidMask & referenceLayer.ValidMask;
+                pairMasks(pairIndex).Pair = pair;
+                pairMasks(pairIndex).Mask = mask;
+                pairMasks(pairIndex).Count = nnz(mask);
             end
+        end
+
+        function layerImage = layerImageByIndex(layerImages, layerIndex)
+            matches = [layerImages.LayerIndex] == layerIndex;
+            if ~any(matches)
+                error("ProjectionAlignmentWorkingImageRenderer:missingLayerImage", ...
+                    "Scheduled layer %d was not rendered.", layerIndex);
+            end
+            layerImage = layerImages(find(matches, 1, "first"));
         end
 
         function [sourceRows, sourceColumns, sourceMask] = sourceObservationMap( ...

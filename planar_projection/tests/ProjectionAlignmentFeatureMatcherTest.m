@@ -40,10 +40,13 @@ classdef ProjectionAlignmentFeatureMatcherTest < matlab.unittest.TestCase
             pairMatch = result.Matches;
 
             testCase.verifyEqual(result.Detector.Method, "sift");
-            testCase.verifyEqual(pairMatch.Pair, [1 2]);
+            testCase.verifyEqual(pairMatch.Pair, [2 1]);
             testCase.verifyGreaterThan(result.Features(1).Count, 0);
             testCase.verifyGreaterThan(result.Features(2).Count, 0);
             testCase.verifyGreaterThan(pairMatch.Count, 0);
+            testCase.verifyNumElements(result.Diagnostics.PairDiagnostics, 1);
+            testCase.verifyGreaterThan( ...
+                result.Diagnostics.PairDiagnostics.Confidence, 0);
             testCase.verifySize(pairMatch.MovingFeatureLocations, [pairMatch.Count 2]);
             testCase.verifySize(pairMatch.ReferenceFeatureLocations, [pairMatch.Count 2]);
             testCase.verifySize(pairMatch.MovingPlaneCoordinates, [pairMatch.Count 2]);
