@@ -1,5 +1,5 @@
 classdef ProjectionAlignmentOpkSolver
-    %ProjectionAlignmentOpkSolver Solve two-image OPK alignment corrections.
+    %ProjectionAlignmentOpkSolver Solve pairwise OPK alignment corrections.
 
     methods (Static)
         function result = solve(scene, matchResult, options)
@@ -35,11 +35,13 @@ classdef ProjectionAlignmentOpkSolver
                 residualFcn, x0, lowerBounds, upperBounds, solverOptions);
             afterResiduals = ProjectionAlignmentOpkSolver.dataResiduals( ...
                 xSolved, scene, matchResult, layerIndices, commonPlane);
+            perPairResiduals = ProjectionAlignmentOpkSolver.residualPairs( ...
+                x0, xSolved, scene, matchResult, layerIndices, commonPlane);
 
             result = ProjectionAlignmentOpkSolver.resultStruct( ...
                 matchResult, layerIndices, startCorrections, xSolved, ...
-                beforeResiduals, afterResiduals, residual, exitFlag, output, ...
-                boundsDegrees, toc(timer));
+                beforeResiduals, afterResiduals, perPairResiduals, residual, ...
+                exitFlag, output, boundsDegrees, toc(timer));
             result = ProjectionAlignmentResult.validate(result);
         end
 
@@ -76,9 +78,18 @@ classdef ProjectionAlignmentOpkSolver
 
         function residuals = dataResiduals(x, scene, matchResult, layerIndices, ...
                 commonPlane)
+            pairResiduals = ProjectionAlignmentOpkSolver.dataResidualsByPair( ...
+                x, scene, matchResult, layerIndices, commonPlane);
+            residualCells = cellfun(@(values) values(:), pairResiduals, ...
+                UniformOutput=false);
+            residuals = vertcat(residualCells{:});
+        end
+
+        function residuals = dataResidualsByPair(x, scene, matchResult, ...
+                layerIndices, commonPlane)
             corrections = ProjectionAlignmentOpkSolver.vectorToCorrections( ...
                 x, layerIndices);
-            residuals = zeros(0, 1);
+            residuals = cell(1, numel(matchResult.Matches));
             for pairIndex = 1:numel(matchResult.Matches)
                 pairMatch = matchResult.Matches(pairIndex);
                 movingCorrection = ProjectionAlignmentOpkSolver.correctionForLayer( ...
@@ -93,8 +104,7 @@ classdef ProjectionAlignmentOpkSolver
                     scene.layers(pairMatch.Pair(2)), referenceCorrection, ...
                     pairMatch.ReferenceSourceRows, pairMatch.ReferenceSourceColumns, ...
                     scene.renderOrigin, commonPlane);
-                pairResiduals = movingCoordinates - referenceCoordinates;
-                residuals = [residuals; pairResiduals(:)]; %#ok<AGROW>
+                residuals{pairIndex} = movingCoordinates - referenceCoordinates;
             end
         end
 
@@ -201,22 +211,20 @@ classdef ProjectionAlignmentOpkSolver
         end
 
         function result = resultStruct(matchResult, layerIndices, startCorrections, ...
-                xSolved, beforeResiduals, afterResiduals, solverResiduals, exitFlag, ...
-                output, boundsDegrees, totalSeconds)
+                xSolved, beforeResiduals, afterResiduals, perPairResiduals, ...
+                solverResiduals, exitFlag, output, boundsDegrees, totalSeconds)
             solvedCorrections = ProjectionAlignmentOpkSolver.vectorToCorrections( ...
                 xSolved, layerIndices);
             result = struct();
             result.Status = "solved";
-            result.RequestSummary = struct(LayerIndices=layerIndices, ...
-                ReferenceLayerIndex=layerIndices(ceil(numel(layerIndices) / 2)), ...
-                AnalysisBands=ones(1, numel(layerIndices)), ...
-                LossMode="projectionPlane2D", SchedulingStrategy="twoImage", ...
-                MovableParameters=["omega", "phi", "kappa"]);
+            result.RequestSummary = ProjectionAlignmentOpkSolver.requestSummary( ...
+                matchResult, layerIndices);
             result.Matches = ProjectionAlignmentOpkSolver.resultMatches(matchResult);
             result.Inliers = ProjectionAlignmentOpkSolver.resultInliers(matchResult);
             result.Residuals = struct(LossMode="projectionPlane2D", Unit="meters", ...
                 Before=ProjectionAlignmentOpkSolver.residualNorms(beforeResiduals), ...
-                After=ProjectionAlignmentOpkSolver.residualNorms(afterResiduals));
+                After=ProjectionAlignmentOpkSolver.residualNorms(afterResiduals), ...
+                PerPair=perPairResiduals);
             result.SolvedCorrections = solvedCorrections;
             result.Convergence = struct(Status= ...
                 ProjectionAlignmentOpkSolver.convergenceStatus(exitFlag), ...
@@ -231,6 +239,43 @@ classdef ProjectionAlignmentOpkSolver
             result.Diagnostics.BoundsDegrees = boundsDegrees;
             result.Diagnostics.RmsBefore = rms(result.Residuals.Before);
             result.Diagnostics.RmsAfter = rms(result.Residuals.After);
+        end
+
+        function summary = requestSummary(matchResult, layerIndices)
+            referenceIndex = layerIndices(ceil(numel(layerIndices) / 2));
+            schedulingStrategy = "pairwiseJoint";
+            if isfield(matchResult, "Schedule")
+                schedule = matchResult.Schedule;
+                if isfield(schedule, "ReferenceLayerIndex")
+                    referenceIndex = schedule.ReferenceLayerIndex;
+                end
+                if isfield(schedule, "Strategy")
+                    schedulingStrategy = schedule.Strategy;
+                end
+            end
+            summary = struct(LayerIndices=layerIndices, ...
+                ReferenceLayerIndex=referenceIndex, ...
+                AnalysisBands=ones(1, numel(layerIndices)), ...
+                LossMode="projectionPlane2D", ...
+                SchedulingStrategy=schedulingStrategy, ...
+                MovableParameters=["omega", "phi", "kappa"]);
+        end
+
+        function pairs = residualPairs(xBefore, xAfter, scene, matchResult, ...
+                layerIndices, commonPlane)
+            beforeByPair = ProjectionAlignmentOpkSolver.dataResidualsByPair( ...
+                xBefore, scene, matchResult, layerIndices, commonPlane);
+            afterByPair = ProjectionAlignmentOpkSolver.dataResidualsByPair( ...
+                xAfter, scene, matchResult, layerIndices, commonPlane);
+            pairs = struct("Pair", {}, "Before", {}, "After", {}, "Count", {});
+            for k = 1:numel(matchResult.Matches)
+                pairs(k).Pair = matchResult.Matches(k).Pair;
+                pairs(k).Before = ProjectionAlignmentOpkSolver.residualNorms( ...
+                    beforeByPair{k});
+                pairs(k).After = ProjectionAlignmentOpkSolver.residualNorms( ...
+                    afterByPair{k});
+                pairs(k).Count = matchResult.Matches(k).Count;
+            end
         end
 
         function matches = resultMatches(matchResult)
@@ -274,7 +319,11 @@ classdef ProjectionAlignmentOpkSolver
                 norms = [];
                 return
             end
-            pairs = reshape(residuals, [], 2);
+            if ismatrix(residuals) && size(residuals, 2) == 2
+                pairs = residuals;
+            else
+                pairs = reshape(residuals, [], 2);
+            end
             norms = sqrt(sum(pairs.^2, 2)).';
         end
 
@@ -352,11 +401,17 @@ classdef ProjectionAlignmentOpkSolver
         end
 
         function layerIndices = matchLayerIndices(matchResult)
-            pairs = reshape([matchResult.Matches.Pair], 2, []).';
-            layerIndices = unique(pairs(:).', "stable");
-            if numel(layerIndices) ~= 2
+            if isfield(matchResult, "Schedule") && ...
+                    isfield(matchResult.Schedule, "LayerIndices") && ...
+                    ~isempty(matchResult.Schedule.LayerIndices)
+                layerIndices = double(matchResult.Schedule.LayerIndices);
+            else
+                pairs = reshape([matchResult.Matches.Pair], 2, []).';
+                layerIndices = unique(pairs(:).', "stable");
+            end
+            if numel(layerIndices) < 2
                 error("ProjectionAlignmentOpkSolver:invalidMatchPairs", ...
-                    "Milestone 6 OPK solver requires exactly two matched layers.");
+                    "OPK alignment solving requires at least two matched layers.");
             end
         end
 
@@ -373,6 +428,11 @@ classdef ProjectionAlignmentOpkSolver
                     ~isfield(matchResult, "Matches") || isempty(matchResult.Matches)
                 error("ProjectionAlignmentOpkSolver:invalidMatchResult", ...
                     "Match result must contain a nonempty Matches struct array.");
+            end
+            pairs = reshape([matchResult.Matches.Pair], 2, []).';
+            if numel(unique(pairs(:))) < 2
+                error("ProjectionAlignmentOpkSolver:invalidMatchPairs", ...
+                    "OPK alignment solving requires at least two matched layers.");
             end
             if any([matchResult.Matches.Count] < 3)
                 error("ProjectionAlignmentOpkSolver:insufficientMatches", ...

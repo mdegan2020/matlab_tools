@@ -50,6 +50,9 @@ classdef ProjectionAlignmentFeatureMatcher
             matchResult.Matcher = options.Matcher;
             matchResult.Features = features;
             matchResult.Matches = matches;
+            if isfield(workingImages, "Schedule")
+                matchResult.Schedule = workingImages.Schedule;
+            end
             matchResult.Capabilities = capabilities;
             matchResult.Diagnostics = ProjectionAlignmentFeatureMatcher.diagnostics( ...
                 features, matches);

@@ -92,6 +92,37 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
                 AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
         end
 
+        function testJointMultiImageSolverReportsPairwiseResiduals(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makeMultiLayerPerturbedScene();
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMultiLayerMatchResult(scene);
+
+            result = ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, ProjectionAlignmentOpkSolverTest.looseOptions());
+
+            solvedLayerIndices = [result.SolvedCorrections.LayerIndex];
+            testCase.verifyTrue(result.Convergence.Success);
+            testCase.verifyEqual(solvedLayerIndices, 1:5);
+            testCase.verifyEqual(result.RequestSummary.ReferenceLayerIndex, 3);
+            testCase.verifyLessThan(result.Diagnostics.RmsAfter, ...
+                result.Diagnostics.RmsBefore);
+            testCase.verifyNumElements(result.Residuals.PerPair, ...
+                numel(matchResult.Matches));
+            for k = 1:numel(result.Residuals.PerPair)
+                testCase.verifyEqual(result.Residuals.PerPair(k).Pair, ...
+                    matchResult.Matches(k).Pair);
+                testCase.verifyEqual(result.Residuals.PerPair(k).Count, ...
+                    matchResult.Matches(k).Count);
+                testCase.verifyLessThanOrEqual( ...
+                    mean(result.Residuals.PerPair(k).After), ...
+                    mean(result.Residuals.PerPair(k).Before));
+            end
+            solvedOffsets = reshape( ...
+                [result.SolvedCorrections.ViewVectorAngularOffsetsDegrees], ...
+                3, []).';
+            testCase.verifyTrue(all(isfinite(solvedOffsets), "all"));
+            testCase.verifyLessThan(max(abs(solvedOffsets), [], "all"), 0.02);
+        end
+
         function testInsufficientMatchesError(testCase)
             scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
             matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
@@ -117,6 +148,25 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
             scene.layers(2).ViewVectorAngularOffsetsDegrees = [0.004; 0.003; 0];
         end
 
+        function scene = makeMultiLayerPerturbedScene()
+            imageData = reshape(1:400, 20, 20);
+            images = repmat({imageData}, 1, 5);
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                images, "layer" + string(1:5) + ".tif", ...
+                struct(RowStride=1, ColumnStride=1, GSD=0.5, ...
+                PlatformStepMeters=0.5));
+            perturbations = [ ...
+                0.006, 0.002, 0.001; ...
+                0.003, -0.001, 0; ...
+                0, 0, 0; ...
+                -0.002, 0.001, 0; ...
+                -0.005, -0.002, -0.001];
+            for layerIndex = 1:5
+                scene.layers(layerIndex).ViewVectorAngularOffsetsDegrees = ...
+                    perturbations(layerIndex, :).';
+            end
+        end
+
         function scene = makeBaseTwoLayerScene()
             imageData = reshape(1:400, 20, 20);
             scene = ProjectionViewerHarness.createSceneFromImage( ...
@@ -129,10 +179,30 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
         end
 
         function matchResult = makeMatchResult()
+            matchResult = struct(Matches= ...
+                ProjectionAlignmentOpkSolverTest.makePairMatch([1 2]));
+        end
+
+        function matchResult = makeMultiLayerMatchResult(scene)
+            schedule = ProjectionAlignmentScheduler.build(scene, struct( ...
+                Options=struct(Scheduling=struct(Strategy="centerOut"))));
+            for k = 1:numel(schedule.Pairs)
+                pairMatch = ProjectionAlignmentOpkSolverTest.makePairMatch( ...
+                    schedule.Pairs(k).Pair);
+                if k == 1
+                    matches = pairMatch;
+                else
+                    matches(k) = pairMatch;
+                end
+            end
+            matchResult = struct(Matches=matches, Schedule=schedule);
+        end
+
+        function pairMatch = makePairMatch(pair)
             rows = [5; 5; 10; 15; 15; 10];
             columns = [5; 15; 10; 5; 15; 15];
             pairMatch = struct();
-            pairMatch.Pair = [1 2];
+            pairMatch.Pair = pair;
             pairMatch.MovingFeatureLocations = [columns rows];
             pairMatch.ReferenceFeatureLocations = [columns rows];
             pairMatch.MovingPlaneCoordinates = zeros(numel(rows), 2);
@@ -147,7 +217,6 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
             pairMatch.FeatureCounts = [numel(rows) numel(rows)];
             pairMatch.Count = numel(rows);
             pairMatch.OverlapMask = true(20, 20);
-            matchResult = struct(Matches=pairMatch);
         end
 
         function options = looseOptions()
