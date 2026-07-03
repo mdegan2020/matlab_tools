@@ -133,9 +133,63 @@ classdef ProjectionViewerState
                 scene.layers(layerIndex) = layer;
             end
         end
+
+        function state = fromScene(scene, state)
+            %fromScene Build or update serializable viewer state from scene layers.
+            ProjectionViewerState.validateScene(scene);
+            if nargin < 2 || isempty(state)
+                state = ProjectionViewerState.defaultState(scene);
+            else
+                state = ProjectionViewerState.validate(state, numel(scene.layers));
+            end
+
+            layers = repmat( ...
+                ProjectionViewerState.layerStateFromScene(scene.layers(1), 1), ...
+                1, numel(scene.layers));
+            for layerIndex = 2:numel(scene.layers)
+                layers(layerIndex) = ProjectionViewerState.layerStateFromScene( ...
+                    scene.layers(layerIndex), layerIndex);
+            end
+            state.Format = ProjectionViewerState.Format;
+            state.Version = ProjectionViewerState.Version;
+            state.LayerCount = numel(scene.layers);
+            state.Layers = layers;
+            state = ProjectionViewerState.validate(state, numel(scene.layers));
+        end
     end
 
     methods (Static, Access = private)
+        function state = defaultState(scene)
+            state = struct();
+            state.Format = ProjectionViewerState.Format;
+            state.Version = ProjectionViewerState.Version;
+            state.LayerCount = numel(scene.layers);
+            state.SelectedLayerIndex = 1;
+            state.Projection = struct(TipDegrees=0, TiltDegrees=0);
+            state.View = struct(TwistDegrees=0);
+        end
+
+        function layerState = layerStateFromScene(layer, layerIndex)
+            layerState = struct();
+            layerState.Index = layerIndex;
+            layerState.Name = string(ProjectionViewerState.fieldOrDefault( ...
+                layer, "Name", ""));
+            layerState.ImagePath = string(ProjectionViewerState.fieldOrDefault( ...
+                layer, "ImagePath", ""));
+            layerState.Alpha = ProjectionViewerState.fieldOrDefault(layer, ...
+                "Alpha", 1);
+            layerState.Visible = ProjectionViewerState.fieldOrDefault(layer, ...
+                "Visible", true);
+            layerState.BlendMode = string(ProjectionViewerState.fieldOrDefault( ...
+                layer, "BlendMode", "alpha"));
+            layerState.ProjectionOffsetMeters = ...
+                ProjectionViewerState.fieldOrDefault(layer, ...
+                "ProjectionOffsetMeters", [0 0]);
+            layerState.ViewVectorAngularOffsetsDegrees = ...
+                ProjectionViewerState.fieldOrDefault(layer, ...
+                "ViewVectorAngularOffsetsDegrees", [0 0 0]);
+        end
+
         function validateScene(scene)
             if ~isstruct(scene) || ~isscalar(scene) || ~isfield(scene, "layers") || ...
                     isempty(scene.layers) || ~isstruct(scene.layers)

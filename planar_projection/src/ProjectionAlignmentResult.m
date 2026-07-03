@@ -412,6 +412,10 @@ classdef ProjectionAlignmentResult
         end
 
         function values = validateStringList(values, name)
+            if isempty(values)
+                values = strings(1, 0);
+                return
+            end
             values = string(values);
             if ~isvector(values)
                 error("ProjectionAlignmentResult:invalidString", ...

@@ -31,6 +31,13 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
             testCase.verifyEqual(job.Execution.Mode, "serial");
             testCase.verifyFalse(job.Execution.UseGPU);
             testCase.verifyFalse(job.Execution.UseCustomGpuKernels);
+            testCase.verifyFalse(job.Alignment.Enabled);
+            testCase.verifyTrue(job.Alignment.WriteUpdatedViewerState);
+            testCase.verifyTrue(job.Alignment.WriteDiagnostics);
+            testCase.verifyEqual(job.Alignment.ViewerStateFileName, ...
+                "aligned_viewer_state.json");
+            testCase.verifyEqual(job.Alignment.DiagnosticsFileName, ...
+                "alignment_diagnostics.json");
         end
 
         function testValidationRejectsMissingScene(testCase)

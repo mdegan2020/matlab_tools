@@ -20,6 +20,8 @@ classdef ProjectionBackendOutputWriter
             outputFiles.CompositeMask = "";
             outputFiles.Layers = struct([]);
             outputFiles.Metadata = "";
+            outputFiles.AlignmentDiagnostics = "";
+            outputFiles.AlignedViewerState = "";
 
             if output.IncludeComposite
                 outputFiles.Composite = ProjectionBackendOutputWriter.writeImageFormats( ...
@@ -33,6 +35,9 @@ classdef ProjectionBackendOutputWriter
                     result.Readback.LayerReadbacks, result.Scene.layers, ...
                     outputDirectory, formats);
             end
+
+            outputFiles = ProjectionBackendOutputWriter.writeAlignmentOutputs( ...
+                result, outputFiles, outputDirectory);
 
             outputFiles.Metadata = string(fullfile(outputDirectory, "metadata.json"));
             ProjectionBackendOutputWriter.writeMetadata( ...
@@ -114,11 +119,70 @@ classdef ProjectionBackendOutputWriter
             metadata.GpuInfo = result.GpuInfo;
             metadata.OutputFiles = outputFiles;
             metadata.Timing = result.Timing;
+            metadata.AlignmentSummary = ...
+                ProjectionBackendOutputWriter.alignmentSummary(result);
             if ~isempty(result.ViewerState)
                 metadata.ViewerStateSummary = ...
                     ProjectionBackendOutputWriter.viewerStateSummary(result.ViewerState);
             else
                 metadata.ViewerStateSummary = [];
+            end
+        end
+
+        function outputFiles = writeAlignmentOutputs(result, outputFiles, outputDirectory)
+            if ~ProjectionBackendOutputWriter.hasAlignmentResult(result)
+                return
+            end
+
+            alignment = result.Alignment;
+            if alignment.WriteDiagnostics
+                diagnosticsPath = string(fullfile(outputDirectory, ...
+                    alignment.DiagnosticsFileName));
+                ProjectionAlignmentResult.write(diagnosticsPath, alignment.Result);
+                outputFiles.AlignmentDiagnostics = diagnosticsPath;
+            end
+
+            if alignment.WriteUpdatedViewerState && ~isempty(result.ViewerState)
+                statePath = string(fullfile(outputDirectory, ...
+                    alignment.ViewerStateFileName));
+                ProjectionViewerState.write(statePath, result.ViewerState);
+                outputFiles.AlignedViewerState = statePath;
+            end
+        end
+
+        function tf = hasAlignmentResult(result)
+            tf = isfield(result, "Alignment") && isstruct(result.Alignment) && ...
+                isscalar(result.Alignment) && isfield(result.Alignment, "Enabled") && ...
+                result.Alignment.Enabled && isfield(result.Alignment, "Result") && ...
+                ~isempty(result.Alignment.Result);
+        end
+
+        function summary = alignmentSummary(result)
+            summary = struct();
+            summary.Enabled = false;
+            if ~ProjectionBackendOutputWriter.hasAlignmentResult(result)
+                return
+            end
+
+            alignmentResult = result.Alignment.Result;
+            summary.Enabled = true;
+            summary.Status = alignmentResult.Status;
+            summary.LayerIndices = alignmentResult.RequestSummary.LayerIndices;
+            summary.ReferenceLayerIndex = ...
+                alignmentResult.RequestSummary.ReferenceLayerIndex;
+            summary.LossMode = alignmentResult.RequestSummary.LossMode;
+            summary.Convergence = alignmentResult.Convergence;
+            summary.RmsBefore = ProjectionBackendOutputWriter.rmsOrEmpty( ...
+                alignmentResult.Residuals.Before);
+            summary.RmsAfter = ProjectionBackendOutputWriter.rmsOrEmpty( ...
+                alignmentResult.Residuals.After);
+        end
+
+        function value = rmsOrEmpty(values)
+            if isempty(values)
+                value = [];
+            else
+                value = rms(values);
             end
         end
 

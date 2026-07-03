@@ -81,6 +81,8 @@ classdef ProjectionBackendJob
                 ProjectionBackendJob.fieldOrDefault(job, "Output", struct()));
             job.Execution = ProjectionBackendJob.validateExecutionOptions( ...
                 ProjectionBackendJob.fieldOrDefault(job, "Execution", struct()));
+            job.Alignment = ProjectionBackendJob.validateAlignmentOptions( ...
+                ProjectionBackendJob.fieldOrDefault(job, "Alignment", struct()));
         end
 
         function job = resolvePayloads(job)
@@ -360,6 +362,49 @@ classdef ProjectionBackendJob
             ProjectionBackendCustomGpuKernelPlan.validateExecution(execution);
         end
 
+        function alignment = validateAlignmentOptions(alignment)
+            defaults = struct();
+            defaults.Enabled = false;
+            defaults.Request = struct();
+            defaults.RenderOptions = struct();
+            defaults.WriteUpdatedViewerState = true;
+            defaults.WriteDiagnostics = true;
+            defaults.ViewerStateFileName = "aligned_viewer_state.json";
+            defaults.DiagnosticsFileName = "alignment_diagnostics.json";
+
+            alignment = ProjectionBackendJob.mergeStruct(defaults, alignment, ...
+                "Alignment");
+            alignment.Enabled = ProjectionBackendJob.validateLogicalScalar( ...
+                alignment.Enabled, "Alignment.Enabled");
+            alignment.Request = ProjectionBackendJob.validateAlignmentRequest( ...
+                alignment.Request);
+            alignment.RenderOptions = ProjectionBackendJob.validateScalarStruct( ...
+                alignment.RenderOptions, "Alignment.RenderOptions");
+            alignment.WriteUpdatedViewerState = ...
+                ProjectionBackendJob.validateLogicalScalar( ...
+                alignment.WriteUpdatedViewerState, ...
+                "Alignment.WriteUpdatedViewerState");
+            alignment.WriteDiagnostics = ProjectionBackendJob.validateLogicalScalar( ...
+                alignment.WriteDiagnostics, "Alignment.WriteDiagnostics");
+            alignment.ViewerStateFileName = ...
+                ProjectionBackendJob.validateOutputFileName( ...
+                alignment.ViewerStateFileName, "Alignment.ViewerStateFileName");
+            alignment.DiagnosticsFileName = ...
+                ProjectionBackendJob.validateOutputFileName( ...
+                alignment.DiagnosticsFileName, "Alignment.DiagnosticsFileName");
+        end
+
+        function request = validateAlignmentRequest(request)
+            request = ProjectionBackendJob.validateScalarStruct( ...
+                request, "Alignment.Request");
+            request = ProjectionBackendJob.removeFieldIfPresent(request, "Scene");
+            request = ProjectionBackendJob.removeFieldIfPresent(request, ...
+                "SceneMatPath");
+            request = ProjectionBackendJob.removeFieldIfPresent(request, ...
+                "ViewerState");
+            request = ProjectionAlignmentRequest.validate(request);
+        end
+
         function validateScene(scene)
             if ~isstruct(scene) || ~isscalar(scene) || ...
                     ~isfield(scene, "frameCamera") || ...
@@ -514,6 +559,26 @@ classdef ProjectionBackendJob
             value = logical(value);
         end
 
+        function value = validateScalarStruct(value, name)
+            if isempty(value)
+                value = struct();
+                return
+            end
+            if ~isstruct(value) || ~isscalar(value)
+                error("ProjectionBackendJob:invalidOptions", ...
+                    "%s must be a scalar struct.", name);
+            end
+        end
+
+        function value = validateOutputFileName(value, name)
+            if ~(ischar(value) || (isstring(value) && isscalar(value))) || ...
+                    strlength(string(value)) == 0
+                error("ProjectionBackendJob:invalidPath", ...
+                    "%s must be a nonempty file name.", name);
+            end
+            value = string(value);
+        end
+
         function pathValue = validatePathValue(pathValue, name)
             if ~(ischar(pathValue) || (isstring(pathValue) && isscalar(pathValue))) || ...
                     strlength(string(pathValue)) == 0
@@ -595,6 +660,12 @@ classdef ProjectionBackendJob
             names = fieldnames(overrides);
             for k = 1:numel(names)
                 output.(names{k}) = overrides.(names{k});
+            end
+        end
+
+        function value = removeFieldIfPresent(value, fieldName)
+            if isfield(value, fieldName)
+                value = rmfield(value, fieldName);
             end
         end
 
