@@ -207,3 +207,37 @@ columnIndices)` contract. For sparse camera-model posts, use
 `ProjectionSourceGeometry.fromGrid` to adapt uniformly spaced row/column geometry
 posts into the same sampled-origin and sampled-view-vector interface used by the
 mesh builder.
+
+## Backend Processor Workflow
+
+The backend processor milestones are implemented and committed. The backend can
+run live in-memory jobs or serialized JSON/MAT jobs, apply viewer state
+headlessly, plan full-extent output grids, render composite and per-layer
+outputs, write PNG/TIFF products with metadata, process tiles serially or with
+`parpool("threads")`, and accept optional GPU requests with CPU fallback.
+
+From an interactive app session:
+
+```matlab
+app = runProjectionViewerPrototype("test_data/10.tif");
+job = app.exportBackendJob(struct( ...
+    RenderOptions=struct(OutputSize=[512 512], TileSize=[128 128]), ...
+    Execution=struct(Mode="serial"), ...
+    Output=struct(Directory="backend_output", WriteFiles=true)));
+ProjectionBackendJob.write("backend_job.json", job);
+validation = validateProjectionBackendJob("backend_job.json");
+result = ProjectionBackendProcessor.run("backend_job.json");
+```
+
+Threaded backend execution is opt-in and uses only MATLAB's thread pool:
+
+```matlab
+job.Execution = struct(Mode="threads");
+```
+
+GPU requests are optional. If compatible `gpuArray` support is unavailable, the
+backend records the fallback reason in `GpuInfo` and continues on CPU.
+
+See `docs/backend_app_workflow.md` for the complete app-to-backend workflow and
+`docs/backend_milestone_9_custom_gpu_kernel_assessment.md` for the current
+custom GPU kernel decision record.

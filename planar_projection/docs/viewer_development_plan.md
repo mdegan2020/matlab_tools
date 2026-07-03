@@ -489,6 +489,24 @@ comes first; optimization follows profiling.
 
 ### Backend Milestones
 
+Implementation status:
+
+- Backend Milestones 1-10 are complete, validated, and committed.
+- Validation for the final backend state: `results = runTests;` passed with
+  128 tests.
+- The backend now supports live and serialized jobs, `.mat` scene payloads,
+  headless viewer-state application, output-grid planning, composite/per-layer
+  image writers, hardened readback masks and band handling, serial tiled CPU
+  rendering, opt-in `parpool("threads")` tile execution, optional
+  MATLAB-managed `gpuArray` compositing with CPU fallback, a documented custom
+  GPU-kernel assessment, app job export, and validate-only job checks.
+- See `docs/backend_app_workflow.md` for the operator workflow from app
+  alignment to backend validation and rendering.
+- See `docs/backend_milestone_9_custom_gpu_kernel_assessment.md` for the
+  current decision that custom GPU kernels are not enabled without profiling
+  evidence.
+- The Auto Alignment Feature Tree has not been started.
+
 #### Backend Milestone 1: Job Contract And Serialization
 
 Deliverables:
