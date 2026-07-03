@@ -29,9 +29,14 @@ classdef ProjectionAlignmentModelTest < matlab.unittest.TestCase
                 ["omega", "phi", "kappa"]);
             testCase.verifyTrue(options.MovableParameters.AllowReferenceMotion);
             testCase.verifyFalse(options.MovableParameters.IncludeProjectionOffsets);
+            testCase.verifyFalse(options.MovableParameters.IncludeSharedScale);
             testCase.verifyEqual(options.Bounds.FieldOfViewFraction, 0.25, ...
                 AbsTol=ProjectionAlignmentModelTest.Tol);
+            testCase.verifyEqual(options.Bounds.SharedScale, [0.95 1.05], ...
+                AbsTol=ProjectionAlignmentModelTest.Tol);
             testCase.verifyGreaterThan(options.Regularization.OverallWeight, 0);
+            testCase.verifyGreaterThan( ...
+                options.Regularization.SharedScaleWeight, 0);
             testCase.verifyTrue(options.Diagnostics.StoreTiming);
             testCase.verifyEqual(options.Execution.Mode, "serial");
             testCase.verifyFalse(options.Execution.UseGPU);

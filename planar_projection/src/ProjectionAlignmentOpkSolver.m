@@ -87,7 +87,7 @@ classdef ProjectionAlignmentOpkSolver
 
         function residuals = dataResidualsByPair(x, scene, matchResult, ...
                 layerIndices, commonPlane)
-            corrections = ProjectionAlignmentOpkSolver.vectorToCorrections( ...
+            [corrections, sharedScale] = ProjectionAlignmentOpkSolver.vectorToCorrections( ...
                 x, layerIndices);
             residuals = cell(1, numel(matchResult.Matches));
             for pairIndex = 1:numel(matchResult.Matches)
@@ -99,19 +99,21 @@ classdef ProjectionAlignmentOpkSolver
                 movingCoordinates = ProjectionAlignmentOpkSolver.projectObservations( ...
                     scene.layers(pairMatch.Pair(1)), movingCorrection, ...
                     pairMatch.MovingSourceRows, pairMatch.MovingSourceColumns, ...
-                    scene.renderOrigin, commonPlane);
+                    scene.renderOrigin, commonPlane, sharedScale);
                 referenceCoordinates = ProjectionAlignmentOpkSolver.projectObservations( ...
                     scene.layers(pairMatch.Pair(2)), referenceCorrection, ...
                     pairMatch.ReferenceSourceRows, pairMatch.ReferenceSourceColumns, ...
-                    scene.renderOrigin, commonPlane);
+                    scene.renderOrigin, commonPlane, sharedScale);
                 residuals{pairIndex} = movingCoordinates - referenceCoordinates;
             end
         end
 
         function coordinates = projectObservations(layer, correctionDegrees, rows, ...
-                columns, renderOrigin, commonPlane)
+                columns, renderOrigin, commonPlane, sharedScale)
             projectedLayer = layer;
             projectedLayer.ViewVectorAngularOffsetsDegrees = correctionDegrees(:);
+            rows = ProjectionAlignmentOpkSolver.scaleSourceRows( ...
+                rows, layer, sharedScale);
             mesh = ProjectionMeshBuilder.buildLayerMesh( ...
                 projectedLayer, projectedLayer.CurrentProjectionPlane, renderOrigin);
             worldPoints = reshape(mesh.WorldPoints, 3, []);
@@ -128,6 +130,15 @@ classdef ProjectionAlignmentOpkSolver
                 error("ProjectionAlignmentOpkSolver:observationOutsideMesh", ...
                     "Matched source observations must lie inside the layer mesh.");
             end
+        end
+
+        function rows = scaleSourceRows(rows, layer, sharedScale)
+            if sharedScale == 1
+                return
+            end
+            imageSize = layer.SourceGeometry.ImageSize;
+            centerRow = (double(imageSize(1)) + 1) / 2;
+            rows = centerRow + (rows - centerRow) * sharedScale;
         end
 
         function residuals = robustResiduals(residuals, regularization)
@@ -150,8 +161,16 @@ classdef ProjectionAlignmentOpkSolver
                 regularization.KappaWeight];
             weights = repmat(sqrt(regularization.OverallWeight) * sqrt(weights), ...
                 numel(startCorrections), 1);
-            residuals = (x(:) - reshape([startCorrections.ViewVectorAngularOffsetsDegrees], ...
+            opkValueCount = 3 * numel(startCorrections);
+            opkValues = x(1:opkValueCount);
+            residuals = (opkValues(:) - ...
+                reshape([startCorrections.ViewVectorAngularOffsetsDegrees], ...
                 [], 1)) .* weights;
+            if numel(x) > opkValueCount
+                scaleWeight = sqrt(regularization.OverallWeight) * ...
+                    sqrt(regularization.SharedScaleWeight);
+                residuals = [residuals; (x(end) - 1) * scaleWeight];
+            end
         end
 
         function [x0, lowerBounds, upperBounds, boundsDegrees] = variableBounds( ...
@@ -165,6 +184,11 @@ classdef ProjectionAlignmentOpkSolver
             boundsVector = reshape(boundsDegrees.', [], 1);
             lowerBounds = x0 - boundsVector;
             upperBounds = x0 + boundsVector;
+            if options.MovableParameters.IncludeSharedScale
+                x0(end + 1, 1) = 1;
+                lowerBounds(end + 1, 1) = options.Bounds.SharedScale(1);
+                upperBounds(end + 1, 1) = options.Bounds.SharedScale(2);
+            end
         end
 
         function bounds = layerBounds(layer, options)
@@ -213,7 +237,7 @@ classdef ProjectionAlignmentOpkSolver
         function result = resultStruct(matchResult, layerIndices, startCorrections, ...
                 xSolved, beforeResiduals, afterResiduals, perPairResiduals, ...
                 solverResiduals, exitFlag, output, boundsDegrees, totalSeconds)
-            solvedCorrections = ProjectionAlignmentOpkSolver.vectorToCorrections( ...
+            [solvedCorrections, sharedScale] = ProjectionAlignmentOpkSolver.vectorToCorrections( ...
                 xSolved, layerIndices);
             result = struct();
             result.Status = "solved";
@@ -237,6 +261,7 @@ classdef ProjectionAlignmentOpkSolver
             result.Diagnostics = struct();
             result.Diagnostics.StartingCorrections = startCorrections;
             result.Diagnostics.BoundsDegrees = boundsDegrees;
+            result.Diagnostics.SharedScale = sharedScale;
             result.Diagnostics.RmsBefore = rms(result.Residuals.Before);
             result.Diagnostics.RmsAfter = rms(result.Residuals.After);
         end
@@ -371,14 +396,19 @@ classdef ProjectionAlignmentOpkSolver
             end
         end
 
-        function corrections = vectorToCorrections(x, layerIndices)
-            x = reshape(x, 3, []).';
+        function [corrections, sharedScale] = vectorToCorrections(x, layerIndices)
+            opkValueCount = 3 * numel(layerIndices);
+            sharedScale = 1;
+            if numel(x) > opkValueCount
+                sharedScale = x(opkValueCount + 1);
+            end
+            x = reshape(x(1:opkValueCount), 3, []).';
             for k = 1:numel(layerIndices)
                 correction = struct();
                 correction.LayerIndex = layerIndices(k);
                 correction.ViewVectorAngularOffsetsDegrees = x(k, :);
                 correction.ProjectionOffsetMeters = [0 0];
-                correction.SharedScale = 1;
+                correction.SharedScale = sharedScale;
                 if k == 1
                     corrections = correction;
                 else

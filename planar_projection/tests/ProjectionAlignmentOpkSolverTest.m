@@ -123,6 +123,27 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
             testCase.verifyLessThan(max(abs(solvedOffsets), [], "all"), 0.02);
         end
 
+        function testSharedScaleImprovesRowScaleMismatch(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makeBaseTwoLayerScene();
+            matchResult = ProjectionAlignmentOpkSolverTest.makeRowScaleMatchResult();
+            opkOnly = ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, ...
+                ProjectionAlignmentOpkSolverTest.frozenOpkOptions(false));
+            withScale = ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, ...
+                ProjectionAlignmentOpkSolverTest.frozenOpkOptions(true));
+
+            sharedScales = [withScale.SolvedCorrections.SharedScale];
+            testCase.verifyLessThan(withScale.Diagnostics.RmsAfter, ...
+                opkOnly.Diagnostics.RmsAfter);
+            testCase.verifyLessThan(withScale.Diagnostics.SharedScale, 0.99);
+            testCase.verifyEqual(sharedScales, ...
+                withScale.Diagnostics.SharedScale * ones(size(sharedScales)), ...
+                AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
+            testCase.verifyEqual(opkOnly.Diagnostics.SharedScale, 1, ...
+                AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
+        end
+
         function testInsufficientMatchesError(testCase)
             scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
             matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
@@ -183,6 +204,14 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
                 ProjectionAlignmentOpkSolverTest.makePairMatch([1 2]));
         end
 
+        function matchResult = makeRowScaleMatchResult()
+            pairMatch = ProjectionAlignmentOpkSolverTest.makePairMatch([1 2]);
+            centerRow = 10.5;
+            pairMatch.ReferenceSourceRows = centerRow + ...
+                1.2 * (pairMatch.ReferenceSourceRows - centerRow);
+            matchResult = struct(Matches=pairMatch);
+        end
+
         function matchResult = makeMultiLayerMatchResult(scene)
             schedule = ProjectionAlignmentScheduler.build(scene, struct( ...
                 Options=struct(Scheduling=struct(Strategy="centerOut"))));
@@ -231,6 +260,16 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
             options.Bounds = struct(OmegaDegrees=0.001, PhiDegrees=0.001, ...
                 KappaDegrees=0.001);
             options.Regularization = struct(OverallWeight=1e-6, RobustLoss="none");
+        end
+
+        function options = frozenOpkOptions(includeSharedScale)
+            options = struct();
+            options.MovableParameters = struct( ...
+                IncludeSharedScale=includeSharedScale);
+            options.Bounds = struct(OmegaDegrees=0, PhiDegrees=0, ...
+                KappaDegrees=0, SharedScale=[0.8 1.2]);
+            options.Regularization = struct(OverallWeight=1e-8, ...
+                SharedScaleWeight=1e-6, RobustLoss="none");
         end
     end
 end
