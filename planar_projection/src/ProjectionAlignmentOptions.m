@@ -1,0 +1,500 @@
+classdef ProjectionAlignmentOptions
+    %ProjectionAlignmentOptions Validate alignment engine option structs.
+
+    properties (Constant)
+        Format = "ProjectionAlignmentOptions"
+        Version = 1
+    end
+
+    methods (Static)
+        function options = defaults()
+            %defaults Return normalized default alignment options.
+            options = ProjectionAlignmentOptions.validate(struct());
+        end
+
+        function options = validate(options)
+            %validate Normalize and validate alignment options.
+            if nargin < 1 || isempty(options)
+                options = struct();
+            end
+            if ~isstruct(options) || ~isscalar(options)
+                error("ProjectionAlignmentOptions:invalidOptions", ...
+                    "Alignment options must be a scalar struct.");
+            end
+
+            options.Format = ProjectionAlignmentOptions.Format;
+            options.Version = ProjectionAlignmentOptions.Version;
+            options.Detector = ProjectionAlignmentOptions.validateDetector( ...
+                ProjectionAlignmentOptions.fieldOrDefault(options, "Detector", struct()));
+            options.Matcher = ProjectionAlignmentOptions.validateMatcher( ...
+                ProjectionAlignmentOptions.fieldOrDefault(options, "Matcher", struct()));
+            options.FilterPipeline = ProjectionAlignmentOptions.validateFilterPipeline( ...
+                ProjectionAlignmentOptions.fieldOrDefault(options, "FilterPipeline", struct()));
+            options.LossMode = ProjectionAlignmentOptions.validateChoice( ...
+                ProjectionAlignmentOptions.fieldOrDefault(options, "LossMode", ...
+                "projectionPlane2D"), ["projectionPlane2D", "rayToRay3D"], ...
+                "LossMode");
+            options.Scheduling = ProjectionAlignmentOptions.validateScheduling( ...
+                ProjectionAlignmentOptions.fieldOrDefault(options, "Scheduling", struct()));
+            options.MovableParameters = ProjectionAlignmentOptions.validateMovableParameters( ...
+                ProjectionAlignmentOptions.fieldOrDefault(options, ...
+                "MovableParameters", struct()));
+            options.Bounds = ProjectionAlignmentOptions.validateBounds( ...
+                ProjectionAlignmentOptions.fieldOrDefault(options, "Bounds", struct()));
+            options.Regularization = ProjectionAlignmentOptions.validateRegularization( ...
+                ProjectionAlignmentOptions.fieldOrDefault(options, ...
+                "Regularization", struct()));
+            options.Diagnostics = ProjectionAlignmentOptions.validateDiagnostics( ...
+                ProjectionAlignmentOptions.fieldOrDefault(options, "Diagnostics", struct()));
+            options.Execution = ProjectionAlignmentOptions.validateExecution( ...
+                ProjectionAlignmentOptions.fieldOrDefault(options, "Execution", struct()));
+        end
+
+        function jsonOptions = toJsonStruct(options)
+            %toJsonStruct Return the JSON-compatible subset of options.
+            jsonOptions = ProjectionAlignmentOptions.validate(options);
+            if ~isempty(jsonOptions.FilterPipeline.RadialFilterFcn)
+                error("ProjectionAlignmentOptions:nonSerializableFilter", ...
+                    "FilterPipeline.RadialFilterFcn must be empty before JSON serialization.");
+            end
+        end
+
+        function jsonText = encode(options)
+            %encode Convert alignment options to pretty JSON text.
+            jsonText = jsonencode(ProjectionAlignmentOptions.toJsonStruct(options), ...
+                PrettyPrint=true);
+        end
+
+        function options = decode(jsonText)
+            %decode Decode alignment options JSON.
+            options = ProjectionAlignmentOptions.validate(jsondecode(jsonText));
+        end
+
+        function write(filePath, options)
+            %write Save alignment options as JSON.
+            ProjectionAlignmentOptions.writeTextFile(filePath, ...
+                ProjectionAlignmentOptions.encode(options));
+        end
+
+        function options = read(filePath)
+            %read Load alignment options from JSON.
+            filePath = ProjectionAlignmentOptions.validateFilePath(filePath);
+            options = ProjectionAlignmentOptions.decode(fileread(filePath));
+        end
+    end
+
+    methods (Static, Access = private)
+        function detector = validateDetector(detector)
+            defaults = struct();
+            defaults.Method = "auto";
+            defaults.MaxFeatures = 2000;
+            defaults.MetricThreshold = [];
+            defaults.AnalysisBand = 1;
+            defaults.AnalysisScale = 1;
+            detector = ProjectionAlignmentOptions.mergeStruct(defaults, detector, ...
+                "Detector");
+            detector.Method = ProjectionAlignmentOptions.validateChoice( ...
+                detector.Method, ["auto", "sift", "surf", "orb", "brisk", ...
+                "kaze"], "Detector.Method");
+            detector.MaxFeatures = ProjectionAlignmentOptions.validatePositiveInteger( ...
+                detector.MaxFeatures, "Detector.MaxFeatures");
+            detector.MetricThreshold = ...
+                ProjectionAlignmentOptions.validateOptionalNonnegativeScalar( ...
+                detector.MetricThreshold, "Detector.MetricThreshold");
+            detector.AnalysisBand = ProjectionAlignmentOptions.validatePositiveInteger( ...
+                detector.AnalysisBand, "Detector.AnalysisBand");
+            detector.AnalysisScale = ProjectionAlignmentOptions.validatePositiveScalar( ...
+                detector.AnalysisScale, "Detector.AnalysisScale");
+            if detector.AnalysisScale > 1
+                error("ProjectionAlignmentOptions:invalidDetector", ...
+                    "Detector.AnalysisScale must be in the range (0, 1].");
+            end
+        end
+
+        function matcher = validateMatcher(matcher)
+            defaults = struct();
+            defaults.Method = "nearestNeighborRatio";
+            defaults.MatchThreshold = [];
+            defaults.MaxRatio = 0.8;
+            defaults.Unique = true;
+            matcher = ProjectionAlignmentOptions.mergeStruct(defaults, matcher, ...
+                "Matcher");
+            matcher.Method = ProjectionAlignmentOptions.validateChoice( ...
+                matcher.Method, ["nearestNeighborRatio", "exhaustive", ...
+                "approximate"], "Matcher.Method");
+            matcher.MatchThreshold = ...
+                ProjectionAlignmentOptions.validateOptionalNonnegativeScalar( ...
+                matcher.MatchThreshold, "Matcher.MatchThreshold");
+            matcher.MaxRatio = ProjectionAlignmentOptions.validateFraction( ...
+                matcher.MaxRatio, "Matcher.MaxRatio");
+            matcher.Unique = ProjectionAlignmentOptions.validateLogicalScalar( ...
+                matcher.Unique, "Matcher.Unique");
+        end
+
+        function pipeline = validateFilterPipeline(pipeline)
+            defaults = struct();
+            defaults.Stages = ["overlapMask", "descriptorScore", "ratio", ...
+                "geometricOutlier", "radial"];
+            defaults.UseOverlapMask = true;
+            defaults.MinMatchScore = [];
+            defaults.MaxDescriptorRatio = [];
+            defaults.GeometricMethod = "none";
+            defaults.GeometricMaxDistancePixels = 3;
+            defaults.RadialFilterFcn = [];
+            defaults.RadialFilterName = "";
+            pipeline = ProjectionAlignmentOptions.mergeStruct(defaults, pipeline, ...
+                "FilterPipeline");
+            pipeline.Stages = ProjectionAlignmentOptions.validateStringChoices( ...
+                pipeline.Stages, ["overlapMask", "descriptorScore", "ratio", ...
+                "geometricOutlier", "radial"], "FilterPipeline.Stages");
+            pipeline.UseOverlapMask = ProjectionAlignmentOptions.validateLogicalScalar( ...
+                pipeline.UseOverlapMask, "FilterPipeline.UseOverlapMask");
+            pipeline.MinMatchScore = ...
+                ProjectionAlignmentOptions.validateOptionalNonnegativeScalar( ...
+                pipeline.MinMatchScore, "FilterPipeline.MinMatchScore");
+            pipeline.MaxDescriptorRatio = ...
+                ProjectionAlignmentOptions.validateOptionalFraction( ...
+                pipeline.MaxDescriptorRatio, ...
+                "FilterPipeline.MaxDescriptorRatio");
+            pipeline.GeometricMethod = ProjectionAlignmentOptions.validateChoice( ...
+                pipeline.GeometricMethod, ["none", "similarity", "affine", ...
+                "ransac"], "FilterPipeline.GeometricMethod");
+            pipeline.GeometricMaxDistancePixels = ...
+                ProjectionAlignmentOptions.validatePositiveScalar( ...
+                pipeline.GeometricMaxDistancePixels, ...
+                "FilterPipeline.GeometricMaxDistancePixels");
+            pipeline.RadialFilterFcn = ProjectionAlignmentOptions.validateFilterFcn( ...
+                pipeline.RadialFilterFcn);
+            pipeline.RadialFilterName = ...
+                ProjectionAlignmentOptions.validateOptionalScalarString( ...
+                pipeline.RadialFilterName, "FilterPipeline.RadialFilterName");
+        end
+
+        function scheduling = validateScheduling(scheduling)
+            defaults = struct();
+            defaults.Strategy = "centerOut";
+            defaults.ReferenceLayerIndex = [];
+            defaults.PairSelection = "visible";
+            defaults.IncludeHiddenLayers = false;
+            scheduling = ProjectionAlignmentOptions.mergeStruct(defaults, scheduling, ...
+                "Scheduling");
+            scheduling.Strategy = ProjectionAlignmentOptions.validateChoice( ...
+                scheduling.Strategy, ["centerOut", "centerStar", ...
+                "adjacentChain", "hybrid", "twoImage"], "Scheduling.Strategy");
+            scheduling.ReferenceLayerIndex = ...
+                ProjectionAlignmentOptions.validateOptionalPositiveInteger( ...
+                scheduling.ReferenceLayerIndex, "Scheduling.ReferenceLayerIndex");
+            scheduling.PairSelection = ProjectionAlignmentOptions.validateChoice( ...
+                scheduling.PairSelection, ["visible", "selected", "all"], ...
+                "Scheduling.PairSelection");
+            scheduling.IncludeHiddenLayers = ...
+                ProjectionAlignmentOptions.validateLogicalScalar( ...
+                scheduling.IncludeHiddenLayers, "Scheduling.IncludeHiddenLayers");
+        end
+
+        function movable = validateMovableParameters(movable)
+            defaults = struct();
+            defaults.Parameters = ["omega", "phi", "kappa"];
+            defaults.AllowReferenceMotion = true;
+            defaults.IncludeProjectionOffsets = false;
+            defaults.IncludeSharedScale = false;
+            movable = ProjectionAlignmentOptions.mergeStruct(defaults, movable, ...
+                "MovableParameters");
+            movable.Parameters = ProjectionAlignmentOptions.validateStringChoices( ...
+                movable.Parameters, ["omega", "phi", "kappa", ...
+                "projectionOffsetX", "projectionOffsetY", "sharedScale"], ...
+                "MovableParameters.Parameters");
+            movable.AllowReferenceMotion = ...
+                ProjectionAlignmentOptions.validateLogicalScalar( ...
+                movable.AllowReferenceMotion, ...
+                "MovableParameters.AllowReferenceMotion");
+            movable.IncludeProjectionOffsets = ...
+                ProjectionAlignmentOptions.validateLogicalScalar( ...
+                movable.IncludeProjectionOffsets, ...
+                "MovableParameters.IncludeProjectionOffsets");
+            movable.IncludeSharedScale = ...
+                ProjectionAlignmentOptions.validateLogicalScalar( ...
+                movable.IncludeSharedScale, ...
+                "MovableParameters.IncludeSharedScale");
+        end
+
+        function bounds = validateBounds(bounds)
+            defaults = struct();
+            defaults.FieldOfViewFraction = 0.25;
+            defaults.OmegaDegrees = [];
+            defaults.PhiDegrees = [];
+            defaults.KappaDegrees = [];
+            defaults.SharedScale = [0.95 1.05];
+            bounds = ProjectionAlignmentOptions.mergeStruct(defaults, bounds, "Bounds");
+            bounds.FieldOfViewFraction = ProjectionAlignmentOptions.validateFraction( ...
+                bounds.FieldOfViewFraction, "Bounds.FieldOfViewFraction");
+            bounds.OmegaDegrees = ...
+                ProjectionAlignmentOptions.validateOptionalNonnegativeScalar( ...
+                bounds.OmegaDegrees, "Bounds.OmegaDegrees");
+            bounds.PhiDegrees = ...
+                ProjectionAlignmentOptions.validateOptionalNonnegativeScalar( ...
+                bounds.PhiDegrees, "Bounds.PhiDegrees");
+            bounds.KappaDegrees = ...
+                ProjectionAlignmentOptions.validateOptionalNonnegativeScalar( ...
+                bounds.KappaDegrees, "Bounds.KappaDegrees");
+            bounds.SharedScale = ProjectionAlignmentOptions.validateRange( ...
+                bounds.SharedScale, "Bounds.SharedScale");
+        end
+
+        function regularization = validateRegularization(regularization)
+            defaults = struct();
+            defaults.OverallWeight = 1e-3;
+            defaults.OmegaWeight = 1;
+            defaults.PhiWeight = 1;
+            defaults.KappaWeight = 1;
+            defaults.SharedScaleWeight = 1;
+            defaults.RobustLoss = "huber";
+            defaults.RobustScale = 1;
+            regularization = ProjectionAlignmentOptions.mergeStruct(defaults, ...
+                regularization, "Regularization");
+            regularization.OverallWeight = ...
+                ProjectionAlignmentOptions.validateNonnegativeScalar( ...
+                regularization.OverallWeight, "Regularization.OverallWeight");
+            regularization.OmegaWeight = ...
+                ProjectionAlignmentOptions.validateNonnegativeScalar( ...
+                regularization.OmegaWeight, "Regularization.OmegaWeight");
+            regularization.PhiWeight = ...
+                ProjectionAlignmentOptions.validateNonnegativeScalar( ...
+                regularization.PhiWeight, "Regularization.PhiWeight");
+            regularization.KappaWeight = ...
+                ProjectionAlignmentOptions.validateNonnegativeScalar( ...
+                regularization.KappaWeight, "Regularization.KappaWeight");
+            regularization.SharedScaleWeight = ...
+                ProjectionAlignmentOptions.validateNonnegativeScalar( ...
+                regularization.SharedScaleWeight, ...
+                "Regularization.SharedScaleWeight");
+            regularization.RobustLoss = ProjectionAlignmentOptions.validateChoice( ...
+                regularization.RobustLoss, ["none", "huber", "bisquare"], ...
+                "Regularization.RobustLoss");
+            regularization.RobustScale = ProjectionAlignmentOptions.validatePositiveScalar( ...
+                regularization.RobustScale, "Regularization.RobustScale");
+        end
+
+        function diagnostics = validateDiagnostics(diagnostics)
+            defaults = struct();
+            defaults.StoreMatches = true;
+            defaults.StoreInliers = true;
+            defaults.StoreResiduals = true;
+            defaults.StoreTiming = true;
+            defaults.StoreWorkingImages = false;
+            defaults.Verbose = false;
+            diagnostics = ProjectionAlignmentOptions.mergeStruct(defaults, ...
+                diagnostics, "Diagnostics");
+            diagnostics.StoreMatches = ProjectionAlignmentOptions.validateLogicalScalar( ...
+                diagnostics.StoreMatches, "Diagnostics.StoreMatches");
+            diagnostics.StoreInliers = ProjectionAlignmentOptions.validateLogicalScalar( ...
+                diagnostics.StoreInliers, "Diagnostics.StoreInliers");
+            diagnostics.StoreResiduals = ProjectionAlignmentOptions.validateLogicalScalar( ...
+                diagnostics.StoreResiduals, "Diagnostics.StoreResiduals");
+            diagnostics.StoreTiming = ProjectionAlignmentOptions.validateLogicalScalar( ...
+                diagnostics.StoreTiming, "Diagnostics.StoreTiming");
+            diagnostics.StoreWorkingImages = ...
+                ProjectionAlignmentOptions.validateLogicalScalar( ...
+                diagnostics.StoreWorkingImages, "Diagnostics.StoreWorkingImages");
+            verboseValue = ProjectionAlignmentOptions.fieldOrDefault( ...
+                diagnostics, "Verbose", false);
+            if isfield(diagnostics, "Verose") && ~isfield(diagnostics, "Verbose")
+                verboseValue = diagnostics.Verose;
+            end
+            diagnostics.Verbose = ProjectionAlignmentOptions.validateLogicalScalar( ...
+                verboseValue, "Diagnostics.Verbose");
+            if isfield(diagnostics, "Verose")
+                diagnostics = rmfield(diagnostics, "Verose");
+            end
+        end
+
+        function execution = validateExecution(execution)
+            defaults = struct();
+            defaults.Mode = "serial";
+            defaults.UseGPU = false;
+            execution = ProjectionAlignmentOptions.mergeStruct(defaults, execution, ...
+                "Execution");
+            execution.Mode = ProjectionAlignmentOptions.validateChoice( ...
+                execution.Mode, ["serial", "threads"], "Execution.Mode");
+            execution.UseGPU = ProjectionAlignmentOptions.validateLogicalScalar( ...
+                execution.UseGPU, "Execution.UseGPU");
+        end
+
+        function value = validateChoice(value, allowed, name)
+            value = ProjectionAlignmentOptions.validateScalarString(value, name);
+            matches = lower(value) == lower(allowed);
+            if ~any(matches)
+                error("ProjectionAlignmentOptions:invalidChoice", ...
+                    "%s must be one of: %s.", name, strjoin(allowed, ", "));
+            end
+            value = allowed(find(matches, 1, "first"));
+        end
+
+        function values = validateStringChoices(values, allowed, name)
+            values = string(values);
+            values = reshape(values, 1, []);
+            if isempty(values) || any(strlength(values) == 0)
+                error("ProjectionAlignmentOptions:invalidChoice", ...
+                    "%s must contain nonempty string values.", name);
+            end
+            for k = 1:numel(values)
+                values(k) = ProjectionAlignmentOptions.validateChoice( ...
+                    values(k), allowed, name);
+            end
+        end
+
+        function value = validateScalarString(value, name)
+            if ~(ischar(value) || isstring(value)) || ~isscalar(string(value)) || ...
+                    strlength(string(value)) == 0
+                error("ProjectionAlignmentOptions:invalidString", ...
+                    "%s must be a nonempty scalar string.", name);
+            end
+            value = string(value);
+        end
+
+        function value = validateOptionalScalarString(value, name)
+            if isempty(value)
+                value = "";
+                return
+            end
+            if ~(ischar(value) || isstring(value)) || ~isscalar(string(value))
+                error("ProjectionAlignmentOptions:invalidString", ...
+                    "%s must be a scalar string.", name);
+            end
+            value = string(value);
+        end
+
+        function value = validatePositiveScalar(value, name)
+            if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || value <= 0
+                error("ProjectionAlignmentOptions:invalidScalar", ...
+                    "%s must be a positive finite scalar.", name);
+            end
+            value = double(value);
+        end
+
+        function value = validateNonnegativeScalar(value, name)
+            if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || value < 0
+                error("ProjectionAlignmentOptions:invalidScalar", ...
+                    "%s must be a nonnegative finite scalar.", name);
+            end
+            value = double(value);
+        end
+
+        function value = validateOptionalNonnegativeScalar(value, name)
+            if isempty(value)
+                value = [];
+                return
+            end
+            value = ProjectionAlignmentOptions.validateNonnegativeScalar(value, name);
+        end
+
+        function value = validateFraction(value, name)
+            value = ProjectionAlignmentOptions.validatePositiveScalar(value, name);
+            if value > 1
+                error("ProjectionAlignmentOptions:invalidScalar", ...
+                    "%s must be in the range (0, 1].", name);
+            end
+        end
+
+        function value = validateOptionalFraction(value, name)
+            if isempty(value)
+                value = [];
+                return
+            end
+            value = ProjectionAlignmentOptions.validateFraction(value, name);
+        end
+
+        function value = validatePositiveInteger(value, name)
+            value = ProjectionAlignmentOptions.validatePositiveScalar(value, name);
+            if fix(value) ~= value
+                error("ProjectionAlignmentOptions:invalidInteger", ...
+                    "%s must be a positive integer.", name);
+            end
+        end
+
+        function value = validateOptionalPositiveInteger(value, name)
+            if isempty(value)
+                value = [];
+                return
+            end
+            value = ProjectionAlignmentOptions.validatePositiveInteger(value, name);
+        end
+
+        function value = validateLogicalScalar(value, name)
+            if ~(islogical(value) || isnumeric(value)) || ~isscalar(value)
+                error("ProjectionAlignmentOptions:invalidLogical", ...
+                    "%s must be a scalar logical value.", name);
+            end
+            value = logical(value);
+        end
+
+        function value = validateRange(value, name)
+            if ~isnumeric(value) || numel(value) ~= 2 || any(~isfinite(value), "all")
+                error("ProjectionAlignmentOptions:invalidRange", ...
+                    "%s must be a finite numeric two-element range.", name);
+            end
+            value = double(value(:).');
+            if value(1) <= 0 || value(2) <= value(1)
+                error("ProjectionAlignmentOptions:invalidRange", ...
+                    "%s must be positive and strictly increasing.", name);
+            end
+        end
+
+        function value = validateFilterFcn(value)
+            if isempty(value)
+                value = [];
+                return
+            end
+            if ~isa(value, "function_handle")
+                error("ProjectionAlignmentOptions:invalidFilterFcn", ...
+                    "FilterPipeline.RadialFilterFcn must be empty or a function handle.");
+            end
+        end
+
+        function output = mergeStruct(defaults, overrides, name)
+            if isempty(overrides)
+                output = defaults;
+                return
+            end
+            if ~isstruct(overrides) || ~isscalar(overrides)
+                error("ProjectionAlignmentOptions:invalidOptions", ...
+                    "%s must be a scalar struct.", name);
+            end
+
+            output = defaults;
+            names = fieldnames(overrides);
+            for k = 1:numel(names)
+                output.(names{k}) = overrides.(names{k});
+            end
+        end
+
+        function value = fieldOrDefault(value, fieldName, defaultValue)
+            if isfield(value, fieldName)
+                value = value.(fieldName);
+            else
+                value = defaultValue;
+            end
+        end
+
+        function filePath = validateFilePath(filePath)
+            if ~(ischar(filePath) || (isstring(filePath) && isscalar(filePath))) || ...
+                    strlength(string(filePath)) == 0
+                error("ProjectionAlignmentOptions:invalidPath", ...
+                    "File path must be a nonempty character vector or scalar string.");
+            end
+            filePath = char(filePath);
+        end
+
+        function writeTextFile(filePath, text)
+            filePath = ProjectionAlignmentOptions.validateFilePath(filePath);
+            fid = fopen(filePath, "w");
+            if fid < 0
+                error("ProjectionAlignmentOptions:fileOpenFailed", ...
+                    "Unable to open alignment options file for writing: %s", filePath);
+            end
+            cleaner = onCleanup(@() fclose(fid));
+            fprintf(fid, "%s\n", text);
+            clear cleaner
+        end
+    end
+end
