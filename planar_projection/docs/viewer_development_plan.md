@@ -24,6 +24,12 @@ src/ProjectionReadbackRenderer.m   Headless frame-camera readback prototype
 src/ProjectionLayerManager.m       Multi-layer workflow helpers
 src/ProjectionViewerState.m        JSON viewer-state serialization
 src/ProjectionViewerApp.m          Programmatic interactive preview app
+src/ProjectionBackendJob.m         Backend job contract/serialization helpers
+src/ProjectionBackendOutputGrid.m  Backend full-extent output-grid planner
+src/ProjectionBackendOutputWriter.m Backend TIFF/PNG/mask/metadata writer
+src/ProjectionBackendTiledRenderer.m Backend serial/threaded tiled renderer
+src/ProjectionBackendGpuSupport.m  Optional MATLAB-managed GPU checks
+src/ProjectionBackendProcessor.m   Backend validation/render facade
 
 tests/PlanarProjectionTest.m
 tests/ProjectionViewerHarnessTest.m
@@ -33,10 +39,15 @@ tests/ProjectionReadbackRendererTest.m
 tests/ProjectionLayerManagerTest.m
 tests/ProjectionViewerStateTest.m
 tests/ProjectionViewerAppInteractionTest.m
+tests/ProjectionBackend*.m
 
 runProjectionViewerPrototype.m
 runTests.m
 buildfile.m
+validateProjectionBackendJob.m
+scripts/backend_interactive_evaluation.m
+docs/backend_app_workflow.md
+docs/backend_milestone_9_custom_gpu_kernel_assessment.md
 ```
 
 Local prototype TIFFs live under `test_data/` and are intentionally ignored by
@@ -67,8 +78,13 @@ The current prototype can:
    per-layer projection offsets, and per-layer omega/phi/kappa view-vector
    corrections.
 7. Serialize and restore a human-readable JSON viewer state.
-8. Render deterministic headless frame-camera readback images with configurable
-   interpolation and basic multi-layer blending.
+8. Export backend jobs directly from the app or write them as JSON plus `.mat`
+   scene payloads.
+9. Validate backend jobs without rendering.
+10. Render deterministic headless composite and per-layer outputs with
+   configurable interpolation, tiled CPU execution, optional thread execution,
+   optional MATLAB-managed GPU acceleration, masks, metadata, and basic
+   multi-layer blending.
 
 ## Core Design Principles
 
@@ -276,19 +292,26 @@ Current controls:
 - W/A/S/D translates the selected layer up/left/down/right on the projection
   plane.
 - Control + left-drag translates the selected layer on the projection plane.
+- Alt/Option + left-drag adjusts omega and phi so the selected layer tracks the
+  mouse drag.
 - I/K adjust phi.
 - J/L adjust omega.
 - U/O adjust kappa.
-- Control + right-drag adjusts omega and phi so the selected layer tracks the
-  mouse drag.
+- double left-click shows the next layer and hides the other layers.
+- spacebar down temporarily hides the selected layer; spacebar up shows it.
 - layer dropdown selects the active layer.
+- `+` and `-` buttons beside the layer label swap the selected layer with the
+  next or previous layer in the stack.
 - alpha slider changes selected-layer alpha.
-- Visible checkbox changes selected-layer visibility.
-- blend dropdown supports `"alpha"` and `"redBlueAnaglyph"`.
-- Cycle advances the single-active-layer change workflow.
+- Visible checkbox in the layer header changes selected-layer visibility.
+- right-click context menu on the image contains Save, Load, Cycle, Reset, Help,
+  Crosshair, and Blend mode controls.
+- Blend mode context menu supports `"alpha"` and `"redBlueAnaglyph"`.
+- Crosshair toggles cyan screen-space guide lines across the image viewport.
+- Cycle shows the next layer and hides the others without changing layer alpha.
 - Save/Load write and read JSON viewer state.
-- Reset returns tip, tilt, twist, and alpha to defaults and restores the frame
-  camera view.
+- Reset restores neutral tip, tilt, twist, layer order, visibility, alpha, blend
+  mode, WASD projection offsets, OPK corrections, and the frame camera view.
 
 Omega and phi keyboard steps default to one estimated IFOV for the selected
 layer. Kappa defaults to `0.1` degrees.
@@ -308,7 +331,9 @@ h = surface(ax, X, Y, Z, textureData, ...
 Callbacks update existing surface `XData`, `YData`, `ZData`, `CData`,
 `FaceAlpha`, and `Visible` values. Multi-layer preview surfaces share the same
 projection plane and use a display-only depth bias along the frame-camera view
-direction to avoid renderer depth fighting.
+direction to avoid renderer depth fighting. Stabilized axes limits are planned
+over the full supported tip/tilt range so preview surfaces do not clip at large
+projection-plane angles.
 
 ### Headless Readback
 
@@ -383,9 +408,12 @@ Post-milestone features already added:
 - IFOV-derived omega/phi key steps.
 - sparse source-geometry grid adapter.
 - JSON state save/load.
-- compact UI control layout.
+- compact UI control layout with image context menu, layer-order buttons, and
+  header-row visibility control.
 - Control + left-drag layer translation.
-- Control + right-drag omega/phi correction.
+- Alt/Option + left-drag omega/phi correction.
+- image-space crosshair overlay.
+- visibility-preserving layer cycling and reset-all viewer state restoration.
 
 ## Validation
 
@@ -492,8 +520,8 @@ comes first; optimization follows profiling.
 Implementation status:
 
 - Backend Milestones 1-10 are complete, validated, and committed.
-- Validation for the final backend state: `results = runTests;` passed with
-  128 tests.
+- Validation for the current backend/viewer state: `results = runTests;` passed
+  with 139 tests.
 - The backend now supports live and serialized jobs, `.mat` scene payloads,
   headless viewer-state application, output-grid planning, composite/per-layer
   image writers, hardened readback masks and band handling, serial tiled CPU
@@ -998,9 +1026,10 @@ operations.
 
 ### Blend And Change-Detection Workflows
 
-Current blend support is alpha and red/blue anaglyph, plus layer cycling. Future
-work may add difference, flicker, swipe, false-color, checkerboard, or other
-change/stereo workflows.
+Current blend support is alpha and red/blue anaglyph from the image context
+menu, plus visibility-based layer cycling and simple adjacent layer-order
+swapping. Future work may add difference, flicker, swipe, false-color,
+checkerboard, or other change/stereo workflows.
 
 ### Scene Builder Boundary
 

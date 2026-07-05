@@ -860,7 +860,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 ProjectionViewerAppInteractionTest.opkText(offsets));
         end
 
-        function testControlRightDragDoesNotAdjustOmegaPhi(testCase)
+        function testControlAlternateSelectionDragTranslatesLayerWithoutOmegaPhi(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
@@ -881,8 +881,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
 
             testCase.verifyEqual(state.Layers(2).ViewVectorAngularOffsetsDegrees, ...
                 [0 0 0], AbsTol=ProjectionViewerAppInteractionTest.Tol);
-            testCase.verifyEqual(state.Layers(2).ProjectionOffsetMeters, [0 0], ...
-                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyGreaterThan(norm(state.Layers(2).ProjectionOffsetMeters), 0);
         end
 
         function testExportImportStateRestoresViewerConfiguration(testCase)

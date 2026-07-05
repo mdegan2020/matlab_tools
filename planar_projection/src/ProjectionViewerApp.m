@@ -1778,7 +1778,7 @@ classdef ProjectionViewerApp < handle
             end
             hasControl = app.IsControlDown || app.eventHasControl(event);
             hasAlt = app.IsAltDown || app.eventHasAlt(event);
-            if hasControl && selectionType == "normal"
+            if hasControl && any(selectionType == ["normal", "alt"])
                 app.DragMode = "translateLayer";
             elseif hasAlt && selectionType == "normal"
                 app.DragMode = "adjustViewVectors";
