@@ -35,10 +35,18 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentReferenceDropDown");
             movingDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentMovingDropDown");
+            presetDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentPresetDropDown");
+            scopeDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentScopeDropDown");
             detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentDetectorDropDown");
             lossDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentLossDropDown");
+            roiButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentRoiButton");
+            clearRoiButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentClearRoiButton");
             runButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentRunButton");
             cancelButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -49,16 +57,51 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentApplyButton");
             revertButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentRevertButton");
+            pairTable = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentPairTable");
 
             testCase.verifyEqual(str2double(string(referenceDropDown.Value)), 1);
             testCase.verifyEqual(str2double(string(movingDropDown.Value)), 2);
+            testCase.verifyEqual(string(presetDropDown.Value), "fast");
+            testCase.verifyEqual(string(scopeDropDown.Value), "selectedPair");
             testCase.verifyEqual(string(detectorDropDown.Value), "auto");
             testCase.verifyEqual(string(lossDropDown.Value), "projectionPlane2D");
+            testCase.verifyEqual(string(roiButton.Enable), "on");
+            testCase.verifyEqual(string(clearRoiButton.Enable), "on");
             testCase.verifyEqual(string(runButton.Enable), "on");
             testCase.verifyEqual(string(cancelButton.Enable), "off");
             testCase.verifyEqual(string(previewButton.Enable), "off");
             testCase.verifyEqual(string(applyButton.Enable), "off");
             testCase.verifyEqual(string(revertButton.Enable), "off");
+            testCase.verifyEqual(height(pairTable.Data), 1);
+            testCase.verifyTrue(pairTable.Data.Enabled(1));
+            testCase.verifyEqual(string(pairTable.Data.Pair(1)), "2 -> 1");
+            testCase.verifyTrue(all(ismember(["Matches", "Inliers", "Confidence"], ...
+                string(pairTable.Data.Properties.VariableNames))));
+        end
+
+        function testPairTableCanDisableAlignmentPairs(testCase)
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(false);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            pairTable = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentPairTable");
+            runButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentRunButton");
+            statusLabel = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentStatusLabel");
+            data = pairTable.Data;
+            data.Enabled(:) = false;
+            pairTable.Data = data;
+
+            runButton.ButtonPushedFcn(runButton, struct());
+            drawnow
+
+            testCase.verifyTrue(contains(string(statusLabel.Text), ...
+                "No enabled alignment pairs"));
         end
 
         function testAlignmentRunPreviewApplyAndRevertThroughControls(testCase)

@@ -185,10 +185,11 @@ Core controls:
   to one estimated IFOV per key press; kappa defaults to 0.1 degrees.
 - Save and Load write/read a human-readable JSON viewer state containing camera,
   layer, alpha, blend, projection offset, OPK, tip, tilt, and twist settings.
-- The alignment row can run the current two-image auto-alignment prototype.
-  Choose a reference layer, a moving layer, detector, and loss mode, then use
-  Run, Preview, Apply, and Revert. Run reports stage progress and residual/OPK
-  summaries in the status text and draws match/inlier overlays in the viewer.
+- The alignment row can run auto-alignment for the selected pair or all visible
+  layers. Choose a fast or quality preset, detector, loss mode, optional ROI,
+  and enabled pair-table rows, then use Run, Preview, Apply, and Revert. Run
+  reports stage progress and residual/OPK summaries in the status text, updates
+  pair match/inlier counts, and draws match/inlier overlays in the viewer.
 
 Manual auto-alignment validation loop:
 
@@ -196,9 +197,14 @@ Manual auto-alignment validation loop:
 app = runSyntheticAlignmentPrototype("test_data/10.tif");
 ```
 
-In the viewer, run alignment with `projectionPlane2D` or `rayToRay3D`, inspect
-the match overlays and RMS summary, preview the solved OPK corrections, apply
-them, revert them, and save the viewer state from the context menu.
+In the viewer, start with the fast preset and `projectionPlane2D`, inspect the
+pair table, match overlays, and RMS summary, then switch to the quality preset
+or `rayToRay3D` when the fast solve looks plausible. Use the ROI button when
+background features dominate the overlap, uncheck weak pair rows before rerun,
+preview the solved OPK corrections, apply or revert them, and save the viewer
+state from the context menu. Common failure modes are too few filtered matches,
+disabled or hidden layers leaving no enabled pairs, an ROI that clips all
+features, or a detector that is unavailable in the current MATLAB installation.
 
 Projection scenes can choose how the initial projection plane is built:
 
