@@ -29,6 +29,7 @@ classdef ProjectionViewerApp < handle
         MinViewVectorIfovRadians double = 1e-12
         PreviewLayerDepthStepFraction double = 1e-4
         PreviewLayerDepthMinimumStepMeters double = 0.5
+        AnaglyphPreviewFaceAlpha double = 0.55
         MinProjectedNudgeNorm double = 1e-9
         ResetScene struct
         UIFigure matlab.ui.Figure
@@ -685,7 +686,7 @@ classdef ProjectionViewerApp < handle
                     detectorMaxFeatures = 2000;
                     matcherMaxRatio = 0.8;
                 otherwise
-                    detectorMaxFeatures = 500;
+                    detectorMaxFeatures = 1000;
                     matcherMaxRatio = 0.9;
             end
             options = ProjectionAlignmentOptions.validate(struct( ...
@@ -721,7 +722,7 @@ classdef ProjectionViewerApp < handle
             if app.alignmentPreset() == "quality"
                 outputSize = [768 768];
             else
-                outputSize = [384 384];
+                outputSize = [512 512];
             end
             options = struct(OutputSize=outputSize, ...
                 MaxOutputPixels=prod(outputSize));
@@ -929,22 +930,8 @@ classdef ProjectionViewerApp < handle
             app.clearAlignmentRoi(false);
             position = app.defaultAlignmentRoiPosition();
             app.AlignmentRoiBounds = app.roiBoundsFromPosition(position);
-            if exist("drawrectangle", "file") ~= 2
-                app.setAlignmentStatus("ROI set to central projection area.");
-                return
-            end
-
             try
-                app.AlignmentRoiHandle = drawrectangle(app.Axes, ...
-                    Position=position, Color=[0 1 1], ...
-                    StripeColor=[0 0 0], InteractionsAllowed="all", ...
-                    Tag="ProjectionViewerAlignmentRoi");
-                app.AlignmentRoiListeners = [ ...
-                    addlistener(app.AlignmentRoiHandle, "MovingROI", ...
-                    @(~, ~) app.updateAlignmentRoiBounds()), ...
-                    addlistener(app.AlignmentRoiHandle, "ROIMoved", ...
-                    @(~, ~) app.updateAlignmentRoiBounds())];
-                app.updateAlignmentRoiBounds();
+                app.drawAlignmentRoiOverlay(position);
                 app.setAlignmentStatus("ROI active.");
             catch
                 app.AlignmentRoiHandle = [];
@@ -975,7 +962,8 @@ classdef ProjectionViewerApp < handle
         end
 
         function updateAlignmentRoiBounds(app)
-            if app.hasValidAlignmentRoiHandle()
+            if app.hasValidAlignmentRoiHandle() && ...
+                    isprop(app.AlignmentRoiHandle, "Position")
                 app.AlignmentRoiBounds = app.roiBoundsFromPosition( ...
                     app.AlignmentRoiHandle.Position);
             end
@@ -991,18 +979,94 @@ classdef ProjectionViewerApp < handle
         end
 
         function position = defaultAlignmentRoiPosition(app)
-            xLimits = app.Axes.XLim;
-            yLimits = app.Axes.YLim;
-            width = 0.6 * diff(xLimits);
-            height = 0.6 * diff(yLimits);
-            position = [xLimits(1) + 0.2 * diff(xLimits), ...
-                yLimits(1) + 0.2 * diff(yLimits), width, height];
+            bounds = app.defaultAlignmentRoiBounds();
+            width = 0.6 * (bounds(2) - bounds(1));
+            height = 0.6 * (bounds(4) - bounds(3));
+            position = [bounds(1) + 0.2 * (bounds(2) - bounds(1)), ...
+                bounds(3) + 0.2 * (bounds(4) - bounds(3)), ...
+                width, height];
         end
 
         function bounds = roiBoundsFromPosition(~, position)
             xValues = [position(1), position(1) + position(3)];
             yValues = [position(2), position(2) + position(4)];
             bounds = [min(xValues), max(xValues), min(yValues), max(yValues)];
+        end
+
+        function bounds = defaultAlignmentRoiBounds(app)
+            layerIndices = app.alignmentRoiLayerIndices();
+            [intersectionBounds, unionBounds, hasIntersection] = ...
+                app.projectionPlaneBoundsForLayers(layerIndices);
+            if hasIntersection
+                bounds = intersectionBounds;
+            else
+                bounds = unionBounds;
+            end
+
+            if isempty(bounds) || any(~isfinite(bounds)) || ...
+                    bounds(2) <= bounds(1) || bounds(4) <= bounds(3)
+                bounds = [-1 1 -1 1];
+            end
+        end
+
+        function layerIndices = alignmentRoiLayerIndices(app)
+            try
+                request = app.currentAlignmentRequest();
+                layerIndices = unique(request.LayerIndices, "stable");
+            catch
+                layerIndices = find([app.Scene.layers.Visible]);
+            end
+            if isempty(layerIndices)
+                layerIndices = app.SelectedLayerIndex;
+            end
+        end
+
+        function [intersectionBounds, unionBounds, hasIntersection] = ...
+                projectionPlaneBoundsForLayers(app, layerIndices)
+            plane = app.currentProjectionPlane();
+            intersectionBounds = [-Inf Inf -Inf Inf];
+            unionBounds = [Inf -Inf Inf -Inf];
+
+            for layerIndex = reshape(layerIndices, 1, [])
+                layer = app.Scene.layers(layerIndex);
+                layer.CurrentProjectionPlane = plane;
+                layer.MeshSampling = app.DefaultMeshSampling(layerIndex);
+                mesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                    layer, plane, app.Scene.renderOrigin);
+                coordinates = PlanarProjection.worldToPlane( ...
+                    reshape(mesh.WorldPoints, 3, []), plane);
+                layerBounds = [min(coordinates(1, :)), max(coordinates(1, :)), ...
+                    min(coordinates(2, :)), max(coordinates(2, :))];
+                intersectionBounds = [ ...
+                    max(intersectionBounds(1), layerBounds(1)), ...
+                    min(intersectionBounds(2), layerBounds(2)), ...
+                    max(intersectionBounds(3), layerBounds(3)), ...
+                    min(intersectionBounds(4), layerBounds(4))];
+                unionBounds = [ ...
+                    min(unionBounds(1), layerBounds(1)), ...
+                    max(unionBounds(2), layerBounds(2)), ...
+                    min(unionBounds(3), layerBounds(3)), ...
+                    max(unionBounds(4), layerBounds(4))];
+            end
+
+            hasIntersection = all(isfinite(intersectionBounds)) && ...
+                intersectionBounds(2) > intersectionBounds(1) && ...
+                intersectionBounds(4) > intersectionBounds(3);
+        end
+
+        function drawAlignmentRoiOverlay(app, position)
+            bounds = app.roiBoundsFromPosition(position);
+            planeCoordinates = [ ...
+                bounds(1), bounds(2), bounds(2), bounds(1), bounds(1); ...
+                bounds(3), bounds(3), bounds(4), bounds(4), bounds(3)];
+            worldPoints = PlanarProjection.reconstruct3d( ...
+                planeCoordinates, app.currentProjectionPlane()) - ...
+                app.Scene.renderOrigin;
+            app.AlignmentRoiHandle = line(app.Axes, ...
+                worldPoints(1, :), worldPoints(2, :), worldPoints(3, :), ...
+                Color=[0 1 1], LineWidth=1.5, HitTest="off", ...
+                PickableParts="none", Tag="ProjectionViewerAlignmentRoi");
+            app.raiseCrosshairOverlay();
         end
 
         function setAlignmentRunning(app, isRunning)
@@ -1319,8 +1383,10 @@ classdef ProjectionViewerApp < handle
                     layer, layer.CurrentProjectionPlane, app.Scene.renderOrigin);
                 [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
                 app.Surfaces{layerIndex} = surface(app.Axes, X, Y, ...
-                    Z, mesh.Texture, FaceColor="texturemap", EdgeColor="none", ...
-                    FaceAlpha=mesh.Alpha, Visible=app.onOff(layer.Visible), ...
+                    Z, app.previewTextureForLayer(mesh.Texture, layerIndex), ...
+                    FaceColor="texturemap", EdgeColor="none", ...
+                    FaceAlpha=app.previewFaceAlphaForLayer(mesh.Alpha, layerIndex), ...
+                    Visible=app.onOff(layer.Visible), ...
                     ContextMenu=app.ImageContextMenu);
                 if layerIndex == app.SelectedLayerIndex
                     app.Surface = app.Surfaces{layerIndex};
@@ -2048,7 +2114,8 @@ classdef ProjectionViewerApp < handle
             layer = app.Scene.layers(layerIndex);
             layer.Alpha = alpha;
             app.Scene.layers(layerIndex) = layer;
-            app.Surfaces{layerIndex}.FaceAlpha = alpha;
+            app.Surfaces{layerIndex}.FaceAlpha = ...
+                app.previewFaceAlphaForLayer(alpha, layerIndex);
             if ~isempty(app.CurrentMesh)
                 app.CurrentMesh.Alpha = alpha;
             end
@@ -2119,9 +2186,73 @@ classdef ProjectionViewerApp < handle
             surfaceHandle.XData = X;
             surfaceHandle.YData = Y;
             surfaceHandle.ZData = Z;
-            surfaceHandle.CData = mesh.Texture;
-            surfaceHandle.FaceAlpha = mesh.Alpha;
+            surfaceHandle.CData = app.previewTextureForLayer( ...
+                mesh.Texture, layerIndex);
+            surfaceHandle.FaceAlpha = app.previewFaceAlphaForLayer( ...
+                mesh.Alpha, layerIndex);
             surfaceHandle.Visible = app.onOff(mesh.Visible);
+        end
+
+        function updateAllSurfaceBlendAppearance(app)
+            for layerIndex = 1:numel(app.Surfaces)
+                surfaceHandle = app.Surfaces{layerIndex};
+                if isempty(surfaceHandle) || ~isvalid(surfaceHandle)
+                    continue
+                end
+                layer = app.Scene.layers(layerIndex);
+                surfaceHandle.CData = app.previewTextureForLayer( ...
+                    layer.DisplayTexture, layerIndex);
+                surfaceHandle.FaceAlpha = app.previewFaceAlphaForLayer( ...
+                    layer.Alpha, layerIndex);
+                surfaceHandle.Visible = app.onOff(layer.Visible);
+            end
+        end
+
+        function texture = previewTextureForLayer(app, texture, layerIndex)
+            layer = app.Scene.layers(layerIndex);
+            if lower(string(layer.BlendMode)) ~= "redblueanaglyph"
+                return
+            end
+
+            gray = app.grayscaleDisplayTexture(texture);
+            texture = zeros([size(gray, 1), size(gray, 2), 3], "like", texture);
+            channelIndex = app.anaglyphChannelForLayer(layerIndex);
+            texture(:, :, channelIndex) = gray;
+        end
+
+        function alpha = previewFaceAlphaForLayer(app, alpha, layerIndex)
+            layer = app.Scene.layers(layerIndex);
+            if lower(string(layer.BlendMode)) == "redblueanaglyph" && ...
+                    app.visibleAnaglyphLayerCount() > 1
+                alpha = min(alpha, app.AnaglyphPreviewFaceAlpha);
+            end
+        end
+
+        function channelIndex = anaglyphChannelForLayer(app, layerIndex)
+            anaglyphLayers = find([app.Scene.layers.Visible] & ...
+                lower(string([app.Scene.layers.BlendMode])) == "redblueanaglyph");
+            ordinal = find(anaglyphLayers == layerIndex, 1, "first");
+            if isempty(ordinal)
+                ordinal = 1;
+            end
+            channelIndex = 1 + 2 * double(mod(ordinal, 2) == 0);
+        end
+
+        function count = visibleAnaglyphLayerCount(app)
+            count = nnz([app.Scene.layers.Visible] & ...
+                lower(string([app.Scene.layers.BlendMode])) == "redblueanaglyph");
+        end
+
+        function gray = grayscaleDisplayTexture(~, texture)
+            if ismatrix(texture)
+                gray = texture;
+            elseif isinteger(texture)
+                gray = cast(round(mean(double(texture), 3)), class(texture));
+            elseif islogical(texture)
+                gray = any(texture, 3);
+            else
+                gray = mean(texture, 3);
+            end
         end
 
         function [X, Y, Z] = previewSurfaceCoordinates(app, mesh, layerIndex)
@@ -2312,9 +2443,16 @@ classdef ProjectionViewerApp < handle
         end
 
         function setSelectedLayerBlendMode(app, blendMode)
-            layer = app.Scene.layers(app.SelectedLayerIndex);
-            layer.BlendMode = string(blendMode);
-            app.Scene.layers(app.SelectedLayerIndex) = layer;
+            targetLayerIndices = find([app.Scene.layers.Visible]);
+            if isempty(targetLayerIndices)
+                targetLayerIndices = app.SelectedLayerIndex;
+            end
+            for layerIndex = reshape(targetLayerIndices, 1, [])
+                layer = app.Scene.layers(layerIndex);
+                layer.BlendMode = string(blendMode);
+                app.Scene.layers(layerIndex) = layer;
+            end
+            app.updateAllSurfaceBlendAppearance();
             app.updateBlendMenuChecks();
         end
 
@@ -2326,6 +2464,7 @@ classdef ProjectionViewerApp < handle
                 app.Scene.layers(layerIndex) = layer;
                 app.Surfaces{layerIndex}.Visible = app.onOff(layer.Visible);
             end
+            app.updateAllSurfaceBlendAppearance();
             app.SelectedLayerIndex = nextLayerIndex;
             app.updateControlsFromSelectedLayer();
         end
@@ -2390,7 +2529,7 @@ classdef ProjectionViewerApp < handle
             layer = app.Scene.layers(layerIndex);
             layer.Visible = logical(isVisible);
             app.Scene.layers(layerIndex) = layer;
-            app.Surfaces{layerIndex}.Visible = app.onOff(layer.Visible);
+            app.updateAllSurfaceBlendAppearance();
             app.VisibleCheckBox.Value = layer.Visible;
         end
 
@@ -2399,10 +2538,18 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
-            blendMode = string(app.Scene.layers(app.SelectedLayerIndex).BlendMode);
-            app.AlphaBlendMenuItem.Checked = app.onOff(blendMode == "alpha");
+            visibleModes = app.visibleBlendModes();
+            app.AlphaBlendMenuItem.Checked = app.onOff(all(visibleModes == "alpha"));
             app.AnaglyphBlendMenuItem.Checked = ...
-                app.onOff(blendMode == "redBlueAnaglyph");
+                app.onOff(all(visibleModes == "redBlueAnaglyph"));
+        end
+
+        function modes = visibleBlendModes(app)
+            visibleMask = [app.Scene.layers.Visible];
+            if ~any(visibleMask)
+                visibleMask(app.SelectedLayerIndex) = true;
+            end
+            modes = string([app.Scene.layers(visibleMask).BlendMode]);
         end
 
         function toggleCrosshair(app)

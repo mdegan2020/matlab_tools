@@ -107,7 +107,7 @@ classdef ProjectionAlignmentFeatureMatcher
         end
 
         function detector = defaultDetector(capabilities)
-            preferences = ["sift", "surf", "orb", "brisk", "kaze"];
+            preferences = ["kaze", "sift", "surf", "orb", "brisk"];
             detector = "";
             for k = 1:numel(preferences)
                 if ismember(preferences(k), capabilities.AvailableDetectors)

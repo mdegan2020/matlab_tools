@@ -259,10 +259,12 @@ classdef ProjectionAlignmentScheduler
 
         function score = confidenceScore(matchCount, featureCounts, overlapCount)
             featureCounts = double(featureCounts(:));
-            featureSupport = max([featureCounts; 10]);
-            matchSupport = double(matchCount) / featureSupport;
+            featureSupport = max([min(featureCounts); 10]);
+            featureRatioSupport = double(matchCount) / featureSupport;
+            matchCountSupport = min(1, double(matchCount) / 50);
             overlapSupport = min(1, double(overlapCount) / 100);
-            score = min(1, max(0, 0.8 * matchSupport + 0.2 * overlapSupport));
+            score = min(1, max(0, 0.6 * matchCountSupport + ...
+                0.2 * featureRatioSupport + 0.2 * overlapSupport));
         end
 
         function value = meanConfidence(pairDiagnostics)

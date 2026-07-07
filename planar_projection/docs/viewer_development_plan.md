@@ -42,6 +42,7 @@ tests/ProjectionViewerAppInteractionTest.m
 tests/ProjectionBackend*.m
 
 runProjectionViewerPrototype.m
+runProjectionViewer.m
 runTests.m
 buildfile.m
 validateProjectionBackendJob.m
@@ -72,16 +73,18 @@ The current prototype can:
 2. Generate synthetic linear-array-style source geometry for each layer.
 3. Accept sparse source geometry through a `SampleFcn(rowIndices, columnIndices)`
    adapter contract.
-4. Project sampled source rays onto a shared target projection plane.
-5. Preview projected textures in a fixed frame-camera-style view.
-6. Manipulate projection plane tip, tilt, camera twist, layer alpha/visibility,
+4. Launch real in-memory `uint8` image layers with sparse view-vector geometry
+   definitions and a supplied projection plane.
+5. Project sampled source rays onto a shared target projection plane.
+6. Preview projected textures in a fixed frame-camera-style view.
+7. Manipulate projection plane tip, tilt, camera twist, layer alpha/visibility,
    per-layer projection offsets, and per-layer omega/phi/kappa view-vector
    corrections.
-7. Serialize and restore a human-readable JSON viewer state.
-8. Export backend jobs directly from the app or write them as JSON plus `.mat`
+8. Serialize and restore a human-readable JSON viewer state.
+9. Export backend jobs directly from the app or write them as JSON plus `.mat`
    scene payloads.
-9. Validate backend jobs without rendering.
-10. Render deterministic headless composite and per-layer outputs with
+10. Validate backend jobs without rendering.
+11. Render deterministic headless composite and per-layer outputs with
    configurable interpolation, tiled CPU execution, optional thread execution,
    optional MATLAB-managed GPU acceleration, masks, metadata, and basic
    multi-layer blending.

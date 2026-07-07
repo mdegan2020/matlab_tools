@@ -57,6 +57,34 @@ classdef ProjectionAlignmentFeatureMatcherTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(pairMatch.ReferenceSourceColumns)));
         end
 
+        function testAutoDetectorFindsManySyntheticRedBlueFixtureMatches(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("kaze", capabilities.AvailableDetectors));
+            projectRoot = fileparts(fileparts(mfilename("fullpath")));
+            imagePath = fullfile(projectRoot, "test_data", "10.tif");
+            testCase.assumeTrue(isfile(imagePath));
+            scene = ProjectionAlignmentSyntheticHarness.createSceneFromRgbTiff( ...
+                imagePath);
+            options = ProjectionAlignmentOptions.validate(struct( ...
+                Detector=struct(Method="auto", MaxFeatures=1000), ...
+                Matcher=struct(MaxRatio=0.9), ...
+                FilterPipeline=struct(GeometricMethod="none")));
+            request = ProjectionAlignmentRequest.validate(struct( ...
+                Scene=scene, LayerIndices=[2 1], ReferenceLayerIndex=1, ...
+                AnalysisBands=[1 1], Options=options));
+            working = ProjectionAlignmentWorkingImageRenderer.render( ...
+                scene, request, struct(OutputSize=[512 512], ...
+                MaxOutputPixels=512 * 512));
+
+            result = ProjectionAlignmentFeatureMatcher.match(working, options);
+            filtered = ProjectionAlignmentMatchFilter.filter(result, options);
+
+            testCase.verifyEqual(result.Detector.Method, "kaze");
+            testCase.verifyGreaterThan(filtered.Matches.Count, 40);
+            testCase.verifyGreaterThan( ...
+                result.Diagnostics.PairDiagnostics.Confidence, 0.75);
+        end
+
         function testConstantImagesReturnEmptyMatches(testCase)
             working = ProjectionAlignmentFeatureMatcherTest.makeConstantWorkingImages();
             options = struct(Detector=struct(Method="sift", MaxFeatures=100));

@@ -104,6 +104,52 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 "No enabled alignment pairs"));
         end
 
+        function testRoiButtonDrawsProjectionPlaneRectangle(testCase)
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(false);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            ax = findall(fig, "Type", "axes");
+            roiButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentRoiButton");
+            clearRoiButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentClearRoiButton");
+            statusLabel = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentStatusLabel");
+
+            roiButton.ButtonPushedFcn(roiButton, struct());
+            drawnow
+
+            roiLine = findall(fig, "Tag", "ProjectionViewerAlignmentRoi");
+            testCase.verifyNumElements(roiLine, 1);
+            testCase.verifyEqual(string(roiLine.Type), "line");
+            testCase.verifyNumElements(roiLine.XData, 5);
+            testCase.verifyEqual(roiLine.XData(1), roiLine.XData(end), ...
+                AbsTol=ProjectionViewerAlignmentWorkflowTest.Tol);
+            testCase.verifyEqual(roiLine.YData(1), roiLine.YData(end), ...
+                AbsTol=ProjectionViewerAlignmentWorkflowTest.Tol);
+            testCase.verifyEqual(roiLine.ZData(1), roiLine.ZData(end), ...
+                AbsTol=ProjectionViewerAlignmentWorkflowTest.Tol);
+            testCase.verifyTrue(all(isfinite(roiLine.XData)));
+            testCase.verifyTrue(all(isfinite(roiLine.YData)));
+            testCase.verifyTrue(all(isfinite(roiLine.ZData)));
+            testCase.verifyTrue(all(roiLine.XData >= ax.XLim(1) & ...
+                roiLine.XData <= ax.XLim(2)));
+            testCase.verifyTrue(all(roiLine.YData >= ax.YLim(1) & ...
+                roiLine.YData <= ax.YLim(2)));
+            testCase.verifyTrue(contains(string(statusLabel.Text), "ROI active"));
+
+            clearRoiButton.ButtonPushedFcn(clearRoiButton, struct());
+            drawnow
+
+            testCase.verifyEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentRoi"));
+            testCase.verifyTrue(contains(string(statusLabel.Text), ...
+                "ROI cleared"));
+        end
+
         function testAlignmentRunPreviewApplyAndRevertThroughControls(testCase)
             capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
             testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));

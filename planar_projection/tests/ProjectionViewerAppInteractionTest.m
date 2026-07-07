@@ -323,12 +323,17 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findBlendDropDown(fig));
         end
 
-        function testBlendModeContextMenuUpdatesSelectedLayer(testCase)
+        function testBlendModeContextMenuUpdatesVisibleLayersAndPreview(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
             drawnow
 
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
+                ax, scene);
             anaglyphBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAnaglyphBlendMenuItem");
             alphaBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
@@ -338,17 +343,43 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
             state = app.exportState();
 
+            testCase.verifyEqual(state.Layers(1).BlendMode, "redBlueAnaglyph");
             testCase.verifyEqual(state.Layers(2).BlendMode, "redBlueAnaglyph");
             testCase.verifyEqual(string(anaglyphBlendMenu.Checked), "on");
             testCase.verifyEqual(string(alphaBlendMenu.Checked), "off");
+            testCase.verifyEqual(layerSurfaces(1).CData(:, :, 2), ...
+                zeros(size(layerSurfaces(1).CData(:, :, 2)), ...
+                "like", layerSurfaces(1).CData));
+            testCase.verifyEqual(layerSurfaces(1).CData(:, :, 3), ...
+                zeros(size(layerSurfaces(1).CData(:, :, 3)), ...
+                "like", layerSurfaces(1).CData));
+            testCase.verifyEqual(layerSurfaces(2).CData(:, :, 1), ...
+                zeros(size(layerSurfaces(2).CData(:, :, 1)), ...
+                "like", layerSurfaces(2).CData));
+            testCase.verifyEqual(layerSurfaces(2).CData(:, :, 2), ...
+                zeros(size(layerSurfaces(2).CData(:, :, 2)), ...
+                "like", layerSurfaces(2).CData));
+            testCase.verifyEqual(layerSurfaces(1).FaceAlpha, 0.55, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerSurfaces(2).FaceAlpha, 0.55, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
 
             alphaBlendMenu.MenuSelectedFcn(alphaBlendMenu, struct());
             drawnow
             state = app.exportState();
 
+            testCase.verifyEqual(state.Layers(1).BlendMode, "alpha");
             testCase.verifyEqual(state.Layers(2).BlendMode, "alpha");
             testCase.verifyEqual(string(anaglyphBlendMenu.Checked), "off");
             testCase.verifyEqual(string(alphaBlendMenu.Checked), "on");
+            testCase.verifyEqual(layerSurfaces(1).CData, ...
+                scene.layers(1).DisplayTexture);
+            testCase.verifyEqual(layerSurfaces(2).CData, ...
+                scene.layers(2).DisplayTexture);
+            testCase.verifyEqual(layerSurfaces(1).FaceAlpha, 1, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(layerSurfaces(2).FaceAlpha, 1, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
         function testLayerOrderButtonsSwapAdjacentLayers(testCase)

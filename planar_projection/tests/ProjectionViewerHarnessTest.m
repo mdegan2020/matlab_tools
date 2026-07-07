@@ -9,6 +9,7 @@ classdef ProjectionViewerHarnessTest < matlab.unittest.TestCase
         function addSourceToPath(testCase)
             projectRoot = fileparts(fileparts(mfilename("fullpath")));
             srcFolder = fullfile(projectRoot, "src");
+            testCase.applyFixture(matlab.unittest.fixtures.PathFixture(projectRoot));
             testCase.applyFixture(matlab.unittest.fixtures.PathFixture(srcFolder));
         end
     end
@@ -187,6 +188,102 @@ classdef ProjectionViewerHarnessTest < matlab.unittest.TestCase
             testCase.verifyEqual(scene.renderOrigin, customPlane.P0);
         end
 
+        function testRealDataOptionsExposeDefaultsAndOverrides(testCase)
+            options = ProjectionViewerHarness.realDataOptions( ...
+                struct(RowStride=4, ColumnStride=5, FrameFocalLength=2, ...
+                CoordinateFrame="ecef", InterpolationMethod="nearest"));
+
+            testCase.verifyEqual(options.RowStride, 4);
+            testCase.verifyEqual(options.ColumnStride, 5);
+            testCase.verifyEqual(options.FrameFocalLength, 2, ...
+                AbsTol=ProjectionViewerHarnessTest.Tol);
+            testCase.verifyEqual(options.CoordinateFrame, "ecef");
+            testCase.verifyEqual(options.InterpolationMethod, "nearest");
+            testCase.verifyTrue(isstruct(options.Metadata));
+        end
+
+        function testCreateRealDataSceneBuildsGridBackedLayersAndCamera(testCase)
+            [layerNames, imageDataList, geometryDefinitions, projectionPlane, ...
+                options] = ProjectionViewerHarnessTest.makeRealDataInputs();
+            expectedCameraOrigin = mean([ ...
+                geometryDefinitions{1}.NominalSceneCenter, ...
+                geometryDefinitions{2}.NominalSceneCenter], 2);
+            expectedCameraAxis = projectionPlane.P0 - expectedCameraOrigin;
+            expectedCameraAxis = expectedCameraAxis / norm(expectedCameraAxis);
+
+            scene = ProjectionViewerHarness.createRealDataScene( ...
+                layerNames, imageDataList, geometryDefinitions, ...
+                projectionPlane, options);
+            [G, V] = scene.layers(2).SourceGeometry.SampleFcn([1 3 5], [1 4 7]);
+
+            testCase.verifyNumElements(scene.layers, 2);
+            testCase.verifyEqual([scene.layers.Name], layerNames);
+            testCase.verifyEqual(scene.layers(1).Image, imageDataList{1});
+            testCase.verifyEqual(scene.layers(2).Image, imageDataList{2});
+            testCase.verifyEqual(scene.layers(1).BaseProjectionPlane, projectionPlane);
+            testCase.verifyEqual(scene.layers(2).CurrentProjectionPlane, projectionPlane);
+            testCase.verifyEqual(scene.renderOrigin, projectionPlane.P0);
+            testCase.verifyEqual(scene.frameCamera.G0, expectedCameraOrigin, ...
+                AbsTol=ProjectionViewerHarnessTest.Tol);
+            testCase.verifyEqual(scene.frameCamera.V0, expectedCameraAxis, ...
+                AbsTol=ProjectionViewerHarnessTest.Tol);
+            testCase.verifyEqual(scene.layers(1).SourceGeometry.NominalSceneCenter, ...
+                geometryDefinitions{1}.NominalSceneCenter);
+            testCase.verifySize(G, [3 3]);
+            testCase.verifySize(V, [3 3 3]);
+            testCase.verifyEqual(squeeze(sqrt(sum(V.^2, 1))), ones(3, 3), ...
+                AbsTol=ProjectionViewerHarnessTest.Tol);
+        end
+
+        function testCreateRealSourceGeometryAcceptsPublicGeometryAliases(testCase)
+            [~, imageDataList, geometryDefinitions] = ...
+                ProjectionViewerHarnessTest.makeRealDataInputs();
+            geometryDefinition = geometryDefinitions{1};
+            geometryDefinition.RowIndices = geometryDefinition.RowPostIndices;
+            geometryDefinition.ColumnIndices = geometryDefinition.ColumnPostIndices;
+            geometryDefinition.Origins = geometryDefinition.ViewVectorOrigins;
+            geometryDefinition = rmfield(geometryDefinition, ...
+                {'RowPostIndices', 'ColumnPostIndices', 'ViewVectorOrigins'});
+            imageSize = [size(imageDataList{1}, 1), size(imageDataList{1}, 2)];
+
+            sourceGeometry = ProjectionViewerHarness.createRealSourceGeometry( ...
+                imageSize, geometryDefinition);
+
+            testCase.verifyEqual(sourceGeometry.RowPostIndices, ...
+                geometryDefinitions{1}.RowPostIndices);
+            testCase.verifyEqual(sourceGeometry.ColumnPostIndices, ...
+                geometryDefinitions{1}.ColumnPostIndices);
+            testCase.verifyEqual(sourceGeometry.ViewVectorOrigins, ...
+                geometryDefinitions{1}.ViewVectorOrigins);
+            testCase.verifyEqual(sourceGeometry.NominalSceneCenter, ...
+                geometryDefinitions{1}.NominalSceneCenter);
+        end
+
+        function testCreateRealDataSceneRequiresNominalSceneCenter(testCase)
+            [layerNames, imageDataList, geometryDefinitions, projectionPlane, ...
+                options] = ProjectionViewerHarnessTest.makeRealDataInputs();
+            geometryDefinitions{1} = rmfield(geometryDefinitions{1}, ...
+                "NominalSceneCenter");
+
+            testCase.verifyError( ...
+                @() ProjectionViewerHarness.createRealDataScene( ...
+                layerNames, imageDataList, geometryDefinitions, ...
+                projectionPlane, options), ...
+                "ProjectionViewerHarness:invalidGeometryDefinition");
+        end
+
+        function testCreateRealDataSceneRequiresUint8Imagery(testCase)
+            [layerNames, imageDataList, geometryDefinitions, projectionPlane, ...
+                options] = ProjectionViewerHarnessTest.makeRealDataInputs();
+            imageDataList{1} = double(imageDataList{1});
+
+            testCase.verifyError( ...
+                @() ProjectionViewerHarness.createRealDataScene( ...
+                layerNames, imageDataList, geometryDefinitions, ...
+                projectionPlane, options), ...
+                "ProjectionViewerHarness:invalidRealImage");
+        end
+
         function testApplyProjectionPlaneUpdatesLayersAndFrameCamera(testCase)
             imageData = ones(4, 5);
             scene = ProjectionViewerHarness.createSceneFromImage( ...
@@ -257,6 +354,53 @@ classdef ProjectionViewerHarnessTest < matlab.unittest.TestCase
         function plane = makeCustomPlane()
             plane = PlanarProjection.definePlaneFromBasis( ...
                 [9000; 10; 20], [0; 1; 0], [0; 0; 1]);
+        end
+
+        function [layerNames, imageDataList, geometryDefinitions, ...
+                projectionPlane, options] = makeRealDataInputs()
+            layerNames = ["Forward look", "Aft look"];
+            imageDataList = { ...
+                uint8(reshape(1:35, 5, 7)), ...
+                uint8(reshape(1:105, 5, 7, 3))};
+            geometryDefinitions = { ...
+                ProjectionViewerHarnessTest.makeRealGeometryDefinition( ...
+                [5 7], [10; -2; 1], 0), ...
+                ProjectionViewerHarnessTest.makeRealGeometryDefinition( ...
+                [5 7], [14; 2; 3], 0.02)};
+            projectionPlane = PlanarProjection.definePlaneFromBasis( ...
+                [100; 0; 0], [0; 1; 0], [0; 0; 1]);
+            options = ProjectionViewerHarness.realDataOptions( ...
+                struct(RowStride=2, ColumnStride=3, FrameFocalLength=2));
+        end
+
+        function geometryDefinition = makeRealGeometryDefinition( ...
+                imageSize, nominalSceneCenter, columnTilt)
+            rowPosts = [1 ceil(imageSize(1) / 2) imageSize(1)];
+            columnPosts = [1 ceil(imageSize(2) / 2) imageSize(2)];
+            origins = [ ...
+                nominalSceneCenter(1) + zeros(1, numel(columnPosts)); ...
+                nominalSceneCenter(2) + 0.5 * (columnPosts - columnPosts(2)); ...
+                nominalSceneCenter(3) + 0.25 * (columnPosts - columnPosts(2))];
+            viewVectors = zeros(3, numel(rowPosts), numel(columnPosts));
+            centerRow = (imageSize(1) + 1) / 2;
+            centerColumn = (imageSize(2) + 1) / 2;
+            for rowIndex = 1:numel(rowPosts)
+                for columnIndex = 1:numel(columnPosts)
+                    viewVectors(:, rowIndex, columnIndex) = [1; ...
+                        0.01 * (rowPosts(rowIndex) - centerRow); ...
+                        columnTilt + 0.005 * ...
+                        (columnPosts(columnIndex) - centerColumn)];
+                end
+            end
+            viewVectors = viewVectors ./ sqrt(sum(viewVectors.^2, 1));
+
+            geometryDefinition = struct();
+            geometryDefinition.RowPostIndices = rowPosts;
+            geometryDefinition.ColumnPostIndices = columnPosts;
+            geometryDefinition.ViewVectorOrigins = origins;
+            geometryDefinition.ViewVectors = viewVectors;
+            geometryDefinition.NominalSceneCenter = nominalSceneCenter;
+            geometryDefinition.Metadata = struct(Source="unit-test");
         end
 
         function center = meshCenter(mesh)

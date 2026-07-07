@@ -104,6 +104,125 @@ classdef ProjectionViewerHarness
             scene.layers = layers;
         end
 
+        function options = realDataOptions(overrides)
+            %realDataOptions Return defaults for programmatic real-data scenes.
+            if nargin < 1
+                overrides = struct();
+            end
+
+            options = struct();
+            options.RowStride = 16;
+            options.ColumnStride = 8;
+            options.FrameFocalLength = 1;
+            options.CoordinateFrame = "real-world";
+            options.InterpolationMethod = "linear";
+            options.ReferenceOrigin = [];
+            options.OpticalAxis = [];
+            options.PlatformDirection = [];
+            options.RowAxis = [];
+            options.ImageXAxis = [];
+            options.ImageYAxis = [];
+            options.GSD = [];
+            options.PlatformStepMeters = [];
+            options.NominalRange = [];
+            options.IFOVDegrees = [];
+            options.IFOVRadians = [];
+            options.Metadata = struct();
+
+            options = ProjectionViewerHarness.mergeRealDataOptions( ...
+                options, overrides);
+        end
+
+        function scene = createRealDataScene(layerNames, imageDataList, ...
+                geometryDefinitions, projectionPlane, options)
+            %createRealDataScene Build a viewer scene from real imagery and geometry.
+            if nargin < 5
+                options = ProjectionViewerHarness.realDataOptions();
+            else
+                options = ProjectionViewerHarness.realDataOptions(options);
+            end
+
+            projectionPlane = ProjectionViewerHarness.validateProjectionPlane( ...
+                projectionPlane);
+            imageDataList = ProjectionViewerHarness.normalizeImageDataList( ...
+                imageDataList);
+            layerCount = numel(imageDataList);
+            layerNames = ProjectionViewerHarness.normalizeLayerNames( ...
+                layerNames, layerCount);
+            geometryDefinitions = ...
+                ProjectionViewerHarness.normalizeGeometryDefinitions( ...
+                geometryDefinitions, layerCount);
+
+            for layerIndex = 1:layerCount
+                ProjectionViewerHarness.validateRealImageData( ...
+                    imageDataList{layerIndex});
+            end
+
+            nominalSceneCenters = zeros(3, layerCount);
+            for layerIndex = 1:layerCount
+                imageData = imageDataList{layerIndex};
+                imageSize = [size(imageData, 1), size(imageData, 2)];
+                sourceGeometry = ProjectionViewerHarness.createRealSourceGeometry( ...
+                    imageSize, geometryDefinitions{layerIndex}, options);
+                nominalSceneCenters(:, layerIndex) = ...
+                    sourceGeometry.NominalSceneCenter;
+                sourceGeometry.LayerIndex = layerIndex;
+                sourceGeometry.LayerCount = layerCount;
+                sourceGeometry.Metadata.LayerIndex = layerIndex;
+                sourceGeometry.Metadata.LayerCount = layerCount;
+                sourceGeometry.Metadata.LayerName = layerNames(layerIndex);
+                meshSampling = ProjectionViewerHarness.createMeshSampling( ...
+                    imageSize, options.RowStride, options.ColumnStride);
+                layerOptions = struct(Name=layerNames(layerIndex));
+                layer = ProjectionViewerHarness.createLayer( ...
+                    imageData, "", sourceGeometry, projectionPlane, ...
+                    meshSampling, layerOptions);
+                if layerIndex == 1
+                    layers = layer;
+                else
+                    layers(layerIndex) = layer;
+                end
+            end
+
+            preview = ProjectionViewerHarness.createPreviewMetadata(layers);
+            renderOptions = ProjectionViewerHarness.defaultRenderOptions();
+
+            scene = struct();
+            scene.frameCamera = ProjectionViewerHarness.createRealDataFrameCamera( ...
+                projectionPlane, nominalSceneCenters, options.FrameFocalLength);
+            scene.renderOrigin = projectionPlane.P0;
+            scene.preview = preview;
+            scene.renderOptions = renderOptions;
+            scene.layers = layers;
+        end
+
+        function sourceGeometry = createRealSourceGeometry(imageSize, ...
+                geometryDefinition, options)
+            %createRealSourceGeometry Adapt sparse real geometry to SampleFcn.
+            if nargin < 3
+                options = ProjectionViewerHarness.realDataOptions();
+            else
+                options = ProjectionViewerHarness.realDataOptions(options);
+            end
+
+            imageSize = ProjectionViewerHarness.validateImageSize(imageSize);
+            geometryDefinition = ProjectionViewerHarness.validateRealGeometryDefinition( ...
+                geometryDefinition);
+            sourceOptions = ProjectionViewerHarness.realSourceOptions( ...
+                options, geometryDefinition);
+            sourceGeometry = ProjectionSourceGeometry.fromGrid( ...
+                imageSize, geometryDefinition.RowPostIndices, ...
+                geometryDefinition.ColumnPostIndices, ...
+                geometryDefinition.ViewVectorOrigins, ...
+                geometryDefinition.ViewVectors, sourceOptions);
+            sourceGeometry.NominalSceneCenter = geometryDefinition.NominalSceneCenter;
+            sourceGeometry.ViewVectorOrigins = geometryDefinition.ViewVectorOrigins;
+            sourceGeometry.Metadata.NominalSceneCenter = ...
+                geometryDefinition.NominalSceneCenter;
+            sourceGeometry.Metadata.GeometryDefinitionFormat = ...
+                "ProjectionViewerRealDataGeometry";
+        end
+
         function scene = applyProjectionPlane(scene, projectionPlane)
             %applyProjectionPlane Rebase every scene layer onto an explicit plane.
             projectionPlane = ProjectionViewerHarness.validateProjectionPlane(projectionPlane);
@@ -359,6 +478,40 @@ classdef ProjectionViewerHarness
             end
         end
 
+        function layerNames = normalizeLayerNames(layerNames, layerCount)
+            if iscell(layerNames)
+                layerNames = string(layerNames);
+            elseif ischar(layerNames) || isstring(layerNames)
+                layerNames = string(layerNames);
+            else
+                error("ProjectionViewerHarness:invalidLayerName", ...
+                    "Layer names must be a string array, character vector, or cell array of character vectors.");
+            end
+
+            layerNames = reshape(layerNames, 1, []);
+            if numel(layerNames) ~= layerCount || any(strlength(layerNames) == 0)
+                error("ProjectionViewerHarness:invalidLayerName", ...
+                    "Layer names must contain one nonempty name per image.");
+            end
+        end
+
+        function geometryDefinitions = normalizeGeometryDefinitions( ...
+                geometryDefinitions, layerCount)
+            if iscell(geometryDefinitions)
+                geometryDefinitions = reshape(geometryDefinitions, 1, []);
+            elseif isstruct(geometryDefinitions)
+                geometryDefinitions = reshape(num2cell(geometryDefinitions), 1, []);
+            else
+                error("ProjectionViewerHarness:invalidGeometryDefinition", ...
+                    "Geometry definitions must be a cell array or struct array.");
+            end
+
+            if numel(geometryDefinitions) ~= layerCount
+                error("ProjectionViewerHarness:invalidGeometryDefinition", ...
+                    "The number of geometry definitions must match the number of images.");
+            end
+        end
+
         function name = layerName(optionName, imagePath, layerIndex, layerCount)
             optionNames = string(optionName);
             if isempty(optionNames)
@@ -504,6 +657,171 @@ classdef ProjectionViewerHarness
             metadata.OpticalYawRadians = options.OpticalYawRadians;
         end
 
+        function preview = createPreviewMetadata(layers)
+            preview = struct();
+            preview.MeshSampling = layers(1).MeshSampling;
+            preview.LayerMeshSampling = [layers.MeshSampling];
+            preview.DisplayTextureSize = size(layers(1).DisplayTexture);
+            preview.LayerDisplayTextureSize = arrayfun( ...
+                @(layer) size(layer.DisplayTexture), layers, UniformOutput=false);
+        end
+
+        function renderOptions = defaultRenderOptions()
+            renderOptions = struct();
+            renderOptions.Interpolation = "bilinear";
+            renderOptions.UseGPU = false;
+            renderOptions.InvalidIntersectionPolicy = "error";
+        end
+
+        function frameCamera = createRealDataFrameCamera( ...
+                projectionPlane, nominalSceneCenters, frameFocalLength)
+            if ~isnumeric(nominalSceneCenters) || ...
+                    size(nominalSceneCenters, 1) ~= 3 || ...
+                    isempty(nominalSceneCenters) || ...
+                    any(~isfinite(nominalSceneCenters), "all")
+                error("ProjectionViewerHarness:invalidGeometryDefinition", ...
+                    "Nominal scene centers must form a finite 3 x N numeric array.");
+            end
+
+            cameraOrigin = mean(double(nominalSceneCenters), 2);
+            cameraAxis = ProjectionViewerHarness.unitVector( ...
+                projectionPlane.P0 - cameraOrigin, "FrameCameraViewDirection");
+            frameCamera = PlanarProjection.defineFrameCamera( ...
+                cameraOrigin, cameraAxis, frameFocalLength, projectionPlane);
+        end
+
+        function options = mergeRealDataOptions(options, overrides)
+            if isempty(overrides)
+                overrides = struct();
+            end
+            if ~isstruct(overrides) || ~isscalar(overrides)
+                error("ProjectionViewerHarness:invalidRealDataOptions", ...
+                    "Real-data options must be a scalar struct.");
+            end
+
+            names = fieldnames(overrides);
+            for k = 1:numel(names)
+                options.(names{k}) = overrides.(names{k});
+            end
+
+            options.RowStride = ProjectionViewerHarness.validatePositiveInteger( ...
+                options.RowStride, "RowStride");
+            options.ColumnStride = ProjectionViewerHarness.validatePositiveInteger( ...
+                options.ColumnStride, "ColumnStride");
+            options.FrameFocalLength = ProjectionViewerHarness.validatePositiveScalar( ...
+                options.FrameFocalLength, "FrameFocalLength");
+            options.CoordinateFrame = ProjectionViewerHarness.validateScalarString( ...
+                options.CoordinateFrame, "CoordinateFrame");
+            options.InterpolationMethod = lower( ...
+                ProjectionViewerHarness.validateScalarString( ...
+                options.InterpolationMethod, "InterpolationMethod"));
+            if ~any(options.InterpolationMethod == ["linear", "nearest"])
+                error("ProjectionViewerHarness:invalidRealDataOptions", ...
+                    "InterpolationMethod must be linear or nearest.");
+            end
+            if ~isstruct(options.Metadata) || ~isscalar(options.Metadata)
+                error("ProjectionViewerHarness:invalidRealDataOptions", ...
+                    "Metadata must be a scalar struct.");
+            end
+
+            vectorOptionNames = ["ReferenceOrigin", "OpticalAxis", ...
+                "PlatformDirection", "RowAxis", "ImageXAxis", "ImageYAxis"];
+            for optionName = vectorOptionNames
+                if ~isempty(options.(optionName))
+                    options.(optionName) = ProjectionViewerHarness.validateVector( ...
+                        options.(optionName), optionName);
+                end
+            end
+
+            scalarOptionNames = ["GSD", "PlatformStepMeters", ...
+                "NominalRange", "IFOVDegrees", "IFOVRadians"];
+            for optionName = scalarOptionNames
+                if ~isempty(options.(optionName))
+                    options.(optionName) = ProjectionViewerHarness.validatePositiveScalar( ...
+                        options.(optionName), optionName);
+                end
+            end
+        end
+
+        function geometryDefinition = validateRealGeometryDefinition( ...
+                geometryDefinition)
+            if ~isstruct(geometryDefinition) || ~isscalar(geometryDefinition)
+                error("ProjectionViewerHarness:invalidGeometryDefinition", ...
+                    "Each geometry definition must be a scalar struct.");
+            end
+
+            geometryDefinition.RowPostIndices = ...
+                ProjectionViewerHarness.validatePostIndexVector( ...
+                ProjectionViewerHarness.requiredGeometryField( ...
+                geometryDefinition, ["RowPostIndices", "RowIndices"], ...
+                "row post indices"), "RowPostIndices");
+            geometryDefinition.ColumnPostIndices = ...
+                ProjectionViewerHarness.validatePostIndexVector( ...
+                ProjectionViewerHarness.requiredGeometryField( ...
+                geometryDefinition, ["ColumnPostIndices", "ColumnIndices"], ...
+                "column post indices"), "ColumnPostIndices");
+            geometryDefinition.ViewVectorOrigins = ...
+                ProjectionViewerHarness.validateOriginPosts( ...
+                ProjectionViewerHarness.requiredGeometryField( ...
+                geometryDefinition, ["ViewVectorOrigins", "Origins"], ...
+                "view-vector origins"));
+            geometryDefinition.ViewVectors = ...
+                ProjectionViewerHarness.validateViewVectorPosts( ...
+                ProjectionViewerHarness.requiredGeometryField( ...
+                geometryDefinition, "ViewVectors", "view vectors"));
+            geometryDefinition.NominalSceneCenter = ...
+                ProjectionViewerHarness.validateThreeVector( ...
+                ProjectionViewerHarness.requiredGeometryField( ...
+                geometryDefinition, ["NominalSceneCenter", "SceneCenter"], ...
+                "nominal scene center"), "NominalSceneCenter");
+        end
+
+        function sourceOptions = realSourceOptions(options, geometryDefinition)
+            sourceOptions = struct();
+            optionNames = ["CoordinateFrame", "InterpolationMethod", ...
+                "ReferenceOrigin", "OpticalAxis", "PlatformDirection", ...
+                "RowAxis", "ImageXAxis", "ImageYAxis", "GSD", ...
+                "PlatformStepMeters", "NominalRange", "IFOVDegrees", ...
+                "IFOVRadians"];
+            for optionName = optionNames
+                sourceOptions.(optionName) = options.(optionName);
+                if isfield(geometryDefinition, optionName)
+                    sourceOptions.(optionName) = geometryDefinition.(optionName);
+                end
+            end
+
+            sourceOptions.Metadata = options.Metadata;
+            if isfield(geometryDefinition, "Metadata")
+                if ~isstruct(geometryDefinition.Metadata) || ...
+                        ~isscalar(geometryDefinition.Metadata)
+                    error("ProjectionViewerHarness:invalidGeometryDefinition", ...
+                        "Geometry Metadata must be a scalar struct.");
+                end
+                metadataNames = fieldnames(geometryDefinition.Metadata);
+                for k = 1:numel(metadataNames)
+                    sourceOptions.Metadata.(metadataNames{k}) = ...
+                        geometryDefinition.Metadata.(metadataNames{k});
+                end
+            end
+
+            sourceOptions = ProjectionViewerHarness.mergeRealDataOptions( ...
+                ProjectionViewerHarness.realDataOptions(), sourceOptions);
+        end
+
+        function value = requiredGeometryField(geometryDefinition, fieldNames, label)
+            fieldNames = string(fieldNames);
+            for k = 1:numel(fieldNames)
+                fieldName = fieldNames(k);
+                if isfield(geometryDefinition, fieldName)
+                    value = geometryDefinition.(fieldName);
+                    return
+                end
+            end
+
+            error("ProjectionViewerHarness:invalidGeometryDefinition", ...
+                "Each geometry definition must include %s.", label);
+        end
+
         function [G, V] = sampleSyntheticGeometry(geometryData, rowIndices, columnIndices)
             rowIndices = ProjectionViewerHarness.validateIndices( ...
                 rowIndices, geometryData.ImageSize(1), "rowIndices");
@@ -528,6 +846,14 @@ classdef ProjectionViewerHarness
                 error("ProjectionViewerHarness:unsupportedBandCount", ...
                     "Image data must be single-band or RGB.");
             end
+        end
+
+        function validateRealImageData(imageData)
+            if ~isa(imageData, "uint8")
+                error("ProjectionViewerHarness:invalidRealImage", ...
+                    "Real-data images must be uint8 single-band or RGB arrays.");
+            end
+            ProjectionViewerHarness.validateImageData(imageData);
         end
 
         function imageSize = validateImageSize(imageSize)
@@ -582,6 +908,58 @@ classdef ProjectionViewerHarness
                     "%s must be a finite numeric 3x1 vector.", name);
             end
             value = double(value);
+        end
+
+        function value = validateThreeVector(value, name)
+            if ~isnumeric(value) || numel(value) ~= 3 || ...
+                    any(~isfinite(value), "all")
+                error("ProjectionViewerHarness:invalidGeometryDefinition", ...
+                    "%s must be a finite numeric 3-vector.", name);
+            end
+            value = double(value(:));
+        end
+
+        function value = validateScalarString(value, name)
+            if ~(ischar(value) || isstring(value)) || ...
+                    ~isscalar(string(value)) || strlength(string(value)) == 0
+                error("ProjectionViewerHarness:invalidRealDataOptions", ...
+                    "%s must be a nonempty scalar string.", name);
+            end
+            value = string(value);
+        end
+
+        function indices = validatePostIndexVector(indices, name)
+            if ~isnumeric(indices) || isempty(indices) || ~isvector(indices) || ...
+                    any(~isfinite(indices)) || any(indices < 1) || ...
+                    any(fix(indices) ~= indices)
+                error("ProjectionViewerHarness:invalidGeometryDefinition", ...
+                    "%s must contain finite positive integer image indices.", name);
+            end
+
+            indices = double(indices(:).');
+            if any(diff(indices) <= 0)
+                error("ProjectionViewerHarness:invalidGeometryDefinition", ...
+                    "%s must be strictly increasing.", name);
+            end
+        end
+
+        function origins = validateOriginPosts(origins)
+            if ~isnumeric(origins) || size(origins, 1) ~= 3 || ...
+                    isempty(origins) || any(~isfinite(origins), "all")
+                error("ProjectionViewerHarness:invalidGeometryDefinition", ...
+                    "View-vector origins must be a finite 3 x N numeric array.");
+            end
+            origins = double(origins);
+        end
+
+        function viewVectors = validateViewVectorPosts(viewVectors)
+            if ~isnumeric(viewVectors) || size(viewVectors, 1) ~= 3 || ...
+                    isempty(viewVectors) || ndims(viewVectors) > 3 || ...
+                    any(~isfinite(viewVectors), "all")
+                error("ProjectionViewerHarness:invalidGeometryDefinition", ...
+                    "View vectors must be a finite 3 x M x N numeric array.");
+            end
+            viewVectors = double(viewVectors);
         end
 
         function mode = validateProjectionPlaneMode(mode)

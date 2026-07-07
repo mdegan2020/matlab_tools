@@ -28,6 +28,7 @@ src/ProjectionBackendOutputWriter.m Backend image/mask/metadata writers
 src/ProjectionBackendTiledRenderer.m Backend serial tiled CPU renderer
 src/ProjectionBackendProcessor.m Backend job invocation facade
 tests/PlanarProjectionTest.m    Class-based unit tests
+runProjectionViewer.m           Programmatic launcher for real image/geometry data
 runProjectionViewerPrototype.m  Launcher for the local prototype TIFF
 validateProjectionBackendJob.m  Validate backend jobs without rendering
 scripts/backend_interactive_evaluation.m Sectioned backend evaluation script
@@ -229,6 +230,25 @@ columnIndices)` contract. For sparse camera-model posts, use
 `ProjectionSourceGeometry.fromGrid` to adapt uniformly spaced row/column geometry
 posts into the same sampled-origin and sampled-view-vector interface used by the
 mesh builder.
+
+For programmatic real-data launch, pass layer names, in-memory `uint8` images,
+one sparse geometry definition per image, and the projection plane:
+
+```matlab
+options = ProjectionViewerHarness.realDataOptions();
+geometryDefinitions{1} = struct( ...
+    RowPostIndices=rowPostIndices, ...
+    ColumnPostIndices=columnPostIndices, ...
+    ViewVectorOrigins=viewVectorOrigins, ...  % 3 x numColumnPosts
+    ViewVectors=viewVectors, ...              % 3 x numRowPosts x numColumnPosts
+    NominalSceneCenter=nominalSceneCenter);
+
+app = runProjectionViewer(layerNames, imageDataList, ...
+    geometryDefinitions, projectionPlane, options);
+```
+
+The viewer frame camera is placed at the arithmetic mean of the per-layer
+`NominalSceneCenter` vectors and looks toward the supplied projection plane.
 
 ## Backend Processor Workflow
 
