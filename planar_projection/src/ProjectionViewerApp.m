@@ -55,6 +55,7 @@ classdef ProjectionViewerApp < handle
         HelpMenuItem
         CrosshairMenuItem
         AlignmentPanelMenuItem
+        ClearAlignmentOverlaysMenuItem
         BlendModeMenu
         AlphaBlendMenuItem
         AnaglyphBlendMenuItem
@@ -88,6 +89,7 @@ classdef ProjectionViewerApp < handle
         AlignmentPreviewButton matlab.ui.control.Button
         AlignmentApplyButton matlab.ui.control.Button
         AlignmentRevertButton matlab.ui.control.Button
+        AlignmentClearOverlaysButton matlab.ui.control.Button
         AlignmentStatusLabel matlab.ui.control.Label
         AlignmentPairTable matlab.ui.control.Table
         AlignmentResult struct = struct()
@@ -401,13 +403,13 @@ classdef ProjectionViewerApp < handle
         end
 
         function createAlignmentControls(app)
-            app.AlignmentGrid = uigridlayout(app.GridLayout, [3 14]);
+            app.AlignmentGrid = uigridlayout(app.GridLayout, [3 15]);
             app.AlignmentGrid.Layout.Row = 2;
             app.AlignmentGrid.Layout.Column = 1;
             app.AlignmentGrid.Tag = "ProjectionViewerAlignmentGrid";
             app.AlignmentGrid.RowHeight = {"fit", "fit", 82};
             app.AlignmentGrid.ColumnWidth = {90, 145, 80, 110, 80, 115, ...
-                60, 60, 60, 70, 70, 65, 65, "1x"};
+                60, 60, 60, 70, 70, 65, 65, 70, "1x"};
             app.AlignmentGrid.Padding = [0 0 0 0];
             app.AlignmentGrid.RowSpacing = 4;
             app.AlignmentGrid.ColumnSpacing = 8;
@@ -523,18 +525,25 @@ classdef ProjectionViewerApp < handle
             app.AlignmentRevertButton.Layout.Row = 2;
             app.AlignmentRevertButton.Layout.Column = 13;
 
+            app.AlignmentClearOverlaysButton = uibutton(app.AlignmentGrid, ...
+                Text="Clear", Tooltip="Clear match overlays", ...
+                Tag="ProjectionViewerAlignmentClearOverlaysButton", ...
+                ButtonPushedFcn=@(~, ~) app.clearAlignmentOverlaysFromControls());
+            app.AlignmentClearOverlaysButton.Layout.Row = 2;
+            app.AlignmentClearOverlaysButton.Layout.Column = 14;
+
             app.AlignmentStatusLabel = uilabel(app.AlignmentGrid, ...
                 Text="Alignment not run", ...
                 Tag="ProjectionViewerAlignmentStatusLabel");
             app.AlignmentStatusLabel.Layout.Row = [1 2];
-            app.AlignmentStatusLabel.Layout.Column = 14;
+            app.AlignmentStatusLabel.Layout.Column = 15;
 
             app.AlignmentPairTable = uitable(app.AlignmentGrid, ...
                 Data=app.emptyAlignmentPairTable(), ...
                 ColumnEditable=[true false false false false false false], ...
                 Tag="ProjectionViewerAlignmentPairTable");
             app.AlignmentPairTable.Layout.Row = 3;
-            app.AlignmentPairTable.Layout.Column = [1 14];
+            app.AlignmentPairTable.Layout.Column = [1 15];
 
             app.updateAlignmentLayerItems();
             app.setAlignmentActionEnabled(false);
@@ -1334,6 +1343,11 @@ classdef ProjectionViewerApp < handle
             app.AlignmentOverlayLines = gobjects(0);
         end
 
+        function clearAlignmentOverlaysFromControls(app)
+            app.clearAlignmentOverlays();
+            app.setAlignmentStatus("Alignment overlays cleared.");
+        end
+
         function createImageContextMenu(app)
             app.ImageContextMenu = uicontextmenu(app.UIFigure);
             app.SaveMenuItem = uimenu(app.ImageContextMenu, Text="Save", ...
@@ -1359,6 +1373,10 @@ classdef ProjectionViewerApp < handle
                 Text="Alignment panel", Checked="off", ...
                 MenuSelectedFcn=@(~, ~) app.toggleAlignmentPanel(), ...
                 Tag="ProjectionViewerAlignmentPanelMenuItem");
+            app.ClearAlignmentOverlaysMenuItem = uimenu(app.ImageContextMenu, ...
+                Text="Clear alignment overlays", ...
+                MenuSelectedFcn=@(~, ~) app.clearAlignmentOverlaysFromControls(), ...
+                Tag="ProjectionViewerClearAlignmentOverlaysMenuItem");
             app.BlendModeMenu = uimenu(app.ImageContextMenu, ...
                 Text="Blend mode", Separator="on", ...
                 Tag="ProjectionViewerBlendModeMenu");
