@@ -55,6 +55,11 @@ classdef ProjectionAlignmentMatchFilter
                             ProjectionAlignmentMatchFilter.geometricMask( ...
                             pairMatch, pipeline, keepMask);
                         diagnostics.StageCounts.GeometricOutlier = nnz(keepMask);
+                    case "nativeDisplacement"
+                        keepMask = keepMask & ...
+                            ProjectionAlignmentMatchFilter.nativeDisplacementMask( ...
+                            pairMatch, pipeline, keepMask);
+                        diagnostics.StageCounts.NativeDisplacement = nnz(keepMask);
                     case "radial"
                         keepMask = keepMask & ...
                             ProjectionAlignmentMatchFilter.radialMask( ...
@@ -80,6 +85,7 @@ classdef ProjectionAlignmentMatchFilter
             diagnostics.StageCounts.DescriptorScore = pairMatch.Count;
             diagnostics.StageCounts.RatioUniqueness = pairMatch.Count;
             diagnostics.StageCounts.GeometricOutlier = pairMatch.Count;
+            diagnostics.StageCounts.NativeDisplacement = pairMatch.Count;
             diagnostics.StageCounts.Radial = pairMatch.Count;
         end
 
@@ -124,6 +130,42 @@ classdef ProjectionAlignmentMatchFilter
             residuals = sqrt(sum((displacement - medianDisplacement).^2, 2));
             currentIndices = find(currentMask);
             mask(currentIndices) = residuals <= pipeline.GeometricMaxDistancePixels;
+        end
+
+        function mask = nativeDisplacementMask(pairMatch, pipeline, currentMask)
+            mask = true(pairMatch.Count, 1);
+            if pipeline.NativeDisplacementMethod == "none" || nnz(currentMask) < 3
+                return
+            end
+
+            moving = [pairMatch.MovingSourceColumns(:), ...
+                pairMatch.MovingSourceRows(:)];
+            reference = [pairMatch.ReferenceSourceColumns(:), ...
+                pairMatch.ReferenceSourceRows(:)];
+            displacement = reference - moving;
+            currentDisplacement = displacement(currentMask, :);
+
+            keepCurrent = true(nnz(currentMask), 1);
+            if ~isempty(pipeline.NativeMaxDisplacementPixels)
+                displacementNorms = sqrt(sum(currentDisplacement.^2, 2));
+                keepCurrent = keepCurrent & ...
+                    displacementNorms <= pipeline.NativeMaxDisplacementPixels;
+            end
+
+            if pipeline.NativeDisplacementMethod == "mad"
+                medianDisplacement = median(currentDisplacement, 1);
+                residuals = sqrt(sum((currentDisplacement - ...
+                    medianDisplacement).^2, 2));
+                medianResidual = median(residuals);
+                madResidual = median(abs(residuals - medianResidual));
+                robustScale = max(1.4826 * madResidual, ...
+                    pipeline.NativeMinResidualPixels);
+                threshold = medianResidual + ...
+                    pipeline.NativeMadScale * robustScale;
+                keepCurrent = keepCurrent & residuals <= threshold;
+            end
+
+            mask(currentMask) = keepCurrent;
         end
 
         function mask = radialMask(pairMatch, pipeline, currentMask)

@@ -75,6 +75,8 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(lossDropDown.Value), "projectionPlane2D");
             testCase.verifyEqual(diagnostics.Request.FilterGeometricMethod, ...
                 "similarity");
+            testCase.verifyEqual( ...
+                diagnostics.Request.FilterNativeDisplacementMethod, "mad");
             testCase.verifyEqual(string(roiButton.Enable), "on");
             testCase.verifyEqual(string(clearRoiButton.Enable), "on");
             testCase.verifyEqual(string(clearOverlaysButton.Enable), "on");

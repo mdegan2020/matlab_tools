@@ -80,6 +80,25 @@ classdef ProjectionAlignmentMatchFilterTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(filtered.Matches.IndexPairs(:, 1) <= 20));
         end
 
+        function testNativeDisplacementFilterRejectsNativePixelOutliers(testCase)
+            matchResult = ...
+                ProjectionAlignmentMatchFilterTest.makeCatastrophicOutlierMatchResult();
+            options = struct();
+            options.FilterPipeline = struct( ...
+                Stages="nativeDisplacement", ...
+                NativeDisplacementMethod="mad", ...
+                NativeMadScale=6, ...
+                NativeMinResidualPixels=5);
+
+            filtered = ProjectionAlignmentMatchFilter.filter(matchResult, options);
+
+            testCase.verifyEqual(filtered.Matches.Count, 20);
+            testCase.verifyEqual( ...
+                filtered.Diagnostics.FilterPipeline.StageCounts.NativeDisplacement, ...
+                20);
+            testCase.verifyTrue(all(filtered.Matches.IndexPairs(:, 1) <= 20));
+        end
+
         function testRadialFilterCallbackControlsSurvivingMatches(testCase)
             matchResult = ProjectionAlignmentMatchFilterTest.makeDuplicateMatchResult();
             options = struct();

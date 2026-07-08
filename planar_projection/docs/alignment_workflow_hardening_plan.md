@@ -106,6 +106,12 @@ Acceptance criteria:
   rejects the outliers deterministically.
 - The threshold can be disabled or relaxed from advanced options later.
 
+Implementation note:
+
+- The shared filter pipeline now has a `nativeDisplacement` stage. The GUI
+  default enables the MAD-based native-pixel displacement filter while the
+  engine default keeps the method disabled unless requested.
+
 ### 1.3 Rename and report match states precisely
 
 The current GUI wording can imply that all filtered matches are true inliers.
