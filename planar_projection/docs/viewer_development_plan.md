@@ -53,6 +53,7 @@ buildfile.m
 validateProjectionBackendJob.m
 scripts/backend_interactive_evaluation.m
 docs/backend_app_workflow.md
+docs/alignment_workflow_hardening_plan.md
 docs/backend_milestone_9_custom_gpu_kernel_assessment.md
 ```
 
@@ -748,6 +749,10 @@ Implementation status:
   GUI workflow controls, and backend alignment integration.
 - The remaining alignment items are follow-up quality and sensor-workflow
   decisions, not unstarted milestone gates.
+- Real-data GUI alignment hardening is tracked in
+  `docs/alignment_workflow_hardening_plan.md`. That plan covers staged
+  match/solve controls, stricter outlier filtering, plausible OPK bounds,
+  overlay clearing, and future manual match curation.
 
 ### Auto Alignment Design Decisions
 
@@ -1011,6 +1016,8 @@ Deliverables:
 - per-pair enable/disable controls for multi-image alignment.
 - alignment presets for fast preview versus high-quality solve.
 - documentation for recommended workflows and failure modes.
+- see `docs/alignment_workflow_hardening_plan.md` for the active follow-up
+  feature tree driven by real-data testing.
 
 Feedback checkpoint:
 
@@ -1035,6 +1042,15 @@ corrections. Broader sensor-geometry controls may include platform origin
 offsets, attitude perturbations, scan-angle bias, range/altitude corrections, or
 synthetic-geometry parameter edits. These should keep using the `SampleFcn`
 contract and should not require mesh-builder special cases.
+
+### Auto Alignment Hardening
+
+The next alignment work should follow
+`docs/alignment_workflow_hardening_plan.md`. The current priority is to make
+real-data GUI alignment safer and more inspectable by rejecting catastrophic
+matches, applying conservative OPK bounds, splitting match/filter/solve steps,
+adding clear-overlay controls, and preserving intermediate match state for
+future manual curation.
 
 ### Preview/Exact Comparison Mode
 

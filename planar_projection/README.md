@@ -36,6 +36,7 @@ runProjectionViewerPrototype.m  Launcher for the local prototype TIFF
 runSyntheticAlignmentPrototype.m Launcher for red/blue synthetic alignment scenes
 validateProjectionBackendJob.m  Validate backend jobs without rendering
 scripts/backend_interactive_evaluation.m Sectioned backend evaluation script
+docs/alignment_workflow_hardening_plan.md Real-data GUI alignment hardening plan
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
 runTests.m                      Simple test runner
 buildfile.m                     MATLAB buildtool tasks
@@ -219,6 +220,9 @@ preview the solved OPK corrections, apply or revert them, and save the viewer
 state from the context menu. Common failure modes are too few filtered matches,
 disabled or hidden layers leaving no enabled pairs, an ROI that clips all
 features, or a detector that is unavailable in the current MATLAB installation.
+Real-data alignment quality follow-up work, including staged match/solve
+controls, outlier filtering, OPK bounds, overlay clearing, and future manual
+match curation, is tracked in `docs/alignment_workflow_hardening_plan.md`.
 
 Projection scenes can choose how the initial projection plane is built:
 
@@ -315,7 +319,9 @@ job.Execution = struct(Mode="threads");
 GPU requests are optional. If compatible `gpuArray` support is unavailable, the
 backend records the fallback reason in `GpuInfo` and continues on CPU.
 
-See `docs/backend_app_workflow.md` for the complete app-to-backend workflow and
+See `docs/backend_app_workflow.md` for the complete app-to-backend workflow,
+`docs/alignment_workflow_hardening_plan.md` for the current GUI alignment
+hardening plan, and
 `docs/backend_milestone_9_custom_gpu_kernel_assessment.md` for the current
 custom GPU kernel decision record.
 
