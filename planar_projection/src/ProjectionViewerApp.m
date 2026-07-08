@@ -46,6 +46,7 @@ classdef ProjectionViewerApp < handle
         ResetMenuItem
         HelpMenuItem
         CrosshairMenuItem
+        AlignmentPanelMenuItem
         BlendModeMenu
         AlphaBlendMenuItem
         AnaglyphBlendMenuItem
@@ -230,7 +231,7 @@ classdef ProjectionViewerApp < handle
                 WindowButtonUpFcn=@(~, ~) app.endPan());
 
             app.GridLayout = uigridlayout(app.UIFigure, [3 1]);
-            app.GridLayout.RowHeight = {"1x", "fit", "fit"};
+            app.GridLayout.RowHeight = {"1x", 0, "fit"};
             app.GridLayout.ColumnWidth = {"1x"};
             app.GridLayout.Padding = [8 8 8 8];
             app.GridLayout.RowSpacing = 8;
@@ -245,7 +246,7 @@ classdef ProjectionViewerApp < handle
             app.createCrosshairOverlay();
 
             app.ControlGrid = uigridlayout(app.GridLayout, [2 6]);
-            app.ControlGrid.Layout.Row = 2;
+            app.ControlGrid.Layout.Row = 3;
             app.ControlGrid.Layout.Column = 1;
             app.ControlGrid.RowHeight = {"fit", "fit"};
             app.ControlGrid.ColumnWidth = {420, "1x", "1x", "1x", "1x", ...
@@ -297,10 +298,10 @@ classdef ProjectionViewerApp < handle
             app.TipLabel = uilabel(app.ControlGrid, Text="Tip 0.0 deg");
             app.TipLabel.Layout.Row = 1;
             app.TipLabel.Layout.Column = 2;
-            app.TipSlider = uislider(app.ControlGrid, Limits=[-45 45], Value=0);
+            app.TipSlider = uislider(app.ControlGrid, Limits=[-85 85], Value=0);
             app.TipSlider.Layout.Row = 2;
             app.TipSlider.Layout.Column = 2;
-            app.TipSlider.MajorTicks = -45:15:45;
+            app.TipSlider.MajorTicks = [-85 -45 0 45 85];
             app.TipSlider.ValueChangingFcn = @(source, event) ...
                 app.sliderChanging(source, event, "tip");
             app.TipSlider.ValueChangedFcn = @(~, ~) app.updateFromSliderValues();
@@ -308,10 +309,10 @@ classdef ProjectionViewerApp < handle
             app.TiltLabel = uilabel(app.ControlGrid, Text="Tilt 0.0 deg");
             app.TiltLabel.Layout.Row = 1;
             app.TiltLabel.Layout.Column = 3;
-            app.TiltSlider = uislider(app.ControlGrid, Limits=[-45 45], Value=0);
+            app.TiltSlider = uislider(app.ControlGrid, Limits=[-85 85], Value=0);
             app.TiltSlider.Layout.Row = 2;
             app.TiltSlider.Layout.Column = 3;
-            app.TiltSlider.MajorTicks = -45:15:45;
+            app.TiltSlider.MajorTicks = [-85 -45 0 45 85];
             app.TiltSlider.ValueChangingFcn = @(source, event) ...
                 app.sliderChanging(source, event, "tilt");
             app.TiltSlider.ValueChangedFcn = @(~, ~) app.updateFromSliderValues();
@@ -348,8 +349,9 @@ classdef ProjectionViewerApp < handle
 
         function createAlignmentControls(app)
             app.AlignmentGrid = uigridlayout(app.GridLayout, [3 14]);
-            app.AlignmentGrid.Layout.Row = 3;
+            app.AlignmentGrid.Layout.Row = 2;
             app.AlignmentGrid.Layout.Column = 1;
+            app.AlignmentGrid.Tag = "ProjectionViewerAlignmentGrid";
             app.AlignmentGrid.RowHeight = {"fit", "fit", 82};
             app.AlignmentGrid.ColumnWidth = {90, 145, 80, 110, 80, 115, ...
                 60, 60, 60, 70, 70, 65, 65, "1x"};
@@ -483,6 +485,7 @@ classdef ProjectionViewerApp < handle
 
             app.updateAlignmentLayerItems();
             app.setAlignmentActionEnabled(false);
+            app.setAlignmentPanelVisible(false);
         end
 
         function updateAlignmentLayerItems(app)
@@ -1069,6 +1072,36 @@ classdef ProjectionViewerApp < handle
             app.raiseCrosshairOverlay();
         end
 
+        function toggleAlignmentPanel(app)
+            app.setAlignmentPanelVisible(~app.isAlignmentPanelVisible());
+        end
+
+        function setAlignmentPanelVisible(app, isVisible)
+            if isempty(app.AlignmentGrid) || ~isvalid(app.AlignmentGrid)
+                return
+            end
+
+            app.AlignmentGrid.Visible = app.onOff(isVisible);
+            rowHeights = app.GridLayout.RowHeight;
+            if isVisible
+                rowHeights{2} = "fit";
+            else
+                rowHeights{2} = 0;
+            end
+            app.GridLayout.RowHeight = rowHeights;
+
+            if ~isempty(app.AlignmentPanelMenuItem) && ...
+                    isvalid(app.AlignmentPanelMenuItem)
+                app.AlignmentPanelMenuItem.Checked = app.onOff(isVisible);
+            end
+            drawnow limitrate
+        end
+
+        function tf = isAlignmentPanelVisible(app)
+            tf = ~isempty(app.AlignmentGrid) && isvalid(app.AlignmentGrid) && ...
+                string(app.AlignmentGrid.Visible) == "on";
+        end
+
         function setAlignmentRunning(app, isRunning)
             if isempty(app.AlignmentRunButton) || ~isvalid(app.AlignmentRunButton)
                 return
@@ -1241,6 +1274,10 @@ classdef ProjectionViewerApp < handle
                 Text="Crosshair", Checked="off", ...
                 MenuSelectedFcn=@(~, ~) app.toggleCrosshair(), ...
                 Tag="ProjectionViewerCrosshairMenuItem");
+            app.AlignmentPanelMenuItem = uimenu(app.ImageContextMenu, ...
+                Text="Alignment panel", Checked="off", ...
+                MenuSelectedFcn=@(~, ~) app.toggleAlignmentPanel(), ...
+                Tag="ProjectionViewerAlignmentPanelMenuItem");
             app.BlendModeMenu = uimenu(app.ImageContextMenu, ...
                 Text="Blend mode", Separator="on", ...
                 Tag="ProjectionViewerBlendModeMenu");

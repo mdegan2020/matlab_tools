@@ -186,7 +186,8 @@ Core controls:
   to one estimated IFOV per key press; kappa defaults to 0.1 degrees.
 - Save and Load write/read a human-readable JSON viewer state containing camera,
   layer, alpha, blend, projection offset, OPK, tip, tilt, and twist settings.
-- The alignment row can run auto-alignment for the selected pair or all visible
+- The alignment panel is hidden by default and can be shown from the image
+  context menu. It can run auto-alignment for the selected pair or all visible
   layers. Choose a fast or quality preset, detector, loss mode, optional ROI,
   and enabled pair-table rows, then use Run, Preview, Apply, and Revert. Run
   reports stage progress and residual/OPK summaries in the status text, updates

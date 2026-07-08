@@ -71,6 +71,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 "ProjectionViewerHelpMenuItem");
             crosshairMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerCrosshairMenuItem");
+            alignmentPanelMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAlignmentPanelMenuItem");
             blendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerBlendModeMenu");
             alphaBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
@@ -82,9 +84,9 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 [string(saveMenu.Text) string(loadMenu.Text) ...
                 string(cycleMenu.Text) string(resetMenu.Text) ...
                 string(helpMenu.Text) string(crosshairMenu.Text) ...
-                string(blendMenu.Text)], ...
+                string(alignmentPanelMenu.Text) string(blendMenu.Text)], ...
                 ["Save" "Load" "Cycle" "Reset" "Help" "Crosshair" ...
-                "Blend mode"]);
+                "Alignment panel" "Blend mode"]);
             testCase.verifyEqual(ax.ContextMenu, saveMenu.Parent);
             testCase.verifyEqual(surfaceHandle(1).ContextMenu, saveMenu.Parent);
             testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Save"));
@@ -92,10 +94,47 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Cycle"));
             testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Reset"));
             testCase.verifyEqual(string(crosshairMenu.Checked), "off");
+            testCase.verifyEqual(string(alignmentPanelMenu.Checked), "off");
             testCase.verifyEqual(alphaBlendMenu.Parent, blendMenu);
             testCase.verifyEqual(anaglyphBlendMenu.Parent, blendMenu);
             testCase.verifyEqual(string(alphaBlendMenu.Checked), "on");
             testCase.verifyEqual(string(anaglyphBlendMenu.Checked), "off");
+        end
+
+        function testAlignmentPanelContextMenuTogglesHiddenPanel(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
+            controlGrid = layerDropDown.Parent;
+            alignmentGrid = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                fig, "ProjectionViewerAlignmentGrid");
+            alignmentPanelMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAlignmentPanelMenuItem");
+
+            testCase.verifyEqual(alignmentGrid.Layout.Row, 2);
+            testCase.verifyEqual(controlGrid.Layout.Row, 3);
+            testCase.verifyEqual(string(alignmentGrid.Visible), "off");
+            testCase.verifyEqual(alignmentGrid.Parent.RowHeight{2}, 0);
+            testCase.verifyEqual(string(alignmentPanelMenu.Checked), "off");
+
+            alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
+            drawnow
+
+            testCase.verifyEqual(string(alignmentGrid.Visible), "on");
+            testCase.verifyEqual(string(alignmentGrid.Parent.RowHeight{2}), "fit");
+            testCase.verifyEqual(string(alignmentPanelMenu.Checked), "on");
+
+            alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
+            drawnow
+
+            testCase.verifyEqual(string(alignmentGrid.Visible), "off");
+            testCase.verifyEqual(alignmentGrid.Parent.RowHeight{2}, 0);
+            testCase.verifyEqual(string(alignmentPanelMenu.Checked), "off");
         end
 
         function testHelpContextMenuOpensNonModalDialog(testCase)
@@ -190,7 +229,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 string(scene.layers(2).Name)));
         end
 
-        function testTipTiltTwistRangesAreFortyFiveDegrees(testCase)
+        function testTipTiltRangesAreEightyFiveDegreesAndTwistIsFortyFive(testCase)
             scene = ProjectionViewerAppInteractionTest.makeScene();
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
@@ -202,11 +241,11 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
             twistSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 4);
 
-            testCase.verifyEqual(tipSlider.Limits, [-45 45]);
-            testCase.verifyEqual(tiltSlider.Limits, [-45 45]);
+            testCase.verifyEqual(tipSlider.Limits, [-85 85]);
+            testCase.verifyEqual(tiltSlider.Limits, [-85 85]);
             testCase.verifyEqual(twistSlider.Limits, [-45 45]);
-            testCase.verifyEqual(tipSlider.MajorTicks, -45:15:45);
-            testCase.verifyEqual(tiltSlider.MajorTicks, -45:15:45);
+            testCase.verifyEqual(tipSlider.MajorTicks, [-85 -45 0 45 85]);
+            testCase.verifyEqual(tiltSlider.MajorTicks, [-85 -45 0 45 85]);
             testCase.verifyEqual(twistSlider.MajorTicks, -45:15:45);
         end
 
@@ -222,9 +261,9 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
             tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
 
-            tipSlider.Value = 45;
+            tipSlider.Value = 85;
             tipSlider.ValueChangedFcn(tipSlider, struct());
-            tiltSlider.Value = -45;
+            tiltSlider.Value = -85;
             tiltSlider.ValueChangedFcn(tiltSlider, struct());
             drawnow
             surfaceHandles = findall(ax, "Type", "surface");
