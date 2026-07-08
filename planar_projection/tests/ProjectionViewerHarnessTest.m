@@ -199,7 +199,30 @@ classdef ProjectionViewerHarnessTest < matlab.unittest.TestCase
                 AbsTol=ProjectionViewerHarnessTest.Tol);
             testCase.verifyEqual(options.CoordinateFrame, "ecef");
             testCase.verifyEqual(options.InterpolationMethod, "nearest");
+            testCase.verifyEqual(options.DisplayTextureMaxPixels, 2e6);
             testCase.verifyTrue(isstruct(options.Metadata));
+        end
+
+        function testRealDataSceneCapsDisplayTextureWithoutChangingImage(testCase)
+            layerNames = "Large layer";
+            imageData = uint8(reshape(mod(0:119, 256), 10, 12));
+            imageDataList = {imageData};
+            geometryDefinitions = { ...
+                ProjectionViewerHarnessTest.makeRealGeometryDefinition( ...
+                [10 12], [10; 0; 0], 0)};
+            projectionPlane = PlanarProjection.definePlaneFromBasis( ...
+                [100; 0; 0], [0; 1; 0], [0; 0; 1]);
+            options = ProjectionViewerHarness.realDataOptions( ...
+                struct(RowStride=3, ColumnStride=4, ...
+                DisplayTextureMaxPixels=25));
+
+            scene = ProjectionViewerHarness.createRealDataScene( ...
+                layerNames, imageDataList, geometryDefinitions, ...
+                projectionPlane, options);
+
+            testCase.verifyEqual(scene.layers.Image, imageData);
+            testCase.verifySize(scene.layers.DisplayTexture, [4 5 3]);
+            testCase.verifyEqual(scene.layers.ImageMetadata.ImageSize, [10 12]);
         end
 
         function testCreateRealDataSceneBuildsGridBackedLayersAndCamera(testCase)

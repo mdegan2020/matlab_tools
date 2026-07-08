@@ -128,6 +128,7 @@ classdef ProjectionViewerHarness
             options.IFOVDegrees = [];
             options.IFOVRadians = [];
             options.Metadata = struct();
+            options.DisplayTextureMaxPixels = 2e6;
 
             options = ProjectionViewerHarness.mergeRealDataOptions( ...
                 options, overrides);
@@ -173,7 +174,8 @@ classdef ProjectionViewerHarness
                 sourceGeometry.Metadata.LayerName = layerNames(layerIndex);
                 meshSampling = ProjectionViewerHarness.createMeshSampling( ...
                     imageSize, options.RowStride, options.ColumnStride);
-                layerOptions = struct(Name=layerNames(layerIndex));
+                layerOptions = options;
+                layerOptions.Name = layerNames(layerIndex);
                 layer = ProjectionViewerHarness.createLayer( ...
                     imageData, "", sourceGeometry, projectionPlane, ...
                     meshSampling, layerOptions);
@@ -364,6 +366,7 @@ classdef ProjectionViewerHarness
             defaults.OpticalYawRadians = 0;
             defaults.LayerIndex = 1;
             defaults.LayerCount = 1;
+            defaults.DisplayTextureMaxPixels = Inf;
 
             names = fieldnames(options);
             for k = 1:numel(names)
@@ -387,6 +390,9 @@ classdef ProjectionViewerHarness
                 defaults.LayerIndex, "LayerIndex");
             defaults.LayerCount = ProjectionViewerHarness.validatePositiveInteger( ...
                 defaults.LayerCount, "LayerCount");
+            defaults.DisplayTextureMaxPixels = ...
+                ProjectionViewerHarness.validatePositiveScalarOrInf( ...
+                defaults.DisplayTextureMaxPixels, "DisplayTextureMaxPixels");
 
             if isempty(defaults.PlatformStepMeters)
                 defaults.PlatformStepMeters = defaults.GSD;
@@ -568,7 +574,8 @@ classdef ProjectionViewerHarness
             layer = struct();
             layer.Name = string(options.Name);
             layer.Image = imageData;
-            layer.DisplayTexture = ProjectionViewerHarness.prepareDisplayTexture(imageData);
+            layer.DisplayTexture = ProjectionViewerHarness.prepareLayerDisplayTexture( ...
+                imageData, options);
             layer.ImagePath = string(imagePath);
             layer.ImageMetadata = imageMetadata;
             layer.SourceGeometry = sourceGeometry;
@@ -580,6 +587,35 @@ classdef ProjectionViewerHarness
             layer.Alpha = 1.0;
             layer.BlendMode = "alpha";
             layer.Visible = true;
+        end
+
+        function textureData = prepareLayerDisplayTexture(imageData, options)
+            if isfield(options, "DisplayTextureMaxPixels")
+                maxPixels = ProjectionViewerHarness.validatePositiveScalarOrInf( ...
+                    options.DisplayTextureMaxPixels, "DisplayTextureMaxPixels");
+                imageData = ProjectionViewerHarness.downsampleImageForDisplayTexture( ...
+                    imageData, maxPixels);
+            end
+
+            textureData = ProjectionViewerHarness.prepareDisplayTexture(imageData);
+        end
+
+        function imageData = downsampleImageForDisplayTexture(imageData, maxPixels)
+            if ~isfinite(maxPixels)
+                return
+            end
+
+            imagePixels = double(size(imageData, 1)) * double(size(imageData, 2));
+            if imagePixels <= maxPixels
+                return
+            end
+
+            stride = ceil(sqrt(imagePixels / maxPixels));
+            rowIndices = unique([1:stride:size(imageData, 1), ...
+                size(imageData, 1)], "stable");
+            columnIndices = unique([1:stride:size(imageData, 2), ...
+                size(imageData, 2)], "stable");
+            imageData = imageData(rowIndices, columnIndices, :);
         end
 
         function plane = createBaseProjectionPlane(sourceGeometry, options)
@@ -710,6 +746,9 @@ classdef ProjectionViewerHarness
                 options.ColumnStride, "ColumnStride");
             options.FrameFocalLength = ProjectionViewerHarness.validatePositiveScalar( ...
                 options.FrameFocalLength, "FrameFocalLength");
+            options.DisplayTextureMaxPixels = ...
+                ProjectionViewerHarness.validatePositiveScalarOrInf( ...
+                options.DisplayTextureMaxPixels, "DisplayTextureMaxPixels");
             options.CoordinateFrame = ProjectionViewerHarness.validateScalarString( ...
                 options.CoordinateFrame, "CoordinateFrame");
             options.InterpolationMethod = lower( ...
@@ -880,6 +919,14 @@ classdef ProjectionViewerHarness
             if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || value <= 0
                 error("ProjectionViewerHarness:invalidScalar", ...
                     "%s must be a positive finite scalar.", name);
+            end
+            value = double(value);
+        end
+
+        function value = validatePositiveScalarOrInf(value, name)
+            if ~isnumeric(value) || ~isscalar(value) || isnan(value) || value <= 0
+                error("ProjectionViewerHarness:invalidScalar", ...
+                    "%s must be a positive scalar.", name);
             end
             value = double(value);
         end

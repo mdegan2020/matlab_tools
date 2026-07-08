@@ -1139,6 +1139,36 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(pathValidation.OutputGrid.OutputSize, [3 4]);
         end
 
+        function testLargeLayerUsesTiledPreviewAndExportsFullImage(testCase)
+            imageData = zeros(2001, 2001, "uint8");
+            options = struct();
+            options.GSD = 0.01;
+            options.NominalRange = 1e6;
+            options.PlatformStepMeters = 0.01;
+            options.RowStride = 250;
+            options.ColumnStride = 250;
+            options.DisplayTextureMaxPixels = 10000;
+            scene = ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "large.tif", options);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            tileSurfaces = findall(ax, "Type", "surface", ...
+                "Tag", "ProjectionViewerPreviewTileSurface");
+
+            job = app.exportBackendJob(struct(RenderOptions=struct( ...
+                OutputSize=[5 6])));
+
+            testCase.verifyNotEmpty(tileSurfaces);
+            testCase.verifyTrue(size(scene.layers.DisplayTexture, 1) < ...
+                size(imageData, 1));
+            testCase.verifySize(job.Scene.layers.Image, [2001 2001]);
+            testCase.verifyEqual(job.Scene.layers.Image, imageData);
+        end
+
         function testConstructorAcceptsViewerState(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             state = ProjectionViewerAppInteractionTest.makeViewerState(scene);
