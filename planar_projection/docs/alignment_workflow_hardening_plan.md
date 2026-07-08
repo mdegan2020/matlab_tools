@@ -283,6 +283,14 @@ Acceptance criteria:
 - Select a row to highlight its overlay.
 - Disable a row and solve again without re-matching.
 
+Implementation note:
+
+- The GUI now includes a per-match table populated from filtered matches and
+  solver residual records. Rows sort by post-solve residual, row selection
+  highlights the selected correspondence, and editing the `Enabled` column
+  updates session-local curated masks so `Solve` can run again without
+  re-matching.
+
 ### 3.3 Add interactive match editing
 
 Future interaction model:

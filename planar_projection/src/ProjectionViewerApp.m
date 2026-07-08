@@ -93,6 +93,7 @@ classdef ProjectionViewerApp < handle
         AlignmentClearOverlaysButton matlab.ui.control.Button
         AlignmentStatusLabel matlab.ui.control.Label
         AlignmentPairTable matlab.ui.control.Table
+        AlignmentMatchTable matlab.ui.control.Table
         AlignmentRequest struct = struct()
         AlignmentWorkingImages struct = struct()
         AlignmentRawMatchResult struct = struct()
@@ -100,6 +101,7 @@ classdef ProjectionViewerApp < handle
         AlignmentCuratedMatchMask cell = {}
         AlignmentResult struct = struct()
         AlignmentOverlayLines = gobjects(0)
+        AlignmentSelectedMatchOverlay = gobjects(0)
         AlignmentRoiBounds double = []
         AlignmentRoiHandle = []
         AlignmentRoiListeners = []
@@ -420,11 +422,11 @@ classdef ProjectionViewerApp < handle
         end
 
         function createAlignmentControls(app)
-            app.AlignmentGrid = uigridlayout(app.GridLayout, [3 16]);
+            app.AlignmentGrid = uigridlayout(app.GridLayout, [4 16]);
             app.AlignmentGrid.Layout.Row = 2;
             app.AlignmentGrid.Layout.Column = 1;
             app.AlignmentGrid.Tag = "ProjectionViewerAlignmentGrid";
-            app.AlignmentGrid.RowHeight = {"fit", "fit", 82};
+            app.AlignmentGrid.RowHeight = {"fit", "fit", 82, 120};
             app.AlignmentGrid.ColumnWidth = {90, 145, 80, 110, 80, 115, ...
                 60, 60, 65, 60, 70, 70, 65, 65, 70, "1x"};
             app.AlignmentGrid.Padding = [0 0 0 0];
@@ -569,6 +571,17 @@ classdef ProjectionViewerApp < handle
             app.AlignmentPairTable.Layout.Row = 3;
             app.AlignmentPairTable.Layout.Column = [1 16];
 
+            app.AlignmentMatchTable = uitable(app.AlignmentGrid, ...
+                Data=app.emptyAlignmentMatchTable(), ...
+                ColumnEditable=[true false false false false false false ...
+                false false false false false false false false], ...
+                CellEditCallback=@(~, ~) app.alignmentMatchTableEdited(), ...
+                CellSelectionCallback=@(~, event) ...
+                app.alignmentMatchTableSelected(event), ...
+                Tag="ProjectionViewerAlignmentMatchTable");
+            app.AlignmentMatchTable.Layout.Row = 4;
+            app.AlignmentMatchTable.Layout.Column = [1 16];
+
             app.updateAlignmentLayerItems();
             app.setAlignmentActionEnabled(false);
             app.setAlignmentPanelVisible(false);
@@ -682,6 +695,7 @@ classdef ProjectionViewerApp < handle
                     app.defaultAlignmentCuratedMatchMask(filteredMatches);
                 app.updateAlignmentPairTable(workingImages.Schedule, ...
                     enabledPairs, matchResult, filteredMatches);
+                app.updateAlignmentMatchTable(filteredMatches, []);
                 app.drawAlignmentMatchOverlays(filteredMatches);
                 matchCount = sum([filteredMatches.Matches.Count]);
                 if matchCount < 3 || any([filteredMatches.Matches.Count] < 3)
@@ -719,14 +733,17 @@ classdef ProjectionViewerApp < handle
             app.setAlignmentRunning(true);
             cleanup = onCleanup(@() app.setAlignmentRunning(false));
             app.setAlignmentActionEnabled(false);
+            app.syncCuratedMaskFromMatchTable();
 
             try
                 schedule = app.AlignmentWorkingImages.Schedule;
                 enabledPairs = app.enabledAlignmentPairs(schedule);
                 solveMatches = app.applyEnabledPairsToMatchResult( ...
                     app.AlignmentFilteredMatchResult, enabledPairs);
+                solveMatches = app.applyCuratedMaskToMatchResult(solveMatches);
                 app.updateAlignmentPairTable(schedule, enabledPairs, ...
                     app.AlignmentRawMatchResult, solveMatches);
+                app.updateAlignmentMatchTable(app.AlignmentFilteredMatchResult, []);
                 if isempty(enabledPairs) || isempty(solveMatches.Matches)
                     app.setAlignmentStatus("No enabled matched pairs.");
                     return
@@ -750,6 +767,8 @@ classdef ProjectionViewerApp < handle
                 result.RequestSummary = emptyResult.RequestSummary;
                 result = ProjectionAlignmentResult.validate(result);
                 app.AlignmentResult = result;
+                app.updateAlignmentMatchTable(app.AlignmentFilteredMatchResult, ...
+                    result);
                 app.drawAlignmentOverlays(result);
                 app.setAlignmentActionEnabled(true);
                 app.setAlignmentStatus(app.alignmentResultSummary(result));
@@ -933,6 +952,9 @@ classdef ProjectionViewerApp < handle
                 app.totalAlignmentMatchCount(app.AlignmentResult);
             stageDiagnostics.CuratedMaskCount = ...
                 numel(app.AlignmentCuratedMatchMask);
+            stageDiagnostics.CuratedMatchCount = ...
+                sum(app.curatedAlignmentMatchCounts( ...
+                app.AlignmentFilteredMatchResult));
         end
 
         function tf = hasScalarStruct(~, value)
@@ -977,6 +999,17 @@ classdef ProjectionViewerApp < handle
                 "Reference", "RawMatches", "FilteredMatches", "Confidence"]);
         end
 
+        function data = emptyAlignmentMatchTable(~)
+            data = table(logical.empty(0, 1), strings(0, 1), zeros(0, 1), ...
+                nan(0, 1), nan(0, 1), nan(0, 1), nan(0, 1), ...
+                nan(0, 1), nan(0, 1), nan(0, 1), nan(0, 1), ...
+                nan(0, 1), nan(0, 1), nan(0, 1), strings(0, 1), ...
+                VariableNames=["Enabled", "Pair", "MatchIndex", "Score", ...
+                "MovingRow", "MovingColumn", "ReferenceRow", ...
+                "ReferenceColumn", "MovingX", "MovingY", "ReferenceX", ...
+                "ReferenceY", "ResidualBefore", "ResidualAfter", "State"]);
+        end
+
         function updateAlignmentPairTable(app, schedule, enabledPairs, ...
                 matchResult, filteredMatches)
             if isempty(app.AlignmentPairTable) || ~isvalid(app.AlignmentPairTable)
@@ -1015,6 +1048,103 @@ classdef ProjectionViewerApp < handle
                 reference, rawMatches, filteredCounts, confidence, ...
                 VariableNames=["Enabled", "Pair", "Moving", "Reference", ...
                 "RawMatches", "FilteredMatches", "Confidence"]);
+        end
+
+        function updateAlignmentMatchTable(app, matchResult, result)
+            if isempty(app.AlignmentMatchTable) || ~isvalid(app.AlignmentMatchTable)
+                return
+            end
+            if nargin < 2 || ~app.hasMatchResult(matchResult)
+                app.AlignmentMatchTable.Data = app.emptyAlignmentMatchTable();
+                return
+            end
+            if nargin < 3
+                result = [];
+            end
+
+            data = app.alignmentMatchTableData(matchResult, result);
+            if height(data) > 0
+                residuals = data.ResidualAfter;
+                residuals(~isfinite(residuals)) = -Inf;
+                [~, order] = sort(residuals, "descend");
+                data = data(order, :);
+            end
+            app.AlignmentMatchTable.Data = data;
+        end
+
+        function data = alignmentMatchTableData(app, matchResult, result)
+            totalCount = sum([matchResult.Matches.Count]);
+            if totalCount == 0
+                data = app.emptyAlignmentMatchTable();
+                return
+            end
+
+            enabled = false(totalCount, 1);
+            labels = strings(totalCount, 1);
+            matchIndices = zeros(totalCount, 1);
+            scores = nan(totalCount, 1);
+            movingRows = nan(totalCount, 1);
+            movingColumns = nan(totalCount, 1);
+            referenceRows = nan(totalCount, 1);
+            referenceColumns = nan(totalCount, 1);
+            movingX = nan(totalCount, 1);
+            movingY = nan(totalCount, 1);
+            referenceX = nan(totalCount, 1);
+            referenceY = nan(totalCount, 1);
+            residualBefore = nan(totalCount, 1);
+            residualAfter = nan(totalCount, 1);
+            states = strings(totalCount, 1);
+
+            rowIndex = 0;
+            for pairIndex = 1:numel(matchResult.Matches)
+                pairMatch = matchResult.Matches(pairIndex);
+                recordIndices = app.matchRecordIndices(pairMatch);
+                curatedMask = app.curatedMaskForPair( ...
+                    pairMatch.Pair, pairMatch.Count);
+                for matchIndex = 1:pairMatch.Count
+                    rowIndex = rowIndex + 1;
+                    recordIndex = recordIndices(matchIndex);
+                    residualRecord = app.residualRecordForMatch( ...
+                        result, pairMatch.Pair, recordIndex);
+                    enabled(rowIndex) = curatedMask(matchIndex);
+                    labels(rowIndex) = app.pairKey(pairMatch.Pair);
+                    matchIndices(rowIndex) = recordIndex;
+                    scores(rowIndex) = pairMatch.Scores(matchIndex);
+                    movingRows(rowIndex) = pairMatch.MovingSourceRows(matchIndex);
+                    movingColumns(rowIndex) = ...
+                        pairMatch.MovingSourceColumns(matchIndex);
+                    referenceRows(rowIndex) = ...
+                        pairMatch.ReferenceSourceRows(matchIndex);
+                    referenceColumns(rowIndex) = ...
+                        pairMatch.ReferenceSourceColumns(matchIndex);
+                    movingX(rowIndex) = pairMatch.MovingFeatureLocations( ...
+                        matchIndex, 1);
+                    movingY(rowIndex) = pairMatch.MovingFeatureLocations( ...
+                        matchIndex, 2);
+                    referenceX(rowIndex) = ...
+                        pairMatch.ReferenceFeatureLocations(matchIndex, 1);
+                    referenceY(rowIndex) = ...
+                        pairMatch.ReferenceFeatureLocations(matchIndex, 2);
+                    residualBefore(rowIndex) = residualRecord.Before;
+                    residualAfter(rowIndex) = residualRecord.After;
+                    if ~enabled(rowIndex)
+                        states(rowIndex) = "disabled";
+                    elseif residualRecord.Found
+                        states(rowIndex) = "solverObservation";
+                    else
+                        states(rowIndex) = "accepted";
+                    end
+                end
+            end
+
+            data = table(enabled, labels, matchIndices, scores, movingRows, ...
+                movingColumns, referenceRows, referenceColumns, movingX, ...
+                movingY, referenceX, referenceY, residualBefore, ...
+                residualAfter, states, VariableNames=["Enabled", "Pair", ...
+                "MatchIndex", "Score", "MovingRow", "MovingColumn", ...
+                "ReferenceRow", "ReferenceColumn", "MovingX", "MovingY", ...
+                "ReferenceX", "ReferenceY", "ResidualBefore", ...
+                "ResidualAfter", "State"]);
         end
 
         function enabledPairs = enabledAlignmentPairs(app, schedule)
@@ -1085,6 +1215,20 @@ classdef ProjectionViewerApp < handle
                 matchResult, keepMask);
         end
 
+        function matchResult = applyCuratedMaskToMatchResult(app, matchResult)
+            if ~app.hasMatchResult(matchResult)
+                return
+            end
+
+            for k = 1:numel(matchResult.Matches)
+                pairMatch = matchResult.Matches(k);
+                keepMask = app.curatedMaskForPair( ...
+                    pairMatch.Pair, pairMatch.Count);
+                matchResult.Matches(k) = app.subsetAlignmentPairMatch( ...
+                    pairMatch, keepMask);
+            end
+        end
+
         function matchResult = subsetAlignmentPairDiagnostics(~, ...
                 matchResult, keepMask)
             if ~isfield(matchResult, "Diagnostics") || ...
@@ -1153,6 +1297,127 @@ classdef ProjectionViewerApp < handle
             end
         end
 
+        function record = residualRecordForMatch(app, result, pair, matchIndex)
+            record = struct(Before=NaN, After=NaN, Found=false);
+            if isempty(result) || ~isstruct(result) || ...
+                    ~isfield(result, "Diagnostics") || ...
+                    ~isfield(result.Diagnostics, "MatchRecords")
+                return
+            end
+
+            records = result.Diagnostics.MatchRecords;
+            for k = 1:numel(records)
+                if string(records(k).PairKey) == app.pairKey(pair) && ...
+                        records(k).MatchIndex == matchIndex
+                    record.Before = records(k).ResidualBefore;
+                    record.After = records(k).ResidualAfter;
+                    record.Found = true;
+                    return
+                end
+            end
+        end
+
+        function indices = matchRecordIndices(~, pairMatch)
+            if isfield(pairMatch, "MatchRecordIndices") && ...
+                    numel(pairMatch.MatchRecordIndices) == pairMatch.Count
+                indices = pairMatch.MatchRecordIndices(:);
+            else
+                indices = (1:pairMatch.Count).';
+            end
+        end
+
+        function mask = curatedMaskForPair(app, pair, count)
+            mask = true(count, 1);
+            if isempty(app.AlignmentCuratedMatchMask) || ...
+                    ~app.hasMatchResult(app.AlignmentFilteredMatchResult)
+                return
+            end
+
+            pairIndex = app.filteredMatchPairIndex(pair);
+            if isnan(pairIndex) || pairIndex > numel(app.AlignmentCuratedMatchMask)
+                return
+            end
+
+            candidate = app.AlignmentCuratedMatchMask{pairIndex};
+            if numel(candidate) == count
+                mask = logical(candidate(:));
+            end
+        end
+
+        function pairIndex = filteredMatchPairIndex(app, pair)
+            pairIndex = NaN;
+            if ~app.hasMatchResult(app.AlignmentFilteredMatchResult)
+                return
+            end
+
+            for k = 1:numel(app.AlignmentFilteredMatchResult.Matches)
+                if isequal(app.AlignmentFilteredMatchResult.Matches(k).Pair, pair)
+                    pairIndex = k;
+                    return
+                end
+            end
+        end
+
+        function syncCuratedMaskFromMatchTable(app)
+            if isempty(app.AlignmentMatchTable) || ...
+                    ~isvalid(app.AlignmentMatchTable) || ...
+                    ~app.hasMatchResult(app.AlignmentFilteredMatchResult)
+                return
+            end
+
+            data = app.AlignmentMatchTable.Data;
+            if ~istable(data) || height(data) == 0 || ...
+                    ~all(ismember(["Enabled", "Pair", "MatchIndex"], ...
+                    string(data.Properties.VariableNames)))
+                return
+            end
+
+            masks = cell(1, numel(app.AlignmentFilteredMatchResult.Matches));
+            for pairIndex = 1:numel(masks)
+                masks{pairIndex} = false( ...
+                    app.AlignmentFilteredMatchResult.Matches(pairIndex).Count, 1);
+            end
+
+            for rowIndex = 1:height(data)
+                pair = app.pairFromKey(data.Pair(rowIndex));
+                pairIndex = app.filteredMatchPairIndex(pair);
+                if isnan(pairIndex)
+                    continue
+                end
+                pairMatch = app.AlignmentFilteredMatchResult.Matches(pairIndex);
+                recordIndices = app.matchRecordIndices(pairMatch);
+                matchMask = recordIndices == data.MatchIndex(rowIndex);
+                if any(matchMask)
+                    masks{pairIndex}(matchMask) = logical(data.Enabled(rowIndex));
+                end
+            end
+
+            app.AlignmentCuratedMatchMask = masks;
+        end
+
+        function pair = pairFromKey(~, key)
+            values = sscanf(char(string(key)), "%d -> %d");
+            if numel(values) ~= 2
+                pair = [NaN NaN];
+            else
+                pair = values(:).';
+            end
+        end
+
+        function counts = curatedAlignmentMatchCounts(app, matchResult)
+            if ~app.hasMatchResult(matchResult)
+                counts = zeros(1, 0);
+                return
+            end
+
+            counts = zeros(1, numel(matchResult.Matches));
+            for k = 1:numel(matchResult.Matches)
+                pairMatch = matchResult.Matches(k);
+                counts(k) = nnz(app.curatedMaskForPair( ...
+                    pairMatch.Pair, pairMatch.Count));
+            end
+        end
+
         function matchResult = applyAlignmentRoi(app, matchResult)
             if isempty(app.AlignmentRoiBounds) || isempty(matchResult.Matches)
                 return
@@ -1186,7 +1451,7 @@ classdef ProjectionViewerApp < handle
                 "MovingPlaneCoordinates", "ReferencePlaneCoordinates", ...
                 "MovingSourceRows", "MovingSourceColumns", ...
                 "ReferenceSourceRows", "ReferenceSourceColumns", "IndexPairs", ...
-                "MatchMetric", "Scores"];
+                "MatchMetric", "Scores", "MatchRecordIndices"];
             keepMask = logical(keepMask(:));
             for fieldName = rowFields
                 if isfield(pairMatch, fieldName)
@@ -1423,9 +1688,10 @@ classdef ProjectionViewerApp < handle
         end
 
         function tf = hasSolvableFilteredMatches(app)
+            counts = app.curatedAlignmentMatchCounts( ...
+                app.AlignmentFilteredMatchResult);
             tf = app.hasFilteredAlignmentMatches() && ...
-                all([app.AlignmentFilteredMatchResult.Matches.Count] >= 3) && ...
-                sum([app.AlignmentFilteredMatchResult.Matches.Count]) >= 3;
+                all(counts >= 3) && sum(counts) >= 3;
         end
 
         function clearAlignmentComputationState(app)
@@ -1435,6 +1701,8 @@ classdef ProjectionViewerApp < handle
             app.AlignmentFilteredMatchResult = struct();
             app.AlignmentCuratedMatchMask = {};
             app.AlignmentResult = struct();
+            app.updateAlignmentMatchTable([], []);
+            app.clearSelectedAlignmentMatchOverlay();
         end
 
         function throwIfAlignmentCancelled(app)
@@ -1484,6 +1752,98 @@ classdef ProjectionViewerApp < handle
                     isfield(result.Diagnostics, fieldName)
                 value = result.Diagnostics.(fieldName);
             end
+        end
+
+        function alignmentMatchTableEdited(app)
+            app.syncCuratedMaskFromMatchTable();
+            app.AlignmentResult = struct();
+            app.setAlignmentActionEnabled(false);
+            app.setAlignmentSolveEnabled(app.hasSolvableFilteredMatches());
+            app.updateAlignmentMatchTable(app.AlignmentFilteredMatchResult, []);
+            visibleMatches = app.applyCuratedMaskToMatchResult( ...
+                app.AlignmentFilteredMatchResult);
+            app.drawAlignmentMatchOverlays(visibleMatches);
+            app.setAlignmentStatus("Match curation updated. Solve again.");
+        end
+
+        function alignmentMatchTableSelected(app, event)
+            if (isstruct(event) && isfield(event, "Indices")) || ...
+                    (isobject(event) && isprop(event, "Indices"))
+                indices = event.Indices;
+            else
+                indices = [];
+            end
+            if isempty(indices)
+                app.clearSelectedAlignmentMatchOverlay();
+                return
+            end
+            rowIndex = indices(1, 1);
+            data = app.AlignmentMatchTable.Data;
+            if ~istable(data) || rowIndex < 1 || rowIndex > height(data)
+                app.clearSelectedAlignmentMatchOverlay();
+                return
+            end
+
+            app.drawSelectedAlignmentMatchOverlay(data(rowIndex, :));
+        end
+
+        function drawSelectedAlignmentMatchOverlay(app, rowData)
+            app.clearSelectedAlignmentMatchOverlay();
+            if ~app.hasMatchResult(app.AlignmentFilteredMatchResult)
+                return
+            end
+
+            pair = app.pairFromKey(rowData.Pair(1));
+            pairIndex = app.filteredMatchPairIndex(pair);
+            if isnan(pairIndex)
+                return
+            end
+
+            pairMatch = app.AlignmentFilteredMatchResult.Matches(pairIndex);
+            recordIndices = app.matchRecordIndices(pairMatch);
+            matchIndex = find(recordIndices == rowData.MatchIndex(1), ...
+                1, "first");
+            if isempty(matchIndex)
+                return
+            end
+
+            plane = app.currentProjectionPlane();
+            movingWorld = PlanarProjection.reconstruct3d( ...
+                pairMatch.MovingPlaneCoordinates(matchIndex, :).', plane) - ...
+                app.Scene.renderOrigin;
+            referenceWorld = PlanarProjection.reconstruct3d( ...
+                pairMatch.ReferencePlaneCoordinates(matchIndex, :).', plane) - ...
+                app.Scene.renderOrigin;
+            selectedLine = line(app.Axes, ...
+                [movingWorld(1) referenceWorld(1)], ...
+                [movingWorld(2) referenceWorld(2)], ...
+                [movingWorld(3) referenceWorld(3)], ...
+                Color=[1 0 1], LineWidth=2.5, HitTest="off", ...
+                PickableParts="none", ...
+                Tag="ProjectionViewerAlignmentSelectedMatchOverlay");
+            selectedMarkers = line(app.Axes, ...
+                [movingWorld(1) referenceWorld(1)], ...
+                [movingWorld(2) referenceWorld(2)], ...
+                [movingWorld(3) referenceWorld(3)], ...
+                LineStyle="none", Marker="s", MarkerSize=7, ...
+                MarkerEdgeColor=[1 0 1], HitTest="off", ...
+                PickableParts="none", ...
+                Tag="ProjectionViewerAlignmentSelectedMatchOverlay");
+            app.AlignmentSelectedMatchOverlay = [selectedLine selectedMarkers];
+            app.raiseCrosshairOverlay();
+        end
+
+        function clearSelectedAlignmentMatchOverlay(app)
+            if isempty(app.AlignmentSelectedMatchOverlay)
+                return
+            end
+            for k = 1:numel(app.AlignmentSelectedMatchOverlay)
+                overlay = app.AlignmentSelectedMatchOverlay(k);
+                if ~isempty(overlay) && isvalid(overlay)
+                    delete(overlay);
+                end
+            end
+            app.AlignmentSelectedMatchOverlay = gobjects(0);
         end
 
         function drawAlignmentMatchOverlays(app, matchResult)
@@ -1580,6 +1940,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function clearAlignmentOverlays(app)
+            app.clearSelectedAlignmentMatchOverlay();
             if isempty(app.AlignmentOverlayLines)
                 return
             end

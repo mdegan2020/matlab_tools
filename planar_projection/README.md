@@ -209,7 +209,9 @@ Core controls:
   summaries in the status text, including warnings when corrections hit OPK
   bounds. Solver diagnostics also include max residuals, worst residual match
   references, per-pair residual summaries, and table-ready match records for
-  follow-up review workflows.
+  follow-up review workflows. The match table can sort residuals, highlight a
+  selected correspondence, and disable individual observations before solving
+  again without re-matching.
 
 Manual auto-alignment validation loop:
 

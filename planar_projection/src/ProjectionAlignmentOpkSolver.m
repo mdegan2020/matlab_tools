@@ -556,7 +556,9 @@ classdef ProjectionAlignmentOpkSolver
                     record.PairIndex = pairIndex;
                     record.PairKey = sprintf("%d -> %d", ...
                         pairMatch.Pair(1), pairMatch.Pair(2));
-                    record.MatchIndex = matchIndex;
+                    record.MatchIndex = ...
+                        ProjectionAlignmentOpkSolver.matchRecordIndex( ...
+                        pairMatch, matchIndex);
                     record.Score = pairMatch.Scores(matchIndex);
                     record.MovingSourceRow = ...
                         pairMatch.MovingSourceRows(matchIndex);
@@ -618,6 +620,14 @@ classdef ProjectionAlignmentOpkSolver
                 State="solverObservation", ...
                 Accepted=true, ...
                 Disabled=false);
+        end
+
+        function recordIndex = matchRecordIndex(pairMatch, matchIndex)
+            recordIndex = matchIndex;
+            if isfield(pairMatch, "MatchRecordIndices") && ...
+                    numel(pairMatch.MatchRecordIndices) >= matchIndex
+                recordIndex = pairMatch.MatchRecordIndices(matchIndex);
+            end
         end
 
         function summaries = perPairResidualSummary(perPairResiduals)

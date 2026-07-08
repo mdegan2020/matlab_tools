@@ -66,6 +66,8 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerClearAlignmentOverlaysMenuItem");
             pairTable = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentPairTable");
+            matchTable = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchTable");
 
             testCase.verifyEqual(str2double(string(referenceDropDown.Value)), 1);
             testCase.verifyEqual(str2double(string(movingDropDown.Value)), 2);
@@ -95,6 +97,10 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(ismember( ...
                 ["RawMatches", "FilteredMatches", "Confidence"], ...
                 string(pairTable.Data.Properties.VariableNames))));
+            testCase.verifyEqual(height(matchTable.Data), 0);
+            testCase.verifyTrue(all(ismember( ...
+                ["Enabled", "Pair", "MatchIndex", "ResidualAfter", "State"], ...
+                string(matchTable.Data.Properties.VariableNames))));
         end
 
         function testPairTableCanDisableAlignmentPairs(testCase)
@@ -375,6 +381,87 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyGreaterThan( ...
                 diagnosticsAfterMatch.Stage.FilteredMatchCount, ...
                 diagnosticsAfterSolve.Stage.SolvedMatchCount);
+        end
+
+        function testMatchTableCanDisableMatchAndResolve(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(true);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
+            matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchButton");
+            solveButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentSolveButton");
+            previewButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentPreviewButton");
+            matchTable = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchTable");
+            statusLabel = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentStatusLabel");
+
+            detectorDropDown.Value = "sift";
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            dataAfterMatch = matchTable.Data;
+            testCase.assumeTrue(height(dataAfterMatch) > 3);
+            testCase.verifyTrue(all(dataAfterMatch.Enabled));
+            testCase.verifyTrue(all(isnan(dataAfterMatch.ResidualAfter)));
+
+            solveButton.ButtonPushedFcn(solveButton, struct());
+            drawnow
+            diagnosticsAfterFirstSolve = app.alignmentDiagnostics();
+            dataAfterSolve = matchTable.Data;
+            finiteResiduals = dataAfterSolve.ResidualAfter( ...
+                isfinite(dataAfterSolve.ResidualAfter));
+            testCase.verifyTrue(all(diff(finiteResiduals) <= 0));
+            testCase.verifyEqual( ...
+                diagnosticsAfterFirstSolve.Stage.SolvedMatchCount, ...
+                diagnosticsAfterFirstSolve.Stage.FilteredMatchCount);
+
+            matchTable.CellSelectionCallback(matchTable, struct(Indices=[1 1]));
+            drawnow
+            testCase.verifyNotEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentSelectedMatchOverlay"));
+
+            disabledPair = dataAfterSolve.Pair(1);
+            disabledMatchIndex = dataAfterSolve.MatchIndex(1);
+            editedData = dataAfterSolve;
+            editedData.Enabled(1) = false;
+            matchTable.Data = editedData;
+            matchTable.CellEditCallback(matchTable, struct());
+            drawnow
+            diagnosticsAfterEdit = app.alignmentDiagnostics();
+
+            testCase.verifyFalse(diagnosticsAfterEdit.Stage.HasSolveResult);
+            testCase.verifyEqual( ...
+                diagnosticsAfterEdit.Stage.CuratedMatchCount, ...
+                diagnosticsAfterFirstSolve.Stage.FilteredMatchCount - 1);
+            testCase.verifyEqual(string(previewButton.Enable), "off");
+            testCase.verifyTrue(contains(string(statusLabel.Text), ...
+                "curation updated"));
+
+            solveButton.ButtonPushedFcn(solveButton, struct());
+            drawnow
+            diagnosticsAfterSecondSolve = app.alignmentDiagnostics();
+            dataAfterSecondSolve = matchTable.Data;
+            disabledMask = dataAfterSecondSolve.Pair == disabledPair & ...
+                dataAfterSecondSolve.MatchIndex == disabledMatchIndex;
+
+            testCase.verifyEqual( ...
+                diagnosticsAfterSecondSolve.Stage.SolvedMatchCount, ...
+                diagnosticsAfterFirstSolve.Stage.SolvedMatchCount - 1);
+            testCase.verifyTrue(any(disabledMask));
+            testCase.verifyFalse(dataAfterSecondSolve.Enabled(disabledMask));
+            testCase.verifyEqual( ...
+                string(dataAfterSecondSolve.State(disabledMask)), "disabled");
         end
 
         function testRayToRayLossRunsThroughControls(testCase)

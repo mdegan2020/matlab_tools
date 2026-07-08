@@ -18,6 +18,11 @@ classdef ProjectionAlignmentMatchFilter
             filtered = matchResult;
             filtered.Format = ProjectionAlignmentMatchFilter.Format;
             filtered.Version = ProjectionAlignmentMatchFilter.Version;
+            matchRecordIndices = cell(1, numel(filtered.Matches));
+            for k = 1:numel(filtered.Matches)
+                matchRecordIndices{k} = (1:filtered.Matches(k).Count).';
+            end
+            [filtered.Matches.MatchRecordIndices] = matchRecordIndices{:};
             for k = 1:numel(matchResult.Matches)
                 [filtered.Matches(k), pairDiagnostics(k)] = ... %#ok<AGROW>
                     ProjectionAlignmentMatchFilter.filterPair( ...
@@ -31,6 +36,8 @@ classdef ProjectionAlignmentMatchFilter
     methods (Static, Access = private)
         function [pairMatch, diagnostics] = filterPair(pairMatch, options)
             pipeline = options.FilterPipeline;
+            pairMatch = ProjectionAlignmentMatchFilter.ensureMatchRecordIndices( ...
+                pairMatch);
             keepMask = true(pairMatch.Count, 1);
             diagnostics = ProjectionAlignmentMatchFilter.initialDiagnostics(pairMatch);
 
@@ -200,7 +207,19 @@ classdef ProjectionAlignmentMatchFilter
             pairMatch.IndexPairs = pairMatch.IndexPairs(keepMask, :);
             pairMatch.MatchMetric = pairMatch.MatchMetric(keepMask, :);
             pairMatch.Scores = pairMatch.Scores(keepMask, :);
+            pairMatch.MatchRecordIndices = ...
+                pairMatch.MatchRecordIndices(keepMask, :);
             pairMatch.Count = nnz(keepMask);
+        end
+
+        function pairMatch = ensureMatchRecordIndices(pairMatch)
+            if ~isfield(pairMatch, "MatchRecordIndices") || ...
+                    numel(pairMatch.MatchRecordIndices) ~= pairMatch.Count
+                pairMatch.MatchRecordIndices = (1:pairMatch.Count).';
+            else
+                pairMatch.MatchRecordIndices = ...
+                    pairMatch.MatchRecordIndices(:);
+            end
         end
 
         function mask = sampleMask(maskImage, locations)
