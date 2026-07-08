@@ -3,7 +3,8 @@
 This document tracks the current MATLAB projection viewer prototype and the
 remaining roadmap. It supersedes the original first-cut milestone plan: the
 initial harness, mesh builder, app, responsiveness work, exact readback
-prototype, and multi-layer support have all been implemented.
+prototype, multi-layer support, backend processor, auto-alignment tree, and
+display-preview pyramid work have all been implemented.
 
 The project goal remains a backend-capable processor that can read, render, and
 write projected imagery without interaction. The interactive MATLAB app is the
@@ -24,6 +25,8 @@ src/ProjectionReadbackRenderer.m   Headless frame-camera readback prototype
 src/ProjectionLayerManager.m       Multi-layer workflow helpers
 src/ProjectionViewerState.m        JSON viewer-state serialization
 src/ProjectionViewerApp.m          Programmatic interactive preview app
+src/ProjectionPreviewPyramid.m     Display-only preview pyramid/tile helper
+src/ProjectionAlignment*.m         Alignment request/options/result, matching, scheduling, solving, and runner
 src/ProjectionBackendJob.m         Backend job contract/serialization helpers
 src/ProjectionBackendOutputGrid.m  Backend full-extent output-grid planner
 src/ProjectionBackendOutputWriter.m Backend TIFF/PNG/mask/metadata writer
@@ -39,10 +42,12 @@ tests/ProjectionReadbackRendererTest.m
 tests/ProjectionLayerManagerTest.m
 tests/ProjectionViewerStateTest.m
 tests/ProjectionViewerAppInteractionTest.m
+tests/ProjectionAlignment*.m
 tests/ProjectionBackend*.m
 
 runProjectionViewerPrototype.m
 runProjectionViewer.m
+runSyntheticAlignmentPrototype.m
 runTests.m
 buildfile.m
 validateProjectionBackendJob.m
@@ -76,15 +81,19 @@ The current prototype can:
 4. Launch real in-memory `uint8` image layers with sparse view-vector geometry
    definitions and a supplied projection plane.
 5. Project sampled source rays onto a shared target projection plane.
-6. Preview projected textures in a fixed frame-camera-style view.
+6. Preview projected textures in a fixed frame-camera-style view, including
+   display-only pyramids and visible tile selection for large layers.
 7. Manipulate projection plane tip, tilt, camera twist, layer alpha/visibility,
    per-layer projection offsets, and per-layer omega/phi/kappa view-vector
    corrections.
 8. Serialize and restore a human-readable JSON viewer state.
-9. Export backend jobs directly from the app or write them as JSON plus `.mat`
+9. Run feature-based auto-alignment from the GUI or backend over selected
+   single-band analysis inputs, then apply solved corrections to all bands
+   during rendering.
+10. Export backend jobs directly from the app or write them as JSON plus `.mat`
    scene payloads.
-10. Validate backend jobs without rendering.
-11. Render deterministic headless composite and per-layer outputs with
+11. Validate backend jobs without rendering.
+12. Render deterministic headless composite and per-layer outputs with
    configurable interpolation, tiled CPU execution, optional thread execution,
    optional MATLAB-managed GPU acceleration, masks, metadata, and basic
    multi-layer blending.
@@ -110,6 +119,9 @@ model.
 
 Preview and exact readback should share scene/layer state and pure geometry
 helpers. The headless renderer must remain callable without MATLAB graphics.
+Viewer-only display accelerators, including preview pyramids and visible tile
+selection, must not replace or downsample the source images exported to backend
+jobs.
 
 ### CPU Baseline, Optional GPU Acceleration
 
@@ -207,6 +219,10 @@ layer.ProjectionOffsetMeters = [0; 0];
 layer.ViewVectorAngularOffsetsDegrees = [0; 0; 0]; % omega, phi, kappa
 ```
 
+`Image` remains the full source image used by readback and backend jobs.
+`DisplayTexture` may be decimated for interactive display, and the app may also
+create display-only preview pyramid levels outside the layer struct.
+
 `ProjectionOffsetMeters` shifts where the image is projected on the current
 projection plane. It does not move the projection plane and does not move the
 source sensor origin.
@@ -292,6 +308,8 @@ Current controls:
 - Shift + wheel adjusts projection-plane tip.
 - Alt/Option + wheel adjusts projection-plane tilt.
 - Control + wheel adjusts camera twist.
+- Up/Down arrows adjust projection-plane tip by `0.5` degrees.
+- Left/Right arrows adjust projection-plane tilt by `0.5` degrees.
 - W/A/S/D translates the selected layer up/left/down/right on the projection
   plane.
 - Control + left-drag translates the selected layer on the projection plane.
@@ -308,7 +326,10 @@ Current controls:
 - alpha slider changes selected-layer alpha.
 - Visible checkbox in the layer header changes selected-layer visibility.
 - right-click context menu on the image contains Save, Load, Cycle, Reset, Help,
-  Crosshair, and Blend mode controls.
+  Crosshair, Alignment Panel, and Blend mode controls.
+- alignment controls are hidden by default and can run selected-pair or
+  visible-layer alignment with fast/quality presets, detector/loss choices,
+  optional ROI, pair enablement, preview/apply, and revert.
 - Blend mode context menu supports `"alpha"` and `"redBlueAnaglyph"`.
 - Crosshair toggles cyan screen-space guide lines across the image viewport.
 - Cycle shows the next layer and hides the others without changing layer alpha.
@@ -334,9 +355,15 @@ h = surface(ax, X, Y, Z, textureData, ...
 Callbacks update existing surface `XData`, `YData`, `ZData`, `CData`,
 `FaceAlpha`, and `Visible` values. Multi-layer preview surfaces share the same
 projection plane and use a display-only depth bias along the frame-camera view
-direction to avoid renderer depth fighting. Stabilized axes limits are planned
-over the full supported tip/tilt range so preview surfaces do not clip at large
-projection-plane angles.
+direction to avoid renderer depth fighting. Stabilized axes limits cover the
+supported tip/tilt range so preview surfaces do not clip at large
+projection-plane angles or change apparent scale on the first edit.
+
+Large layers may use `ProjectionPreviewPyramid` to create display-only pyramid
+levels and tiled preview surfaces. Tile selection uses the current camera view
+and chooses an appropriate decimation level for the visible footprint. This is
+strictly an app responsiveness feature: backend jobs keep the original layer
+`Image` data and do not consume preview pyramid levels.
 
 ### Headless Readback
 
@@ -351,8 +378,9 @@ without MATLAB graphics. It currently supports:
 - alpha compositing.
 - red/blue anaglyph compositing.
 
-The readback prototype is suitable for qualitative and unit-test validation. It
-is not yet a production tiled renderer for very large images.
+The readback helper is suitable for qualitative and unit-test validation. Large
+backend jobs use `ProjectionBackendTiledRenderer` through
+`ProjectionBackendProcessor`, with serial or opt-in thread-pool tile execution.
 
 ### Preview/Exact Comparison
 
@@ -417,6 +445,14 @@ Post-milestone features already added:
 - Alt/Option + left-drag omega/phi correction.
 - image-space crosshair overlay.
 - visibility-preserving layer cycling and reset-all viewer state restoration.
+- real-data launcher support for in-memory images and sparse sensor geometry.
+- hidden-by-default alignment panel with selected-pair and visible-layer
+  workflows, fast/quality presets, ROI filtering, pair enablement, match/inlier
+  overlays, preview/apply/revert, and backend integration.
+- expanded `-85` to `85` degree tip/tilt controls, stabilized preview axes,
+  improved initial viewport framing, and arrow-key tip/tilt nudges.
+- display-only preview pyramids and visible preview tiling for large layers,
+  while preserving full-resolution image data for readback and backend jobs.
 
 ## Validation
 
@@ -523,20 +559,21 @@ comes first; optimization follows profiling.
 Implementation status:
 
 - Backend Milestones 1-10 are complete, validated, and committed.
-- Validation for the current backend/viewer state: `results = runTests;` passed
-  with 139 tests.
 - The backend now supports live and serialized jobs, `.mat` scene payloads,
   headless viewer-state application, output-grid planning, composite/per-layer
   image writers, hardened readback masks and band handling, serial tiled CPU
   rendering, opt-in `parpool("threads")` tile execution, optional
   MATLAB-managed `gpuArray` compositing with CPU fallback, a documented custom
-  GPU-kernel assessment, app job export, and validate-only job checks.
+  GPU-kernel assessment, app job export, validate-only job checks, and optional
+  pre-render alignment with aligned-state and diagnostics outputs.
 - See `docs/backend_app_workflow.md` for the operator workflow from app
   alignment to backend validation and rendering.
 - See `docs/backend_milestone_9_custom_gpu_kernel_assessment.md` for the
   current decision that custom GPU kernels are not enabled without profiling
   evidence.
-- The Auto Alignment Feature Tree has not been started.
+- The Auto Alignment Feature Tree milestones 1-13 are complete, validated, and
+  committed; the milestone list below is retained as implementation history and
+  design reference.
 
 #### Backend Milestone 1: Job Contract And Serialization
 
@@ -696,37 +733,46 @@ Feedback checkpoint:
 
 ## Auto Alignment Feature Tree
 
-Auto alignment should begin as an interactive viewer workflow and later become a
-backend-capable processing step. The core implementation should be a reusable
+Auto alignment began as an interactive viewer workflow and now also runs as a
+backend-capable processing step. The core implementation is a reusable
 feature-based alignment engine, with the GUI and backend acting as clients of
 the same pure alignment helpers.
 
+Implementation status:
+
+- Auto Alignment Milestones 1-13 are complete, validated, and committed.
+- The implementation includes request/options/result models, synthetic
+  red/blue-channel harness, projection-plane working images, detector/matcher
+  capability checks, match filtering with a radial-filter hook, OPK solving,
+  joint multi-image scheduling/solving, optional shared scale, ray-to-ray loss,
+  GUI workflow controls, and backend alignment integration.
+- The remaining alignment items are follow-up quality and sensor-workflow
+  decisions, not unstarted milestone gates.
+
 ### Auto Alignment Design Decisions
 
-- Initial matching should be feature based on projection-plane working images.
+- Matching is feature based on projection-plane working images.
 - Alignment should operate on selected single-band analysis images. For
   multispectral source data, the user or caller chooses one band from each image
   for alignment.
 - The solved alignment warp should then be applicable to every band in that
   image, assuming the image's bands are internally registered.
-- A synthetic alignment harness should support smoke tests from the local TIFF
+- A synthetic alignment harness supports smoke tests from the local TIFF
   dataset by taking one RGB image, using its red channel as synthetic image 1
   and its blue channel as synthetic image 2.
-- The synthetic harness should generate two independent geometries with enough
+- The synthetic harness generates two independent geometries with enough
   disagreement to exercise alignment while preserving credible correspondence
   between the channel-derived single-band images.
 - Candidate detectors/descriptors include SIFT, SURF, ORB, or MATLAB-supported
   equivalents, with capability checks and clear fallback behavior.
-- Matching should run over the full layer overlap at first.
-- Manual rectangular ROI/rubber-band selection is a later GUI enhancement.
-- The first solver should adjust per-image `omega`, `phi`, and `kappa`
-  corrections only.
-- Do not include WASD projection offsets in the first solver because small
-  translations and small angular corrections can become difficult to separate.
-- A future optional focal-length correction may be represented as one shared
-  image-Y scale factor for all images, reflecting the fixed-camera linear-array
-  scanner model.
-- The default matching reference should be the middle image by input order.
+- Matching can run over full visible overlap or a GUI-selected rectangular ROI.
+- The solver adjusts per-image `omega`, `phi`, and `kappa` corrections, with an
+  optional shared image-Y scale parameter for fixed-camera linear-array
+  workflows.
+- WASD projection offsets are intentionally not part of the first solver path
+  because small translations and small angular corrections can become difficult
+  to separate.
+- The default matching reference is the middle image by input order.
 - The project plane is assumed to be closest to the center perspective when the
   user sets up the scene.
 - The reference image is a scheduling/reference image, not a fixed truth anchor.
@@ -734,18 +780,20 @@ the same pure alignment helpers.
 - Correction bounds should be tied to image angular scale. The default hard cap
   should be less than one quarter of the full field of view, for example
   `0.25 * min(horizontalFOV, verticalFOV)`.
-- Solvers must include least-adjustment regularization so the solution stays
+- Solvers include least-adjustment regularization so the solution stays
   close to the original pointing knowledge and does not drift or run away.
-- The first loss mode should minimize two-dimensional feature residuals on the
+- The default loss mode minimizes two-dimensional feature residuals on the
   projection plane.
-- A second loss mode should evaluate ray-to-ray closest approach between matched
+- A second loss mode evaluates ray-to-ray closest approach between matched
   feature observations.
 - Non-planar terrain or DEM-constrained losses may be added later if ray-to-ray
   closest approach is too noisy.
-- The existing external feature-match direction/magnitude filter should be
-  integrated later as a pluggable `RadialFilterFcn`.
+- The match filtering pipeline includes a pluggable `RadialFilterFcn`.
 
 ### Auto Alignment Milestones
+
+Each milestone in this section is complete. The deliverable lists are preserved
+as a historical checklist for future reviews and regressions.
 
 #### Auto Alignment Milestone 1: Alignment Request And Result Model
 
@@ -971,9 +1019,8 @@ Feedback checkpoint:
 
 ## Active Roadmap For Discussion
 
-The backend and auto-alignment plans above are now the primary roadmaps for
-readback and alignment work. The items below remain broader design topics to
-prioritize with user guidance.
+The backend and auto-alignment feature trees are implemented. The items below
+remain broader design topics to prioritize with user guidance.
 
 ### Real Sensor Geometry Ingestion
 
@@ -997,10 +1044,13 @@ interpolation and camera behavior differ from the headless renderer.
 
 ### Large-Image Tiling And Pyramids
 
-For `15000 x 10000` to `30000 x 20000` imagery, likely future work includes
-`blockedImage`, image pyramids, zoom-dependent tile selection, lower-resolution
-textures during interaction, and full-resolution exact readback outside the UI
-loop.
+For `15000 x 10000` to `30000 x 20000` imagery, the viewer now has an
+app-facing display pyramid and visible tile selection path. Follow-up work may
+still consider `blockedImage`, lazy on-disk pyramid construction, more advanced
+zoom-dependent tile replacement, and profiling of very large scenes. Backend
+processing should remain streamlined and 1:1 with the source image data: preview
+pyramids are not backend inputs, and full-resolution exact readback remains
+outside the UI loop.
 
 ### Optional GPU Path
 
@@ -1023,9 +1073,9 @@ and performance checks for GPU-capable systems.
 - `PlanarProjection.triangulateRays` currently solves closest points for
   infinite lines.
 
-Before exact backend readback becomes authoritative, decide whether these APIs
-should enforce forward-ray semantics or be documented/renamed as signed-line
-operations.
+Before changing geometry semantics or tightening backend assumptions around
+forward-only rays, decide whether these APIs should enforce forward-ray
+semantics or be documented/renamed as signed-line operations.
 
 ### Blend And Change-Detection Workflows
 

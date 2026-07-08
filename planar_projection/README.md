@@ -17,9 +17,11 @@ src/ProjectionViewerHarness.m   Synthetic scene and source-geometry harness
 src/ProjectionSourceGeometry.m  Sparse source-geometry grid adapter
 src/ProjectionLayerManager.m    Multi-layer visibility and change-workflow helpers
 src/ProjectionMeshBuilder.m     Pure sampled projection mesh builder
+src/ProjectionPreviewPyramid.m  Display-only viewer preview pyramid/tile helper
 src/ProjectionReadbackRenderer.m Headless frame-camera readback prototype
 src/ProjectionViewerApp.m       Programmatic interactive preview app
 src/ProjectionViewerState.m     JSON-serializable viewer state and scene-apply helpers
+src/ProjectionAlignment*.m      Feature-based alignment models, matching, solving, and runner
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionBackendGpuSupport.m Backend optional gpuArray capability checks
 src/ProjectionBackendCustomGpuKernelPlan.m Backend custom GPU kernel assessment
@@ -28,8 +30,10 @@ src/ProjectionBackendOutputWriter.m Backend image/mask/metadata writers
 src/ProjectionBackendTiledRenderer.m Backend serial tiled CPU renderer
 src/ProjectionBackendProcessor.m Backend job invocation facade
 tests/PlanarProjectionTest.m    Class-based unit tests
+tests/ProjectionAlignment*.m    Alignment model, matching, solver, GUI, and backend tests
 runProjectionViewer.m           Programmatic launcher for real image/geometry data
 runProjectionViewerPrototype.m  Launcher for the local prototype TIFF
+runSyntheticAlignmentPrototype.m Launcher for red/blue synthetic alignment scenes
 validateProjectionBackendJob.m  Validate backend jobs without rendering
 scripts/backend_interactive_evaluation.m Sectioned backend evaluation script
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
@@ -170,15 +174,23 @@ kappa view-vector correction state. Multi-layer previews share one projection
 plane, with a small display-only depth bias so layers do not fight in the
 renderer. The default selected layer is the topmost layer.
 
+Large layers can use display-only preview pyramids and tiled preview surfaces so
+the app stays responsive while panning, zooming, and adjusting projection state.
+These pyramids do not change the layer `Image` data used by readback or backend
+jobs; backend processing keeps the full source image and renders through the
+configured output grid.
+
 Core controls:
 
 - Mouse wheel zooms the view.
 - Shift + wheel adjusts Tip, Alt/Option + wheel adjusts Tilt, and Control +
   wheel adjusts Twist camera roll.
+- Up/Down arrows adjust Tip by `0.5` degrees; Left/Right arrows adjust Tilt by
+  `0.5` degrees.
 - Plain left-drag pans the camera.
 - Control + left-drag translates the selected layer on the projection plane,
   using the same selected-layer projection offset as W/A/S/D.
-- Control + right-drag adjusts omega and phi for the selected layer so the
+- Alt/Option + left-drag adjusts omega and phi for the selected layer so the
   projected image tracks the mouse drag.
 - W/A/S/D translates the selected layer up/left/down/right on the projection
   plane.
@@ -250,6 +262,9 @@ app = runProjectionViewer(layerNames, imageDataList, ...
 
 The viewer frame camera is placed at the arithmetic mean of the per-layer
 `NominalSceneCenter` vectors and looks toward the supplied projection plane.
+The initial view frames the projected surface conservatively in the viewport,
+and stabilized axes limits keep large tip/tilt adjustments from changing the
+apparent scale on the first edit.
 
 ## Backend Processor Workflow
 
@@ -257,7 +272,8 @@ The backend processor milestones are implemented and committed. The backend can
 run live in-memory jobs or serialized JSON/MAT jobs, apply viewer state
 headlessly, plan full-extent output grids, render composite and per-layer
 outputs, write PNG/TIFF products with metadata, process tiles serially or with
-`parpool("threads")`, and accept optional GPU requests with CPU fallback.
+`parpool("threads")`, run optional alignment before rendering, and accept
+optional GPU requests with CPU fallback.
 
 From an interactive app session:
 
@@ -271,6 +287,24 @@ ProjectionBackendJob.write("backend_job.json", job);
 validation = validateProjectionBackendJob("backend_job.json");
 result = ProjectionBackendProcessor.run("backend_job.json");
 ```
+
+Alignment can also run headlessly before rendering. The alignment request selects
+analysis layers and bands; solved pointing corrections are applied to the scene
+and therefore to all bands during backend rendering:
+
+```matlab
+job.Alignment = struct( ...
+    Enabled=true, ...
+    Request=struct( ...
+        LayerIndices=[1 2], ...
+        ReferenceLayerIndex=1, ...
+        AnalysisBands=[1 1]), ...
+    RenderOptions=struct(OutputSize=[512 512]));
+```
+
+When `Output.WriteFiles` is true, alignment-enabled jobs can write
+`aligned_viewer_state.json` and `alignment_diagnostics.json` beside the rendered
+products.
 
 Threaded backend execution is opt-in and uses only MATLAB's thread pool:
 
