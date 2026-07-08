@@ -326,6 +326,13 @@ Acceptance criteria:
 - Match markers remain registered to their source layers after tip/tilt edits.
 - Match lines remain meaningful after previewing or applying OPK corrections.
 
+Implementation note:
+
+- Overlay redraw now prefers source row/column observations and recomputes
+  current projection-plane coordinates from the active scene geometry. Finalized
+  projection, layer offset, preview, apply, and revert updates refresh visible
+  overlays without changing stored match or solve state.
+
 ### 4.2 Add overlay visibility controls
 
 Add toggles for:

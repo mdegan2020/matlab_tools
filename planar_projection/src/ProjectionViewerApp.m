@@ -1851,11 +1851,21 @@ classdef ProjectionViewerApp < handle
             app.drawAlignmentOverlays(result);
         end
 
-        function matches = alignmentOverlayMatches(~, matchResult)
+        function matches = alignmentOverlayMatches(app, matchResult)
             if isempty(matchResult) || ~isstruct(matchResult) || ...
-                    ~isfield(matchResult, "Matches") || isempty(matchResult.Matches)
+                    (~isfield(matchResult, "Matches") || isempty(matchResult.Matches)) && ...
+                    (~isfield(matchResult, "Diagnostics") || ...
+                    ~isfield(matchResult.Diagnostics, "MatchRecords"))
                 matches = struct("Pair", {}, "MovingProjectionPoints", {}, ...
                     "ReferenceProjectionPoints", {}, "Count", {});
+                return
+            end
+
+            if isfield(matchResult, "Diagnostics") && ...
+                    isfield(matchResult.Diagnostics, "MatchRecords") && ...
+                    ~isempty(matchResult.Diagnostics.MatchRecords)
+                matches = app.alignmentOverlayMatchesFromRecords( ...
+                    matchResult.Diagnostics.MatchRecords);
                 return
             end
 
@@ -1863,15 +1873,128 @@ classdef ProjectionViewerApp < handle
                 pairMatch = matchResult.Matches(k);
                 match = struct();
                 match.Pair = pairMatch.Pair;
-                match.MovingProjectionPoints = pairMatch.MovingPlaneCoordinates;
-                match.ReferenceProjectionPoints = ...
-                    pairMatch.ReferencePlaneCoordinates;
+                [movingPoints, referencePoints] = ...
+                    app.currentAlignmentProjectionPoints(pairMatch);
+                match.MovingProjectionPoints = movingPoints;
+                match.ReferenceProjectionPoints = referencePoints;
                 match.Count = pairMatch.Count;
                 if k == 1
                     matches = match;
                 else
                     matches(k) = match;
                 end
+            end
+        end
+
+        function matches = alignmentOverlayMatchesFromRecords(app, records)
+            if isempty(records)
+                matches = struct("Pair", {}, "MovingProjectionPoints", {}, ...
+                    "ReferenceProjectionPoints", {}, "Count", {});
+                return
+            end
+
+            pairKeys = unique(string({records.PairKey}), "stable");
+            for k = 1:numel(pairKeys)
+                pairRecords = records(string({records.PairKey}) == pairKeys(k));
+                pair = pairRecords(1).Pair;
+                pairMatch = struct();
+                pairMatch.Pair = pair;
+                pairMatch.MovingSourceRows = [pairRecords.MovingSourceRow].';
+                pairMatch.MovingSourceColumns = ...
+                    [pairRecords.MovingSourceColumn].';
+                pairMatch.ReferenceSourceRows = ...
+                    [pairRecords.ReferenceSourceRow].';
+                pairMatch.ReferenceSourceColumns = ...
+                    [pairRecords.ReferenceSourceColumn].';
+                pairMatch.MovingPlaneCoordinates = zeros(numel(pairRecords), 2);
+                pairMatch.ReferencePlaneCoordinates = zeros(numel(pairRecords), 2);
+                pairMatch.Count = numel(pairRecords);
+
+                match = struct();
+                match.Pair = pair;
+                [movingPoints, referencePoints] = ...
+                    app.currentAlignmentProjectionPoints(pairMatch);
+                match.MovingProjectionPoints = movingPoints;
+                match.ReferenceProjectionPoints = referencePoints;
+                match.Count = pairMatch.Count;
+                if k == 1
+                    matches = match;
+                else
+                    matches(k) = match;
+                end
+            end
+        end
+
+        function [movingPoints, referencePoints] = ...
+                currentAlignmentProjectionPoints(app, pairMatch)
+            movingPoints = pairMatch.MovingPlaneCoordinates;
+            referencePoints = pairMatch.ReferencePlaneCoordinates;
+            requiredFields = ["MovingSourceRows", "MovingSourceColumns", ...
+                "ReferenceSourceRows", "ReferenceSourceColumns"];
+            if any(~isfield(pairMatch, requiredFields))
+                return
+            end
+
+            try
+                movingPoints = app.projectLayerSourceObservationsToCurrentPlane( ...
+                    pairMatch.Pair(1), pairMatch.MovingSourceRows, ...
+                    pairMatch.MovingSourceColumns);
+                referencePoints = ...
+                    app.projectLayerSourceObservationsToCurrentPlane( ...
+                    pairMatch.Pair(2), pairMatch.ReferenceSourceRows, ...
+                    pairMatch.ReferenceSourceColumns);
+            catch
+                movingPoints = pairMatch.MovingPlaneCoordinates;
+                referencePoints = pairMatch.ReferencePlaneCoordinates;
+            end
+        end
+
+        function planePoints = projectLayerSourceObservationsToCurrentPlane( ...
+                app, layerIndex, rows, columns)
+            rows = double(rows(:));
+            columns = double(columns(:));
+            plane = app.currentProjectionPlane();
+            layer = app.Scene.layers(layerIndex);
+            layer.CurrentProjectionPlane = plane;
+            layer.MeshSampling = app.DefaultMeshSampling(layerIndex);
+            mesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                layer, plane, app.Scene.renderOrigin);
+
+            worldPoints = nan(3, numel(rows));
+            for componentIndex = 1:3
+                componentGrid = squeeze(mesh.WorldPoints(componentIndex, :, :));
+                worldPoints(componentIndex, :) = interp2( ...
+                    mesh.ColumnIndices, mesh.RowIndices, componentGrid, ...
+                    columns.', rows.', "linear", NaN);
+            end
+
+            if any(~isfinite(worldPoints), "all")
+                error("ProjectionViewerApp:invalidAlignmentOverlayPoint", ...
+                    "Alignment overlay source observations must lie inside the current layer mesh.");
+            end
+            planePoints = PlanarProjection.worldToPlane(worldPoints, plane).';
+        end
+
+        function refreshAlignmentOverlays(app)
+            if ~app.hasAlignmentOverlayGraphics()
+                return
+            end
+
+            if app.hasAlignmentResult()
+                app.drawAlignmentOverlays(app.AlignmentResult);
+            elseif app.hasFilteredAlignmentMatches()
+                visibleMatches = app.applyCuratedMaskToMatchResult( ...
+                    app.AlignmentFilteredMatchResult);
+                app.drawAlignmentMatchOverlays(visibleMatches);
+            end
+        end
+
+        function tf = hasAlignmentOverlayGraphics(app)
+            try
+                tf = any(isgraphics(app.AlignmentOverlayLines)) || ...
+                    any(isgraphics(app.AlignmentSelectedMatchOverlay));
+            catch
+                tf = false;
             end
         end
 
@@ -3335,6 +3458,9 @@ classdef ProjectionViewerApp < handle
             end
 
             app.updateLabels(tipDegrees, tiltDegrees, app.ViewTwistDegrees, alpha);
+            if isequal(meshSamplings, app.DefaultMeshSampling)
+                app.refreshAlignmentOverlays();
+            end
             drawnow limitrate
         end
 
@@ -3366,6 +3492,10 @@ classdef ProjectionViewerApp < handle
                     app.CurrentMesh = mesh;
                     app.Surface = app.primarySurfaceForLayer(layerIndex);
                 end
+            end
+
+            if isequal(meshSamplings, app.DefaultMeshSampling)
+                app.refreshAlignmentOverlays();
             end
         end
 

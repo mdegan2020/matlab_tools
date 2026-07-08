@@ -464,6 +464,43 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 string(dataAfterSecondSolve.State(disabledMask)), "disabled");
         end
 
+        function testAlignmentOverlaysRefreshAfterLayerNudge(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(false);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
+            matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchButton");
+
+            detectorDropDown.Value = "sift";
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            overlay = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchOverlay");
+            coordinatesBefore = ...
+                ProjectionViewerAlignmentWorkflowTest.overlayCoordinates(overlay);
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAlignmentWorkflowTest.makeKeyEvent("w"));
+            drawnow
+            overlayAfterNudge = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchOverlay");
+            coordinatesAfter = ...
+                ProjectionViewerAlignmentWorkflowTest.overlayCoordinates( ...
+                overlayAfterNudge);
+
+            testCase.verifyGreaterThan( ...
+                ProjectionViewerAlignmentWorkflowTest.finiteCoordinateDelta( ...
+                coordinatesBefore, coordinatesAfter), 1e-6);
+        end
+
         function testRayToRayLossRunsThroughControls(testCase)
             capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
             testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
@@ -537,6 +574,20 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
         function offsets = viewVectorOffsets(state)
             offsets = reshape([state.Layers.ViewVectorAngularOffsetsDegrees], ...
                 3, []).';
+        end
+
+        function event = makeKeyEvent(key)
+            event = struct(Key=key, Modifier=key);
+        end
+
+        function coordinates = overlayCoordinates(overlay)
+            coordinates = [overlay.XData(:), overlay.YData(:), ...
+                overlay.ZData(:)];
+        end
+
+        function delta = finiteCoordinateDelta(before, after)
+            finiteMask = isfinite(before) & isfinite(after);
+            delta = norm(after(finiteMask) - before(finiteMask));
         end
     end
 end

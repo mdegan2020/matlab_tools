@@ -211,7 +211,9 @@ Core controls:
   references, per-pair residual summaries, and table-ready match records for
   follow-up review workflows. The match table can sort residuals, highlight a
   selected correspondence, and disable individual observations before solving
-  again without re-matching.
+  again without re-matching. Visible match overlays redraw from source
+  observations after finalized projection, layer-offset, preview, apply, and
+  revert updates.
 
 Manual auto-alignment validation loop:
 
