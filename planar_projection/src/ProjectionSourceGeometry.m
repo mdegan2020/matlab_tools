@@ -54,6 +54,9 @@ classdef ProjectionSourceGeometry
             sourceGeometry.SampleFcn = @(rowIndices, columnIndices) ...
                 ProjectionSourceGeometry.sampleGridGeometry( ...
                 geometryData, rowIndices, columnIndices);
+            sourceGeometry.SampleRayFcn = @(rowPositions, columnPositions) ...
+                ProjectionSourceGeometry.sampleGridRays( ...
+                geometryData, rowPositions, columnPositions);
         end
     end
 
@@ -172,6 +175,16 @@ classdef ProjectionSourceGeometry
                 geometryData, rowIndices, columnIndices);
         end
 
+        function [G, V] = sampleGridRays(geometryData, rowPositions, columnPositions)
+            [rowPositions, columnPositions] = ...
+                ProjectionSourceGeometry.validateObservationPositions( ...
+                rowPositions, columnPositions, geometryData.ImageSize);
+
+            G = ProjectionSourceGeometry.sampleOrigins(geometryData, columnPositions);
+            V = ProjectionSourceGeometry.sampleObservationViewVectors( ...
+                geometryData, rowPositions, columnPositions);
+        end
+
         function indices = validateSampleIndices(indices, upperBound, name)
             if ~isnumeric(indices) || isempty(indices) || ~isvector(indices) || ...
                     any(~isfinite(indices)) || any(indices < 1) || ...
@@ -180,6 +193,32 @@ classdef ProjectionSourceGeometry
                     "%s must contain finite positive integer image indices.", name);
             end
             indices = double(indices(:).');
+        end
+
+        function [rowPositions, columnPositions] = validateObservationPositions( ...
+                rowPositions, columnPositions, imageSize)
+            rowPositions = ProjectionSourceGeometry.validateSamplePositions( ...
+                rowPositions, imageSize(1), "rowPositions");
+            columnPositions = ProjectionSourceGeometry.validateSamplePositions( ...
+                columnPositions, imageSize(2), "columnPositions");
+            if isscalar(rowPositions) && ~isscalar(columnPositions)
+                rowPositions = repmat(rowPositions, size(columnPositions));
+            elseif isscalar(columnPositions) && ~isscalar(rowPositions)
+                columnPositions = repmat(columnPositions, size(rowPositions));
+            elseif numel(rowPositions) ~= numel(columnPositions)
+                error("ProjectionSourceGeometry:invalidSamplePositions", ...
+                    "rowPositions and columnPositions must have the same number of elements.");
+            end
+        end
+
+        function positions = validateSamplePositions(positions, upperBound, name)
+            if ~isnumeric(positions) || isempty(positions) || ~isvector(positions) || ...
+                    any(~isfinite(positions)) || any(positions < 1) || ...
+                    any(positions > upperBound)
+                error("ProjectionSourceGeometry:invalidSamplePositions", ...
+                    "%s must contain finite image positions in bounds.", name);
+            end
+            positions = double(positions(:).');
         end
 
         function G = sampleOrigins(geometryData, columnPositions)
@@ -214,6 +253,49 @@ classdef ProjectionSourceGeometry
             end
 
             V = ProjectionSourceGeometry.normalizeVectors(V);
+        end
+
+        function V = sampleObservationViewVectors(geometryData, rowPositions, ...
+                columnPositions)
+            rowPositions = double(rowPositions(:).');
+            columnPositions = double(columnPositions(:).');
+            V = zeros(3, numel(rowPositions));
+
+            rowPosts = geometryData.RowPostIndices;
+            columnPosts = geometryData.ColumnPostIndices;
+            for componentIndex = 1:3
+                componentGrid = squeeze( ...
+                    geometryData.GridViewVectors(componentIndex, :, :));
+                V(componentIndex, :) = ...
+                    ProjectionSourceGeometry.sampleObservationComponentGrid( ...
+                    componentGrid, rowPosts, columnPosts, rowPositions, ...
+                    columnPositions, geometryData.InterpolationMethod);
+            end
+
+            V = ProjectionSourceGeometry.normalizeVectors(V);
+        end
+
+        function values = sampleObservationComponentGrid(componentGrid, rowPosts, ...
+                columnPosts, rowPositions, columnPositions, interpolationMethod)
+            if isscalar(rowPosts) && isscalar(columnPosts)
+                values = repmat(componentGrid(1, 1), 1, numel(rowPositions));
+                return
+            end
+
+            if isscalar(rowPosts)
+                values = interp1(columnPosts, componentGrid(1, :), ...
+                    columnPositions, char(interpolationMethod));
+                return
+            end
+
+            if isscalar(columnPosts)
+                values = interp1(rowPosts, componentGrid(:, 1), ...
+                    rowPositions, char(interpolationMethod));
+                return
+            end
+
+            values = interp2(columnPosts, rowPosts, componentGrid, ...
+                columnPositions, rowPositions, char(interpolationMethod));
         end
 
         function values = sampleComponentGrid(componentGrid, rowPosts, columnPosts, ...

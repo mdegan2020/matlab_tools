@@ -104,6 +104,23 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 "No enabled alignment pairs"));
         end
 
+        function testAlignmentDiagnosticsReportsSamplerAndMeshCost(testCase)
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(false);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            diagnostics = app.alignmentDiagnostics();
+
+            testCase.verifyEqual(diagnostics.LayerCount, 2);
+            testCase.verifyEqual(diagnostics.EnabledPairs, [2 1]);
+            testCase.verifyEqual(diagnostics.EnabledPairCount, 1);
+            testCase.verifyTrue(diagnostics.AllLayersHaveObservationRaySampler);
+            testCase.verifyEqual([diagnostics.Layers.DefaultMeshVertexCount], ...
+                [6400 6400]);
+            testCase.verifyEqual(diagnostics.RenderOptions.OutputSize, [512 512]);
+        end
+
         function testRoiButtonDrawsProjectionPlaneRectangle(testCase)
             scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(false);
             app = ProjectionViewerApp(scene);

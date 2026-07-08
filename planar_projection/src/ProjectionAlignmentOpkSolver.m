@@ -134,10 +134,20 @@ classdef ProjectionAlignmentOpkSolver
 
         function [origins, vectors] = sourceRays(layer, correctionDegrees, rows, ...
                 columns, renderOrigin, ~, sharedScale)
-            projectedLayer = layer;
-            projectedLayer.ViewVectorAngularOffsetsDegrees = correctionDegrees(:);
             rows = ProjectionAlignmentOpkSolver.scaleSourceRows( ...
                 rows, layer, sharedScale);
+            if ProjectionAlignmentOpkSolver.hasObservationRaySampler(layer)
+                [origins, vectors] = ProjectionAlignmentOpkSolver.sampleObservationRays( ...
+                    layer, rows, columns);
+                rotation = ProjectionAlignmentOpkSolver.layerViewVectorRotation( ...
+                    layer, correctionDegrees);
+                vectors = ProjectionAlignmentOpkSolver.normalizeVectors( ...
+                    rotation * vectors);
+                return
+            end
+
+            projectedLayer = layer;
+            projectedLayer.ViewVectorAngularOffsetsDegrees = correctionDegrees(:);
             mesh = ProjectionMeshBuilder.buildLayerMesh( ...
                 projectedLayer, projectedLayer.CurrentProjectionPlane, renderOrigin);
             origins = ProjectionAlignmentOpkSolver.interpolateOrigins(mesh, columns);
@@ -188,26 +198,154 @@ classdef ProjectionAlignmentOpkSolver
 
         function coordinates = projectObservations(layer, correctionDegrees, rows, ...
                 columns, renderOrigin, commonPlane, sharedScale)
-            projectedLayer = layer;
-            projectedLayer.ViewVectorAngularOffsetsDegrees = correctionDegrees(:);
-            rows = ProjectionAlignmentOpkSolver.scaleSourceRows( ...
-                rows, layer, sharedScale);
-            mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                projectedLayer, projectedLayer.CurrentProjectionPlane, renderOrigin);
-            worldPoints = reshape(mesh.WorldPoints, 3, []);
+            [origins, vectors] = ProjectionAlignmentOpkSolver.sourceRays( ...
+                layer, correctionDegrees, rows, columns, renderOrigin, ...
+                commonPlane, sharedScale);
+            worldPoints = ProjectionAlignmentOpkSolver.intersectObservationRays( ...
+                origins, vectors, layer.CurrentProjectionPlane);
             planeCoordinates = PlanarProjection.worldToPlane(worldPoints, commonPlane);
-            [rowGrid, columnGrid] = ndgrid(mesh.RowIndices, mesh.ColumnIndices);
-            xInterpolant = scatteredInterpolant(columnGrid(:), rowGrid(:), ...
-                planeCoordinates(1, :).', "linear", "none");
-            yInterpolant = scatteredInterpolant(columnGrid(:), rowGrid(:), ...
-                planeCoordinates(2, :).', "linear", "none");
-            x = xInterpolant(columns(:), rows(:));
-            y = yInterpolant(columns(:), rows(:));
-            coordinates = [x, y];
+            coordinates = planeCoordinates.';
             if any(~isfinite(coordinates), "all")
                 error("ProjectionAlignmentOpkSolver:observationOutsideMesh", ...
                     "Matched source observations must lie inside the layer mesh.");
             end
+        end
+
+        function worldPoints = intersectObservationRays(origins, vectors, plane)
+            normal = plane.VN;
+            denom = normal.' * vectors;
+            if any(abs(denom) <= ProjectionAlignmentOpkSolver.defaultTolerance())
+                error("ProjectionAlignmentOpkSolver:parallelRay", ...
+                    "One or more matched source rays are parallel to the projection plane.");
+            end
+
+            ranges = (normal.' * (plane.P0 - origins)) ./ denom;
+            if any(ranges <= ProjectionAlignmentOpkSolver.defaultTolerance())
+                error("ProjectionAlignmentOpkSolver:behindSource", ...
+                    "One or more matched intersections are behind the source origin.");
+            end
+
+            worldPoints = origins + vectors .* ranges;
+        end
+
+        function tf = hasObservationRaySampler(layer)
+            sourceGeometry = layer.SourceGeometry;
+            tf = isfield(sourceGeometry, "SampleRayFcn") && ...
+                isa(sourceGeometry.SampleRayFcn, "function_handle");
+        end
+
+        function [origins, vectors] = sampleObservationRays(layer, rows, columns)
+            [origins, vectors] = layer.SourceGeometry.SampleRayFcn(rows, columns);
+            ProjectionAlignmentOpkSolver.validateObservationRays( ...
+                origins, vectors, numel(rows));
+        end
+
+        function validateObservationRays(origins, vectors, observationCount)
+            if ~isnumeric(origins) || ~isequal(size(origins), [3 observationCount]) || ...
+                    any(~isfinite(origins), "all")
+                error("ProjectionAlignmentOpkSolver:invalidObservationRays", ...
+                    "SampleRayFcn must return origins as a finite 3 x N array.");
+            end
+
+            if ~isnumeric(vectors) || ~isequal(size(vectors), [3 observationCount]) || ...
+                    any(~isfinite(vectors), "all")
+                error("ProjectionAlignmentOpkSolver:invalidObservationRays", ...
+                    "SampleRayFcn must return view vectors as a finite 3 x N array.");
+            end
+        end
+
+        function R = layerViewVectorRotation(layer, correctionDegrees)
+            offsetsDegrees = double(correctionDegrees(:));
+            if all(abs(offsetsDegrees) <= ProjectionAlignmentOpkSolver.defaultTolerance())
+                R = eye(3);
+                return
+            end
+
+            sourceGeometry = layer.SourceGeometry;
+            imageYAxis = ProjectionAlignmentOpkSolver.sourceGeometryUnitVector( ...
+                sourceGeometry, ["ImageYAxis", "RowAxis"], "image y axis");
+            imageXAxis = ProjectionAlignmentOpkSolver.sourceGeometryUnitVector( ...
+                sourceGeometry, ["ImageXAxis", "PlatformDirection"], "image x axis");
+            referenceOrigin = ProjectionAlignmentOpkSolver.sourceGeometryPoint( ...
+                sourceGeometry, ["G0", "ReferenceOrigin"], "G0");
+            kappaAxis = ProjectionAlignmentOpkSolver.unitVector( ...
+                layer.CurrentProjectionPlane.P0 - referenceOrigin, "kappa axis");
+
+            omegaRadians = deg2rad(offsetsDegrees(1));
+            phiRadians = deg2rad(offsetsDegrees(2));
+            kappaRadians = deg2rad(offsetsDegrees(3));
+            Romega = ProjectionAlignmentOpkSolver.rotationAboutAxis( ...
+                imageYAxis, omegaRadians);
+            Rphi = ProjectionAlignmentOpkSolver.rotationAboutAxis( ...
+                imageXAxis, phiRadians);
+            Rkappa = ProjectionAlignmentOpkSolver.rotationAboutAxis( ...
+                kappaAxis, kappaRadians);
+            R = Rkappa * Rphi * Romega;
+        end
+
+        function vector = sourceGeometryUnitVector(sourceGeometry, fieldNames, name)
+            vector = ProjectionAlignmentOpkSolver.sourceGeometryVector( ...
+                sourceGeometry, fieldNames, name);
+            vector = ProjectionAlignmentOpkSolver.unitVector(vector, name);
+        end
+
+        function vector = sourceGeometryVector(sourceGeometry, fieldNames, name)
+            for fieldName = string(fieldNames)
+                if isfield(sourceGeometry, fieldName)
+                    vector = sourceGeometry.(fieldName);
+                    if ~isnumeric(vector) || ~isequal(size(vector), [3 1]) || ...
+                            any(~isfinite(vector))
+                        error("ProjectionAlignmentOpkSolver:invalidViewVectorCorrection", ...
+                            "Source geometry %s must be a finite numeric 3x1 vector.", name);
+                    end
+                    vector = double(vector);
+                    return
+                end
+            end
+
+            error("ProjectionAlignmentOpkSolver:invalidViewVectorCorrection", ...
+                "Source geometry must contain %s for view-vector correction.", name);
+        end
+
+        function point = sourceGeometryPoint(sourceGeometry, fieldNames, name)
+            point = ProjectionAlignmentOpkSolver.sourceGeometryVector( ...
+                sourceGeometry, fieldNames, name);
+        end
+
+        function R = rotationAboutAxis(axis, angle)
+            axis = ProjectionAlignmentOpkSolver.unitVector(axis, "rotation axis");
+            K = [0 -axis(3) axis(2); axis(3) 0 -axis(1); -axis(2) axis(1) 0];
+            R = cos(angle) * eye(3) + ...
+                (1 - cos(angle)) * (axis * axis.') + sin(angle) * K;
+        end
+
+        function vector = unitVector(vector, name)
+            if ~isnumeric(vector) || ~isequal(size(vector), [3 1]) || ...
+                    any(~isfinite(vector))
+                error("ProjectionAlignmentOpkSolver:invalidVector", ...
+                    "%s must be a finite numeric 3x1 vector.", name);
+            end
+
+            magnitude = norm(vector);
+            if magnitude <= ProjectionAlignmentOpkSolver.defaultTolerance()
+                error("ProjectionAlignmentOpkSolver:invalidVector", ...
+                    "%s must have nonzero length.", name);
+            end
+            vector = double(vector) / magnitude;
+        end
+
+        function vectors = normalizeVectors(vectors)
+            vectorNorms = sqrt(sum(vectors.^2, 1));
+            if any(vectorNorms <= ProjectionAlignmentOpkSolver.defaultTolerance(), ...
+                    "all")
+                error("ProjectionAlignmentOpkSolver:invalidObservationRays", ...
+                    "Sampled view vectors must have nonzero length.");
+            end
+            vectors = vectors ./ vectorNorms;
+        end
+
+        function tol = defaultTolerance()
+            tol = 1e-10;
         end
 
         function rows = scaleSourceRows(rows, layer, sharedScale)

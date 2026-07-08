@@ -232,6 +232,44 @@ classdef ProjectionViewerApp < handle
             end
             ProjectionBackendJob.write(filePath, app.exportBackendJob(options));
         end
+
+        function diagnostics = alignmentDiagnostics(app)
+            %alignmentDiagnostics Return lightweight GUI alignment diagnostics.
+            diagnostics = struct();
+            diagnostics.LayerCount = numel(app.Scene.layers);
+            diagnostics.Layers = app.alignmentLayerDiagnostics();
+            diagnostics.RenderOptions = app.alignmentRenderOptions();
+            diagnostics.Warning = "";
+
+            try
+                request = app.currentAlignmentRequest();
+                schedule = ProjectionAlignmentScheduler.build(app.Scene, request);
+                enabledPairs = app.enabledAlignmentPairs(schedule);
+                diagnostics.Request = struct( ...
+                    LayerIndices=request.LayerIndices, ...
+                    ReferenceLayerIndex=request.ReferenceLayerIndex, ...
+                    AnalysisBands=request.AnalysisBands, ...
+                    LossMode=request.Options.LossMode, ...
+                    SchedulingStrategy=request.Options.Scheduling.Strategy);
+                diagnostics.Schedule = schedule;
+                diagnostics.EnabledPairs = enabledPairs;
+                diagnostics.EnabledPairCount = size(enabledPairs, 1);
+                diagnostics.TotalDefaultMeshVertices = ...
+                    sum([diagnostics.Layers.DefaultMeshVertexCount]);
+                diagnostics.AllLayersHaveObservationRaySampler = ...
+                    all([diagnostics.Layers.HasSampleRayFcn]);
+            catch ME
+                diagnostics.Request = struct();
+                diagnostics.Schedule = struct();
+                diagnostics.EnabledPairs = zeros(0, 2);
+                diagnostics.EnabledPairCount = 0;
+                diagnostics.TotalDefaultMeshVertices = ...
+                    sum([diagnostics.Layers.DefaultMeshVertexCount]);
+                diagnostics.AllLayersHaveObservationRaySampler = ...
+                    all([diagnostics.Layers.HasSampleRayFcn]);
+                diagnostics.Warning = string(ME.message);
+            end
+        end
     end
 
     methods (Access = private)
@@ -744,6 +782,34 @@ classdef ProjectionViewerApp < handle
             end
             options = struct(OutputSize=outputSize, ...
                 MaxOutputPixels=prod(outputSize));
+        end
+
+        function layerDiagnostics = alignmentLayerDiagnostics(app)
+            names = app.layerDisplayNames();
+            for layerIndex = 1:numel(app.Scene.layers)
+                layer = app.Scene.layers(layerIndex);
+                meshSampling = app.DefaultMeshSampling(layerIndex);
+                sourceGeometry = layer.SourceGeometry;
+                layerDiagnostic = struct();
+                layerDiagnostic.LayerIndex = layerIndex;
+                layerDiagnostic.Name = names(layerIndex);
+                layerDiagnostic.ImageSize = double(sourceGeometry.ImageSize);
+                layerDiagnostic.DefaultMeshRowCount = ...
+                    numel(meshSampling.RowIndices);
+                layerDiagnostic.DefaultMeshColumnCount = ...
+                    numel(meshSampling.ColumnIndices);
+                layerDiagnostic.DefaultMeshVertexCount = ...
+                    layerDiagnostic.DefaultMeshRowCount * ...
+                    layerDiagnostic.DefaultMeshColumnCount;
+                layerDiagnostic.HasSampleRayFcn = ...
+                    isfield(sourceGeometry, "SampleRayFcn") && ...
+                    isa(sourceGeometry.SampleRayFcn, "function_handle");
+                if layerIndex == 1
+                    layerDiagnostics = layerDiagnostic;
+                else
+                    layerDiagnostics(layerIndex) = layerDiagnostic;
+                end
+            end
         end
 
         function refreshAlignmentPairTable(app)

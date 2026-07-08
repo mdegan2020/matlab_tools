@@ -33,6 +33,19 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
                 abs(scene.layers(2).ViewVectorAngularOffsetsDegrees(1)));
         end
 
+        function testProjectionLossUsesObservationRaySamplerWithoutMesh(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
+            scene = ProjectionAlignmentOpkSolverTest.invalidateMeshSampling(scene);
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+
+            result = ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, ProjectionAlignmentOpkSolverTest.looseOptions());
+
+            testCase.verifyTrue(result.Convergence.Success);
+            testCase.verifyLessThan(result.Diagnostics.RmsAfter, ...
+                result.Diagnostics.RmsBefore);
+        end
+
         function testBoundsConstrainSolvedCorrections(testCase)
             scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
             matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
@@ -178,6 +191,18 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(result.Residuals.After)));
         end
 
+        function testRayToRayLossUsesObservationRaySamplerWithoutMesh(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
+            scene = ProjectionAlignmentOpkSolverTest.invalidateMeshSampling(scene);
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+
+            result = ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, ProjectionAlignmentOpkSolverTest.rayOptions());
+
+            testCase.verifyTrue(result.Convergence.Success);
+            testCase.verifyTrue(all(isfinite(result.Residuals.After)));
+        end
+
         function testInsufficientMatchesError(testCase)
             scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
             matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
@@ -231,6 +256,14 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
             layer2.Name = "Layer 2";
             layer2.ImagePath = "layer2.tif";
             scene.layers = [scene.layers layer2];
+        end
+
+        function scene = invalidateMeshSampling(scene)
+            for layerIndex = 1:numel(scene.layers)
+                imageSize = scene.layers(layerIndex).SourceGeometry.ImageSize;
+                scene.layers(layerIndex).MeshSampling.RowIndices = imageSize(1) + 1;
+                scene.layers(layerIndex).MeshSampling.ColumnIndices = imageSize(2) + 1;
+            end
         end
 
         function matchResult = makeMatchResult()

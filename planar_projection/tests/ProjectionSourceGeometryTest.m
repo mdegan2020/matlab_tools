@@ -39,6 +39,28 @@ classdef ProjectionSourceGeometryTest < matlab.unittest.TestCase
                 AbsTol=ProjectionSourceGeometryTest.Tol);
         end
 
+        function testSampleRayFcnInterpolatesFractionalObservations(testCase)
+            [imageSize, rowPosts, columnPosts, origins, viewVectors] = ...
+                ProjectionSourceGeometryTest.makeGridInputs();
+            sourceGeometry = ProjectionSourceGeometry.fromGrid( ...
+                imageSize, rowPosts, columnPosts, origins, viewVectors);
+            rowPositions = [1.5 4 8.25];
+            columnPositions = [2 7.5 12];
+
+            [G, V] = sourceGeometry.SampleRayFcn(rowPositions, columnPositions);
+            expectedOrigins = interp1(columnPosts, origins.', ...
+                columnPositions, "linear").';
+            expectedVectors = ProjectionSourceGeometryTest.expectedObservationVectors( ...
+                rowPosts, columnPosts, viewVectors, rowPositions, columnPositions);
+
+            testCase.verifySize(G, [3 numel(rowPositions)]);
+            testCase.verifySize(V, [3 numel(rowPositions)]);
+            testCase.verifyEqual(G, expectedOrigins, ...
+                AbsTol=ProjectionSourceGeometryTest.Tol);
+            testCase.verifyEqual(V, expectedVectors, ...
+                AbsTol=ProjectionSourceGeometryTest.Tol);
+        end
+
         function testFromGridEstimatesPerPixelIfovFromPostSpacing(testCase)
             imageSize = [9 13];
             rowPosts = [1 5 9];
@@ -167,6 +189,18 @@ classdef ProjectionSourceGeometryTest < matlab.unittest.TestCase
                     columnGrid, rowGrid, "linear");
                 expectedVectors(componentIndex, :, :) = reshape( ...
                     values, 1, numRows, numColumns);
+            end
+            expectedVectors = ProjectionSourceGeometryTest.normalizeVectors(expectedVectors);
+        end
+
+        function expectedVectors = expectedObservationVectors( ...
+                rowPosts, columnPosts, viewVectors, rowPositions, columnPositions)
+            expectedVectors = zeros(3, numel(rowPositions));
+            for componentIndex = 1:3
+                componentGrid = squeeze(viewVectors(componentIndex, :, :));
+                expectedVectors(componentIndex, :) = interp2( ...
+                    columnPosts, rowPosts, componentGrid, ...
+                    columnPositions, rowPositions, "linear");
             end
             expectedVectors = ProjectionSourceGeometryTest.normalizeVectors(expectedVectors);
         end

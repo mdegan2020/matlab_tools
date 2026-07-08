@@ -299,6 +299,9 @@ classdef ProjectionViewerHarness
             sourceGeometry.SampleFcn = @(rowIndices, columnIndices) ...
                 ProjectionViewerHarness.sampleSyntheticGeometry( ...
                 geometryData, rowIndices, columnIndices);
+            sourceGeometry.SampleRayFcn = @(rowPositions, columnPositions) ...
+                ProjectionViewerHarness.sampleSyntheticRays( ...
+                geometryData, rowPositions, columnPositions);
         end
 
         function meshSampling = createMeshSampling(imageSize, rowStride, columnStride)
@@ -871,6 +874,56 @@ classdef ProjectionViewerHarness
             rowRays = geometryData.CameraRays(:, rowIndices);
             V = repmat(reshape(rowRays, 3, numel(rowIndices), 1), ...
                 1, 1, numel(columnIndices));
+        end
+
+        function [G, V] = sampleSyntheticRays(geometryData, rowPositions, ...
+                columnPositions)
+            [rowPositions, columnPositions] = ...
+                ProjectionViewerHarness.validateObservationPositions( ...
+                rowPositions, columnPositions, geometryData.ImageSize);
+            rowIndices = 1:geometryData.ImageSize(1);
+            columnIndices = 1:geometryData.ImageSize(2);
+
+            G = interp1(columnIndices, geometryData.Origins.', ...
+                columnPositions, "linear").';
+            V = interp1(rowIndices, geometryData.CameraRays.', ...
+                rowPositions, "linear").';
+            V = ProjectionViewerHarness.normalizeObservationVectors(V);
+        end
+
+        function [rowPositions, columnPositions] = validateObservationPositions( ...
+                rowPositions, columnPositions, imageSize)
+            rowPositions = ProjectionViewerHarness.validateSamplePositions( ...
+                rowPositions, imageSize(1), "rowPositions");
+            columnPositions = ProjectionViewerHarness.validateSamplePositions( ...
+                columnPositions, imageSize(2), "columnPositions");
+            if isscalar(rowPositions) && ~isscalar(columnPositions)
+                rowPositions = repmat(rowPositions, size(columnPositions));
+            elseif isscalar(columnPositions) && ~isscalar(rowPositions)
+                columnPositions = repmat(columnPositions, size(rowPositions));
+            elseif numel(rowPositions) ~= numel(columnPositions)
+                error("ProjectionViewerHarness:invalidSamplePositions", ...
+                    "rowPositions and columnPositions must have the same number of elements.");
+            end
+        end
+
+        function positions = validateSamplePositions(positions, upperBound, name)
+            if ~isnumeric(positions) || isempty(positions) || ~isvector(positions) || ...
+                    any(~isfinite(positions)) || any(positions < 1) || ...
+                    any(positions > upperBound)
+                error("ProjectionViewerHarness:invalidSamplePositions", ...
+                    "%s must contain finite image positions in bounds.", name);
+            end
+            positions = double(positions(:).');
+        end
+
+        function vectors = normalizeObservationVectors(vectors)
+            vectorNorms = sqrt(sum(vectors.^2, 1));
+            if any(vectorNorms <= 1e-12, "all")
+                error("ProjectionViewerHarness:invalidViewVectors", ...
+                    "Sampled view vectors must have nonzero length.");
+            end
+            vectors = vectors ./ vectorNorms;
         end
 
         function validateImageData(imageData)
