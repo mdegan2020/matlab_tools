@@ -179,6 +179,15 @@ Acceptance criteria:
 - The operator can identify that one or two matches dominate the solve.
 - Tests cover bound-hit reporting and worst-residual diagnostics.
 
+Implementation note:
+
+- Solver results now include `Diagnostics.MaxResidualBefore`,
+  `Diagnostics.MaxResidualAfter`, `Diagnostics.WorstResiduals`,
+  `Diagnostics.PerPairResidualSummary`, and table-ready
+  `Diagnostics.MatchRecords` with per-match source coordinates, working-image
+  coordinates, residuals, and accepted/disabled state. `Convergence` also
+  reports the optimizer function-evaluation count when MATLAB provides it.
+
 ## Feature Pack 2: Staged GUI Alignment Workflow
 
 ### 2.1 Split Run into Match and Solve actions

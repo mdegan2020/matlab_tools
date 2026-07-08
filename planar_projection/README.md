@@ -207,7 +207,9 @@ Core controls:
   displacement filtering, updates raw/filtered match counts, and draws match
   overlays; Solve reuses the stored filtered matches and reports residual/OPK
   summaries in the status text, including warnings when corrections hit OPK
-  bounds.
+  bounds. Solver diagnostics also include max residuals, worst residual match
+  references, per-pair residual summaries, and table-ready match records for
+  follow-up review workflows.
 
 Manual auto-alignment validation loop:
 

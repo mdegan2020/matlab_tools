@@ -86,6 +86,38 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
             testCase.verifyFalse(result.Diagnostics.AnyBoundHit);
         end
 
+        function testResidualDiagnosticsIdentifyWorstMatch(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makeBaseTwoLayerScene();
+            matchResult = ProjectionAlignmentOpkSolverTest.makeOutlierMatchResult();
+
+            result = ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, ...
+                ProjectionAlignmentOpkSolverTest.frozenOpkOptions(false));
+
+            records = result.Diagnostics.MatchRecords;
+            pairSummary = result.Diagnostics.PerPairResidualSummary;
+            testCase.verifyGreaterThan(result.Diagnostics.MaxResidualAfter, 0);
+            testCase.verifyEqual(result.Diagnostics.MaxResidualAfter, ...
+                result.Diagnostics.WorstResiduals.After.Residual, ...
+                AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
+            testCase.verifyEqual( ...
+                result.Diagnostics.WorstResiduals.After.Pair, [1 2]);
+            testCase.verifyEqual( ...
+                result.Diagnostics.WorstResiduals.After.MatchIndex, 6);
+            testCase.verifyEqual(pairSummary.WorstMatchIndexAfter, 6);
+            testCase.verifyEqual(pairSummary.MaxResidualAfter, ...
+                result.Diagnostics.MaxResidualAfter, ...
+                AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
+            testCase.verifyNumElements(records, matchResult.Matches.Count);
+            testCase.verifyEqual([records.MatchIndex], 1:matchResult.Matches.Count);
+            testCase.verifyEqual(records(6).ReferenceSourceColumn, ...
+                matchResult.Matches.ReferenceSourceColumns(6), ...
+                AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
+            testCase.verifyTrue(records(6).Accepted);
+            testCase.verifyFalse(records(6).Disabled);
+            testCase.verifyGreaterThan(result.Convergence.FunctionEvaluations, 0);
+        end
+
         function testRegularizationKeepsPerfectInitialState(testCase)
             scene = ProjectionAlignmentOpkSolverTest.makeRegularizedScene();
             matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
@@ -300,6 +332,14 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
         function matchResult = makeMatchResult()
             matchResult = struct(Matches= ...
                 ProjectionAlignmentOpkSolverTest.makePairMatch([1 2]));
+        end
+
+        function matchResult = makeOutlierMatchResult()
+            pairMatch = ProjectionAlignmentOpkSolverTest.makePairMatch([1 2]);
+            pairMatch.ReferenceFeatureLocations(6, :) = [5 5];
+            pairMatch.ReferenceSourceRows(6) = 5;
+            pairMatch.ReferenceSourceColumns(6) = 5;
+            matchResult = struct(Matches=pairMatch);
         end
 
         function matchResult = makeRowScaleMatchResult()

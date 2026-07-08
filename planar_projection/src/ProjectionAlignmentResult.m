@@ -281,6 +281,7 @@ classdef ProjectionAlignmentResult
             defaults.Status = "notRun";
             defaults.Success = false;
             defaults.Iterations = 0;
+            defaults.FunctionEvaluations = [];
             defaults.ExitFlag = [];
             defaults.Objective = [];
             defaults.FirstOrderOptimality = [];
@@ -295,6 +296,10 @@ classdef ProjectionAlignmentResult
             convergence.Iterations = ...
                 ProjectionAlignmentResult.validateNonnegativeInteger( ...
                 convergence.Iterations, "Convergence.Iterations");
+            convergence.FunctionEvaluations = ...
+                ProjectionAlignmentResult.validateOptionalNonnegativeInteger( ...
+                convergence.FunctionEvaluations, ...
+                "Convergence.FunctionEvaluations");
             convergence.ExitFlag = ProjectionAlignmentResult.validateOptionalFiniteScalar( ...
                 convergence.ExitFlag, "Convergence.ExitFlag");
             convergence.Objective = ProjectionAlignmentResult.validateOptionalFiniteScalar( ...
@@ -529,6 +534,15 @@ classdef ProjectionAlignmentResult
                     "%s must be a finite scalar.", name);
             end
             value = double(value);
+        end
+
+        function value = validateOptionalNonnegativeInteger(value, name)
+            if isempty(value)
+                value = [];
+                return
+            end
+            value = ProjectionAlignmentResult.validateNonnegativeInteger( ...
+                value, name);
         end
 
         function value = validateLogicalScalar(value, name)
