@@ -572,7 +572,7 @@ classdef ProjectionAlignmentOpkSolver
                 inlier.Pair = pairMatch.Pair;
                 inlier.Mask = true(pairMatch.Count, 1);
                 inlier.Count = pairMatch.Count;
-                inlier.Method = "filteredMatches";
+                inlier.Method = "solverObservations";
                 if k == 1
                     inliers = inlier;
                 else

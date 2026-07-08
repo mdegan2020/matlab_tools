@@ -203,7 +203,7 @@ Core controls:
   context menu. It can run auto-alignment for the selected pair or all visible
   layers. Choose a fast or quality preset, detector, loss mode, optional ROI,
   and enabled pair-table rows, then use Match, Solve, Preview, Apply, Revert,
-  and Clear. Match reports stage progress, updates pair match/inlier counts,
+  and Clear. Match reports stage progress, updates raw/filtered match counts,
   and draws match overlays; Solve reuses the stored filtered matches and reports
   residual/OPK summaries in the status text.
 

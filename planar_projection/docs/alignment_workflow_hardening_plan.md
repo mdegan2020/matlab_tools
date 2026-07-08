@@ -63,8 +63,8 @@ The GUI also lacks an obvious way to clear drawn match overlays, and the single
 
 ### 1.1 Enable geometric outlier filtering by default
 
-The GUI currently constructs options with `GeometricMethod="none"`. For real
-data, this is too permissive. The default GUI path should run a geometric
+The GUI previously constructed options with `GeometricMethod="none"`. For real
+data, this was too permissive. The default GUI path should run a geometric
 outlier stage after descriptor matching and before solving.
 
 Candidate behavior:
@@ -82,6 +82,11 @@ Acceptance criteria:
   filter when most correspondences form a compact consensus.
 - Existing synthetic alignment tests still pass.
 - Tests distinguish raw match counts from geometrically accepted counts.
+
+Implementation note:
+
+- The GUI default now requests `GeometricMethod="similarity"` and reports raw
+  versus filtered match counts distinctly.
 
 ### 1.2 Add native-pixel displacement sanity filtering
 

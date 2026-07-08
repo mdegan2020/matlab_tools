@@ -62,6 +62,24 @@ classdef ProjectionAlignmentMatchFilterTest < matlab.unittest.TestCase
                 filtered.Diagnostics.FilterPipeline.StageCounts.OverlapMask, 1);
         end
 
+        function testGeometricFilterRejectsCatastrophicDisplacements(testCase)
+            matchResult = ...
+                ProjectionAlignmentMatchFilterTest.makeCatastrophicOutlierMatchResult();
+            options = struct();
+            options.FilterPipeline = struct( ...
+                Stages="geometricOutlier", ...
+                GeometricMethod="similarity", ...
+                GeometricMaxDistancePixels=20);
+
+            filtered = ProjectionAlignmentMatchFilter.filter(matchResult, options);
+
+            testCase.verifyEqual(filtered.Matches.Count, 20);
+            testCase.verifyEqual( ...
+                filtered.Diagnostics.FilterPipeline.StageCounts.GeometricOutlier, ...
+                20);
+            testCase.verifyTrue(all(filtered.Matches.IndexPairs(:, 1) <= 20));
+        end
+
         function testRadialFilterCallbackControlsSurvivingMatches(testCase)
             matchResult = ProjectionAlignmentMatchFilterTest.makeDuplicateMatchResult();
             options = struct();
@@ -110,6 +128,18 @@ classdef ProjectionAlignmentMatchFilterTest < matlab.unittest.TestCase
                 [1 1; 2 2; 3 3], ...
                 [0.1; 0.2; 0.3], ...
                 [0.9; 0.8; 0.7]);
+        end
+
+        function matchResult = makeCatastrophicOutlierMatchResult()
+            moving = [(1:20).' (1:20).'];
+            reference = moving + [5 * ones(20, 1), 3 * ones(20, 1)];
+            moving = [moving; 10 10; 15 15];
+            reference = [reference; 15000 15000; -15000 14000];
+            indexPairs = [(1:22).' (1:22).'];
+            matchResult = struct();
+            matchResult.Matches = ProjectionAlignmentMatchFilterTest.makePairMatch( ...
+                moving, reference, indexPairs, 0.1 * ones(22, 1), ...
+                ones(22, 1));
         end
 
         function pairMatch = makePairMatch(movingLocations, referenceLocations, ...

@@ -450,7 +450,7 @@ Post-milestone features already added:
 - real-data launcher support for in-memory images and sparse sensor geometry.
 - hidden-by-default alignment panel with selected-pair and visible-layer
   workflows, fast/quality presets, ROI filtering, pair enablement, staged
-  match/solve state, match/inlier overlays, clear-overlays controls,
+  match/solve state, raw/filtered match counts, clear-overlays controls,
   preview/apply/revert, and backend integration.
 - expanded `-85` to `85` degree tip/tilt controls, stabilized preview axes,
   improved initial viewport framing, and arrow-key tip/tilt nudges.

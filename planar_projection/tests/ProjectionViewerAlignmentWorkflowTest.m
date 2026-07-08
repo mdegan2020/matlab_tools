@@ -29,6 +29,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
             drawnow
+            diagnostics = app.alignmentDiagnostics();
 
             fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
             referenceDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -72,6 +73,8 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(scopeDropDown.Value), "selectedPair");
             testCase.verifyEqual(string(detectorDropDown.Value), "auto");
             testCase.verifyEqual(string(lossDropDown.Value), "projectionPlane2D");
+            testCase.verifyEqual(diagnostics.Request.FilterGeometricMethod, ...
+                "similarity");
             testCase.verifyEqual(string(roiButton.Enable), "on");
             testCase.verifyEqual(string(clearRoiButton.Enable), "on");
             testCase.verifyEqual(string(clearOverlaysButton.Enable), "on");
@@ -86,7 +89,8 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(height(pairTable.Data), 1);
             testCase.verifyTrue(pairTable.Data.Enabled(1));
             testCase.verifyEqual(string(pairTable.Data.Pair(1)), "2 -> 1");
-            testCase.verifyTrue(all(ismember(["Matches", "Inliers", "Confidence"], ...
+            testCase.verifyTrue(all(ismember( ...
+                ["RawMatches", "FilteredMatches", "Confidence"], ...
                 string(pairTable.Data.Properties.VariableNames))));
         end
 
@@ -260,7 +264,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyNotEmpty(findall(fig, "Tag", ...
                 "ProjectionViewerAlignmentMatchOverlay"));
             testCase.verifyNotEmpty(findall(fig, "Tag", ...
-                "ProjectionViewerAlignmentReferenceInlierOverlay"));
+                "ProjectionViewerAlignmentReferenceMatchOverlay"));
 
             clearOverlaysMenuItem.MenuSelectedFcn(clearOverlaysMenuItem, struct());
             drawnow
@@ -268,9 +272,9 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEmpty(findall(fig, "Tag", ...
                 "ProjectionViewerAlignmentMatchOverlay"));
             testCase.verifyEmpty(findall(fig, "Tag", ...
-                "ProjectionViewerAlignmentMovingInlierOverlay"));
+                "ProjectionViewerAlignmentMovingMatchOverlay"));
             testCase.verifyEmpty(findall(fig, "Tag", ...
-                "ProjectionViewerAlignmentReferenceInlierOverlay"));
+                "ProjectionViewerAlignmentReferenceMatchOverlay"));
             testCase.verifyTrue(contains(string(statusLabel.Text), ...
                 "overlays cleared"));
             testCase.verifyEqual( ...
