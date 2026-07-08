@@ -84,7 +84,8 @@ classdef ProjectionViewerApp < handle
         AlignmentLossDropDown matlab.ui.control.DropDown
         AlignmentRoiButton matlab.ui.control.Button
         AlignmentClearRoiButton matlab.ui.control.Button
-        AlignmentRunButton matlab.ui.control.Button
+        AlignmentMatchButton matlab.ui.control.Button
+        AlignmentSolveButton matlab.ui.control.Button
         AlignmentCancelButton matlab.ui.control.Button
         AlignmentPreviewButton matlab.ui.control.Button
         AlignmentApplyButton matlab.ui.control.Button
@@ -92,6 +93,11 @@ classdef ProjectionViewerApp < handle
         AlignmentClearOverlaysButton matlab.ui.control.Button
         AlignmentStatusLabel matlab.ui.control.Label
         AlignmentPairTable matlab.ui.control.Table
+        AlignmentRequest struct = struct()
+        AlignmentWorkingImages struct = struct()
+        AlignmentRawMatchResult struct = struct()
+        AlignmentFilteredMatchResult struct = struct()
+        AlignmentCuratedMatchMask cell = {}
         AlignmentResult struct = struct()
         AlignmentOverlayLines = gobjects(0)
         AlignmentRoiBounds double = []
@@ -197,6 +203,11 @@ classdef ProjectionViewerApp < handle
             end
             app.refreshTiledProjectionSurfaces();
             app.updateControlsFromSelectedLayer();
+            app.clearAlignmentComputationState();
+            app.clearAlignmentOverlays();
+            app.setAlignmentActionEnabled(false);
+            app.setAlignmentSolveEnabled(false);
+            app.setAlignmentStatus("Alignment not run");
             drawnow limitrate
         end
 
@@ -241,6 +252,7 @@ classdef ProjectionViewerApp < handle
             diagnostics.LayerCount = numel(app.Scene.layers);
             diagnostics.Layers = app.alignmentLayerDiagnostics();
             diagnostics.RenderOptions = app.alignmentRenderOptions();
+            diagnostics.Stage = app.alignmentStageDiagnostics();
             diagnostics.Warning = "";
 
             try
@@ -403,13 +415,13 @@ classdef ProjectionViewerApp < handle
         end
 
         function createAlignmentControls(app)
-            app.AlignmentGrid = uigridlayout(app.GridLayout, [3 15]);
+            app.AlignmentGrid = uigridlayout(app.GridLayout, [3 16]);
             app.AlignmentGrid.Layout.Row = 2;
             app.AlignmentGrid.Layout.Column = 1;
             app.AlignmentGrid.Tag = "ProjectionViewerAlignmentGrid";
             app.AlignmentGrid.RowHeight = {"fit", "fit", 82};
             app.AlignmentGrid.ColumnWidth = {90, 145, 80, 110, 80, 115, ...
-                60, 60, 60, 70, 70, 65, 65, 70, "1x"};
+                60, 60, 65, 60, 70, 70, 65, 65, 70, "1x"};
             app.AlignmentGrid.Padding = [0 0 0 0];
             app.AlignmentGrid.RowSpacing = 4;
             app.AlignmentGrid.ColumnSpacing = 8;
@@ -491,59 +503,66 @@ classdef ProjectionViewerApp < handle
             app.AlignmentClearRoiButton.Layout.Row = 2;
             app.AlignmentClearRoiButton.Layout.Column = 8;
 
-            app.AlignmentRunButton = uibutton(app.AlignmentGrid, ...
-                Text="Run", Tag="ProjectionViewerAlignmentRunButton", ...
-                ButtonPushedFcn=@(~, ~) app.runAlignmentWorkflow());
-            app.AlignmentRunButton.Layout.Row = 2;
-            app.AlignmentRunButton.Layout.Column = 9;
+            app.AlignmentMatchButton = uibutton(app.AlignmentGrid, ...
+                Text="Match", Tag="ProjectionViewerAlignmentMatchButton", ...
+                ButtonPushedFcn=@(~, ~) app.matchAlignmentWorkflow());
+            app.AlignmentMatchButton.Layout.Row = 2;
+            app.AlignmentMatchButton.Layout.Column = 9;
+
+            app.AlignmentSolveButton = uibutton(app.AlignmentGrid, ...
+                Text="Solve", Enable="off", ...
+                Tag="ProjectionViewerAlignmentSolveButton", ...
+                ButtonPushedFcn=@(~, ~) app.solveAlignmentWorkflow());
+            app.AlignmentSolveButton.Layout.Row = 2;
+            app.AlignmentSolveButton.Layout.Column = 10;
 
             app.AlignmentCancelButton = uibutton(app.AlignmentGrid, ...
                 Text="Cancel", Enable="off", ...
                 Tag="ProjectionViewerAlignmentCancelButton", ...
                 ButtonPushedFcn=@(~, ~) app.cancelAlignmentWorkflow());
             app.AlignmentCancelButton.Layout.Row = 2;
-            app.AlignmentCancelButton.Layout.Column = 10;
+            app.AlignmentCancelButton.Layout.Column = 11;
 
             app.AlignmentPreviewButton = uibutton(app.AlignmentGrid, ...
                 Text="Preview", Enable="off", ...
                 Tag="ProjectionViewerAlignmentPreviewButton", ...
                 ButtonPushedFcn=@(~, ~) app.previewAlignmentResult());
             app.AlignmentPreviewButton.Layout.Row = 2;
-            app.AlignmentPreviewButton.Layout.Column = 11;
+            app.AlignmentPreviewButton.Layout.Column = 12;
 
             app.AlignmentApplyButton = uibutton(app.AlignmentGrid, ...
                 Text="Apply", Enable="off", ...
                 Tag="ProjectionViewerAlignmentApplyButton", ...
                 ButtonPushedFcn=@(~, ~) app.applyAlignmentResult());
             app.AlignmentApplyButton.Layout.Row = 2;
-            app.AlignmentApplyButton.Layout.Column = 12;
+            app.AlignmentApplyButton.Layout.Column = 13;
 
             app.AlignmentRevertButton = uibutton(app.AlignmentGrid, ...
                 Text="Revert", Enable="off", ...
                 Tag="ProjectionViewerAlignmentRevertButton", ...
                 ButtonPushedFcn=@(~, ~) app.revertAlignmentResult());
             app.AlignmentRevertButton.Layout.Row = 2;
-            app.AlignmentRevertButton.Layout.Column = 13;
+            app.AlignmentRevertButton.Layout.Column = 14;
 
             app.AlignmentClearOverlaysButton = uibutton(app.AlignmentGrid, ...
                 Text="Clear", Tooltip="Clear match overlays", ...
                 Tag="ProjectionViewerAlignmentClearOverlaysButton", ...
                 ButtonPushedFcn=@(~, ~) app.clearAlignmentOverlaysFromControls());
             app.AlignmentClearOverlaysButton.Layout.Row = 2;
-            app.AlignmentClearOverlaysButton.Layout.Column = 14;
+            app.AlignmentClearOverlaysButton.Layout.Column = 15;
 
             app.AlignmentStatusLabel = uilabel(app.AlignmentGrid, ...
                 Text="Alignment not run", ...
                 Tag="ProjectionViewerAlignmentStatusLabel");
             app.AlignmentStatusLabel.Layout.Row = [1 2];
-            app.AlignmentStatusLabel.Layout.Column = 15;
+            app.AlignmentStatusLabel.Layout.Column = 16;
 
             app.AlignmentPairTable = uitable(app.AlignmentGrid, ...
                 Data=app.emptyAlignmentPairTable(), ...
                 ColumnEditable=[true false false false false false false], ...
                 Tag="ProjectionViewerAlignmentPairTable");
             app.AlignmentPairTable.Layout.Row = 3;
-            app.AlignmentPairTable.Layout.Column = [1 15];
+            app.AlignmentPairTable.Layout.Column = [1 16];
 
             app.updateAlignmentLayerItems();
             app.setAlignmentActionEnabled(false);
@@ -596,12 +615,20 @@ classdef ProjectionViewerApp < handle
         end
 
         function runAlignmentWorkflow(app)
+            app.matchAlignmentWorkflow();
+            if app.hasSolvableFilteredMatches()
+                app.solveAlignmentWorkflow();
+            end
+        end
+
+        function matchAlignmentWorkflow(app)
             app.AlignmentCancelRequested = false;
+            app.clearAlignmentComputationState();
+            app.clearAlignmentOverlays();
+            app.setAlignmentActionEnabled(false);
+            app.setAlignmentSolveEnabled(false);
             app.setAlignmentRunning(true);
             cleanup = onCleanup(@() app.setAlignmentRunning(false));
-            app.setAlignmentActionEnabled(false);
-            app.clearAlignmentOverlays();
-            app.AlignmentResult = struct();
 
             try
                 request = app.currentAlignmentRequest();
@@ -642,8 +669,15 @@ classdef ProjectionViewerApp < handle
                 filteredMatches = ProjectionAlignmentMatchFilter.filter( ...
                     matchResult, options);
                 filteredMatches = app.applyAlignmentRoi(filteredMatches);
+                app.AlignmentRequest = request;
+                app.AlignmentWorkingImages = workingImages;
+                app.AlignmentRawMatchResult = matchResult;
+                app.AlignmentFilteredMatchResult = filteredMatches;
+                app.AlignmentCuratedMatchMask = ...
+                    app.defaultAlignmentCuratedMatchMask(filteredMatches);
                 app.updateAlignmentPairTable(workingImages.Schedule, ...
                     enabledPairs, matchResult, filteredMatches);
+                app.drawAlignmentMatchOverlays(filteredMatches);
                 matchCount = sum([filteredMatches.Matches.Count]);
                 if matchCount < 3 || any([filteredMatches.Matches.Count] < 3)
                     app.setAlignmentStatus(sprintf( ...
@@ -652,11 +686,62 @@ classdef ProjectionViewerApp < handle
                     return
                 end
 
+                app.setAlignmentSolveEnabled(true);
+                app.setAlignmentStatus(sprintf( ...
+                    "Matched and filtered %d observations. Ready to solve.", ...
+                    matchCount));
+            catch ME
+                if strcmp(ME.identifier, "ProjectionViewerApp:alignmentCancelled")
+                    app.AlignmentResult = ProjectionAlignmentResult.validate( ...
+                        struct(Status="cancelled"));
+                    app.setAlignmentStatus("Alignment cancelled.");
+                else
+                    app.AlignmentResult = ProjectionAlignmentResult.validate( ...
+                        struct(Status="failed", Warnings=string(ME.message)));
+                    app.setAlignmentStatus("Alignment failed: " + string(ME.message));
+                end
+            end
+        end
+
+        function solveAlignmentWorkflow(app)
+            if ~app.hasFilteredAlignmentMatches()
+                app.setAlignmentStatus("Run Match before Solve.");
+                app.setAlignmentSolveEnabled(false);
+                return
+            end
+
+            app.AlignmentCancelRequested = false;
+            app.setAlignmentRunning(true);
+            cleanup = onCleanup(@() app.setAlignmentRunning(false));
+            app.setAlignmentActionEnabled(false);
+
+            try
+                schedule = app.AlignmentWorkingImages.Schedule;
+                enabledPairs = app.enabledAlignmentPairs(schedule);
+                solveMatches = app.applyEnabledPairsToMatchResult( ...
+                    app.AlignmentFilteredMatchResult, enabledPairs);
+                app.updateAlignmentPairTable(schedule, enabledPairs, ...
+                    app.AlignmentRawMatchResult, solveMatches);
+                if isempty(enabledPairs) || isempty(solveMatches.Matches)
+                    app.setAlignmentStatus("No enabled matched pairs.");
+                    return
+                end
+
+                matchCount = sum([solveMatches.Matches.Count]);
+                if matchCount < 3 || any([solveMatches.Matches.Count] < 3)
+                    app.setAlignmentStatus(sprintf( ...
+                        "Each enabled pair needs at least 3 filtered matches; found %d total.", ...
+                        matchCount));
+                    return
+                end
+
                 app.setAlignmentStatus("Solving OPK corrections...");
                 app.throwIfAlignmentCancelled();
+                options = app.AlignmentRequest.Options;
                 result = ProjectionAlignmentOpkSolver.solve( ...
-                    app.Scene, filteredMatches, options);
-                emptyResult = ProjectionAlignmentResult.empty(request);
+                    app.Scene, solveMatches, options);
+                emptyResult = ProjectionAlignmentResult.empty( ...
+                    app.AlignmentRequest);
                 result.RequestSummary = emptyResult.RequestSummary;
                 result = ProjectionAlignmentResult.validate(result);
                 app.AlignmentResult = result;
@@ -821,6 +906,43 @@ classdef ProjectionViewerApp < handle
             end
         end
 
+        function stageDiagnostics = alignmentStageDiagnostics(app)
+            stageDiagnostics = struct();
+            stageDiagnostics.HasRequest = app.hasScalarStruct( ...
+                app.AlignmentRequest);
+            stageDiagnostics.HasWorkingImages = app.hasScalarStruct( ...
+                app.AlignmentWorkingImages);
+            stageDiagnostics.HasRawMatches = app.hasMatchResult( ...
+                app.AlignmentRawMatchResult);
+            stageDiagnostics.HasFilteredMatches = app.hasMatchResult( ...
+                app.AlignmentFilteredMatchResult);
+            stageDiagnostics.HasSolveResult = app.hasAlignmentResult();
+            stageDiagnostics.RawMatchCount = app.totalAlignmentMatchCount( ...
+                app.AlignmentRawMatchResult);
+            stageDiagnostics.FilteredMatchCount = ...
+                app.totalAlignmentMatchCount(app.AlignmentFilteredMatchResult);
+            stageDiagnostics.SolvedMatchCount = ...
+                app.totalAlignmentMatchCount(app.AlignmentResult);
+            stageDiagnostics.CuratedMaskCount = ...
+                numel(app.AlignmentCuratedMatchMask);
+        end
+
+        function tf = hasScalarStruct(~, value)
+            tf = isstruct(value) && isscalar(value) && ~isempty(fieldnames(value));
+        end
+
+        function tf = hasMatchResult(~, value)
+            tf = isstruct(value) && isfield(value, "Matches") && ...
+                ~isempty(value.Matches);
+        end
+
+        function count = totalAlignmentMatchCount(app, matchResult)
+            count = 0;
+            if app.hasMatchResult(matchResult)
+                count = sum([matchResult.Matches.Count]);
+            end
+        end
+
         function refreshAlignmentPairTable(app)
             if isempty(app.AlignmentPairTable) || ~isvalid(app.AlignmentPairTable)
                 return
@@ -927,6 +1049,52 @@ classdef ProjectionViewerApp < handle
             workingImages.PairOverlapMasks = workingImages.PairOverlapMasks(keepMask);
         end
 
+        function matchResult = applyEnabledPairsToMatchResult(app, ...
+                matchResult, enabledPairs)
+            if isempty(matchResult) || ~isstruct(matchResult) || ...
+                    ~isfield(matchResult, "Matches") || isempty(matchResult.Matches)
+                return
+            end
+
+            enabledKeys = app.pairKeys(enabledPairs);
+            pairKeys = strings(1, numel(matchResult.Matches));
+            for pairIndex = 1:numel(matchResult.Matches)
+                pairKeys(pairIndex) = app.pairKey( ...
+                    matchResult.Matches(pairIndex).Pair);
+            end
+            keepMask = ismember(pairKeys, enabledKeys);
+            matchResult.Matches = matchResult.Matches(keepMask);
+            if isfield(matchResult, "Schedule") && ...
+                    isfield(matchResult.Schedule, "Pairs")
+                matchResult.Schedule.Pairs = matchResult.Schedule.Pairs(keepMask);
+                matchResult.Schedule.PairCount = ...
+                    numel(matchResult.Schedule.Pairs);
+                matchResult.Schedule.LayerIndices = unique(enabledPairs(:).', ...
+                    "stable");
+            end
+            matchResult = app.subsetAlignmentPairDiagnostics( ...
+                matchResult, keepMask);
+        end
+
+        function matchResult = subsetAlignmentPairDiagnostics(~, ...
+                matchResult, keepMask)
+            if ~isfield(matchResult, "Diagnostics") || ...
+                    ~isstruct(matchResult.Diagnostics)
+                return
+            end
+
+            diagnostics = matchResult.Diagnostics;
+            if isfield(diagnostics, "PairDiagnostics") && ...
+                    numel(diagnostics.PairDiagnostics) == numel(keepMask)
+                diagnostics.PairDiagnostics = diagnostics.PairDiagnostics(keepMask);
+            end
+            if isfield(diagnostics, "FilterPipeline") && ...
+                    numel(diagnostics.FilterPipeline) == numel(keepMask)
+                diagnostics.FilterPipeline = diagnostics.FilterPipeline(keepMask);
+            end
+            matchResult.Diagnostics = diagnostics;
+        end
+
         function keys = pairKeys(app, pairs)
             keys = strings(1, size(pairs, 1));
             for pairIndex = 1:size(pairs, 1)
@@ -1017,6 +1185,13 @@ classdef ProjectionViewerApp < handle
                 end
             end
             pairMatch.Count = nnz(keepMask);
+        end
+
+        function masks = defaultAlignmentCuratedMatchMask(~, matchResult)
+            masks = cell(1, numel(matchResult.Matches));
+            for k = 1:numel(matchResult.Matches)
+                masks{k} = true(matchResult.Matches(k).Count, 1);
+            end
         end
 
         function selectAlignmentRoi(app)
@@ -1193,12 +1368,26 @@ classdef ProjectionViewerApp < handle
         end
 
         function setAlignmentRunning(app, isRunning)
-            if isempty(app.AlignmentRunButton) || ~isvalid(app.AlignmentRunButton)
+            if isempty(app.AlignmentMatchButton) || ...
+                    ~isvalid(app.AlignmentMatchButton)
                 return
             end
-            app.AlignmentRunButton.Enable = app.onOff(~isRunning);
+            app.AlignmentMatchButton.Enable = app.onOff(~isRunning);
+            if isRunning
+                app.setAlignmentSolveEnabled(false);
+            else
+                app.setAlignmentSolveEnabled(app.hasSolvableFilteredMatches());
+            end
             app.AlignmentCancelButton.Enable = app.onOff(isRunning);
             drawnow limitrate
+        end
+
+        function setAlignmentSolveEnabled(app, isEnabled)
+            if isempty(app.AlignmentSolveButton) || ...
+                    ~isvalid(app.AlignmentSolveButton)
+                return
+            end
+            app.AlignmentSolveButton.Enable = app.onOff(isEnabled);
         end
 
         function setAlignmentActionEnabled(app, isEnabled)
@@ -1216,6 +1405,27 @@ classdef ProjectionViewerApp < handle
             tf = isstruct(app.AlignmentResult) && ...
                 isfield(app.AlignmentResult, "SolvedCorrections") && ...
                 ~isempty(app.AlignmentResult.SolvedCorrections);
+        end
+
+        function tf = hasFilteredAlignmentMatches(app)
+            tf = isstruct(app.AlignmentFilteredMatchResult) && ...
+                isfield(app.AlignmentFilteredMatchResult, "Matches") && ...
+                ~isempty(app.AlignmentFilteredMatchResult.Matches);
+        end
+
+        function tf = hasSolvableFilteredMatches(app)
+            tf = app.hasFilteredAlignmentMatches() && ...
+                all([app.AlignmentFilteredMatchResult.Matches.Count] >= 3) && ...
+                sum([app.AlignmentFilteredMatchResult.Matches.Count]) >= 3;
+        end
+
+        function clearAlignmentComputationState(app)
+            app.AlignmentRequest = struct();
+            app.AlignmentWorkingImages = struct();
+            app.AlignmentRawMatchResult = struct();
+            app.AlignmentFilteredMatchResult = struct();
+            app.AlignmentCuratedMatchMask = {};
+            app.AlignmentResult = struct();
         end
 
         function throwIfAlignmentCancelled(app)
@@ -1263,6 +1473,35 @@ classdef ProjectionViewerApp < handle
             if isfield(result, "Diagnostics") && ...
                     isfield(result.Diagnostics, fieldName)
                 value = result.Diagnostics.(fieldName);
+            end
+        end
+
+        function drawAlignmentMatchOverlays(app, matchResult)
+            result = struct(Matches=app.alignmentOverlayMatches(matchResult));
+            app.drawAlignmentOverlays(result);
+        end
+
+        function matches = alignmentOverlayMatches(~, matchResult)
+            if isempty(matchResult) || ~isstruct(matchResult) || ...
+                    ~isfield(matchResult, "Matches") || isempty(matchResult.Matches)
+                matches = struct("Pair", {}, "MovingProjectionPoints", {}, ...
+                    "ReferenceProjectionPoints", {}, "Count", {});
+                return
+            end
+
+            for k = 1:numel(matchResult.Matches)
+                pairMatch = matchResult.Matches(k);
+                match = struct();
+                match.Pair = pairMatch.Pair;
+                match.MovingProjectionPoints = pairMatch.MovingPlaneCoordinates;
+                match.ReferenceProjectionPoints = ...
+                    pairMatch.ReferencePlaneCoordinates;
+                match.Count = pairMatch.Count;
+                if k == 1
+                    matches = match;
+                else
+                    matches(k) = match;
+                end
             end
         end
 
@@ -3039,11 +3278,12 @@ classdef ProjectionViewerApp < handle
             app.LastPointerLocation = [NaN NaN];
             app.NeedsDragFinalize = false;
             app.IsPreviewCameraReady = false;
-            app.AlignmentResult = struct();
+            app.clearAlignmentComputationState();
             app.AlignmentCancelRequested = false;
             app.clearAlignmentOverlays();
             app.clearAlignmentRoi(false);
             app.setAlignmentActionEnabled(false);
+            app.setAlignmentSolveEnabled(false);
             app.setAlignmentStatus("Alignment not run");
             app.rebuildSurfaces();
             app.configureFrameCamera();
@@ -3301,7 +3541,8 @@ classdef ProjectionViewerApp < handle
                 "Space up: show the selected layer"
                 ""
                 "Context menu"
-                "Right click inside the image for Save, Load, Cycle, Reset, Help, Crosshair, and Blend mode."
+                "Right click inside the image for Save, Load, Cycle, Reset, Help, Crosshair, Alignment panel,"
+                "Clear alignment overlays, and Blend mode."
                 "Crosshair overlays cyan screen-space guide lines across the viewport."
                 "Reset restores neutral tip, tilt, twist, layer order, visibility, alpha, blend mode, offsets, and OPK corrections."
                 "+/- beside Layer move the selected layer one step up or down in the stack."

@@ -202,9 +202,10 @@ Core controls:
 - The alignment panel is hidden by default and can be shown from the image
   context menu. It can run auto-alignment for the selected pair or all visible
   layers. Choose a fast or quality preset, detector, loss mode, optional ROI,
-  and enabled pair-table rows, then use Run, Preview, Apply, and Revert. Run
-  reports stage progress and residual/OPK summaries in the status text, updates
-  pair match/inlier counts, and draws match/inlier overlays in the viewer.
+  and enabled pair-table rows, then use Match, Solve, Preview, Apply, Revert,
+  and Clear. Match reports stage progress, updates pair match/inlier counts,
+  and draws match overlays; Solve reuses the stored filtered matches and reports
+  residual/OPK summaries in the status text.
 
 Manual auto-alignment validation loop:
 

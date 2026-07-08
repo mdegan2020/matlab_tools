@@ -330,7 +330,8 @@ Current controls:
   Crosshair, Alignment Panel, and Blend mode controls.
 - alignment controls are hidden by default and can run selected-pair or
   visible-layer alignment with fast/quality presets, detector/loss choices,
-  optional ROI, pair enablement, preview/apply, and revert.
+  optional ROI, pair enablement, staged match/solve, preview/apply/revert, and
+  clear-overlays controls.
 - Blend mode context menu supports `"alpha"` and `"redBlueAnaglyph"`.
 - Crosshair toggles cyan screen-space guide lines across the image viewport.
 - Cycle shows the next layer and hides the others without changing layer alpha.
@@ -448,8 +449,9 @@ Post-milestone features already added:
 - visibility-preserving layer cycling and reset-all viewer state restoration.
 - real-data launcher support for in-memory images and sparse sensor geometry.
 - hidden-by-default alignment panel with selected-pair and visible-layer
-  workflows, fast/quality presets, ROI filtering, pair enablement, match/inlier
-  overlays, preview/apply/revert, and backend integration.
+  workflows, fast/quality presets, ROI filtering, pair enablement, staged
+  match/solve state, match/inlier overlays, clear-overlays controls,
+  preview/apply/revert, and backend integration.
 - expanded `-85` to `85` degree tip/tilt controls, stabilized preview axes,
   improved initial viewport framing, and arrow-key tip/tilt nudges.
 - display-only preview pyramids and visible preview tiling for large layers,
