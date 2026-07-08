@@ -200,13 +200,30 @@ classdef ProjectionPreviewPyramid
             tile.Downsample = level.Downsample;
             tile.LevelRowLimits = [rowStart, rowEnd];
             tile.LevelColumnLimits = [columnStart, columnEnd];
-            tile.SourceRowLimits = [ ...
-                level.RowIndices(rowStart), level.RowIndices(rowEnd)];
-            tile.SourceColumnLimits = [ ...
-                level.ColumnIndices(columnStart), ...
-                level.ColumnIndices(columnEnd)];
+            tile.SourceRowLimits = ProjectionPreviewPyramid.tileSourceLimits( ...
+                level.RowIndices, rowStart, rowEnd);
+            tile.SourceColumnLimits = ProjectionPreviewPyramid.tileSourceLimits( ...
+                level.ColumnIndices, columnStart, columnEnd);
             tile.TextureSize = [rowEnd - rowStart + 1, ...
                 columnEnd - columnStart + 1];
+        end
+
+        function limits = tileSourceLimits(indices, startIndex, endIndex)
+            if startIndex > 1
+                lowerLimit = round((indices(startIndex - 1) + ...
+                    indices(startIndex)) / 2);
+            else
+                lowerLimit = indices(startIndex);
+            end
+
+            if endIndex < numel(indices)
+                upperLimit = round((indices(endIndex) + ...
+                    indices(endIndex + 1)) / 2);
+            else
+                upperLimit = indices(endIndex);
+            end
+
+            limits = double([lowerLimit, upperLimit]);
         end
 
         function indices = levelIndices(upperBound, factor)

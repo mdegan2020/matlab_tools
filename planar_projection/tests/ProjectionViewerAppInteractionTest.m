@@ -161,6 +161,10 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(helpFig.Visible), "on");
             testCase.verifyTrue(any(contains(string(helpTextArea.Value), ...
                 "Alt/Option + left drag: adjust selected-layer omega and phi")));
+            testCase.verifyTrue(any(contains(string(helpTextArea.Value), ...
+                "Up/Down arrows: adjust Tip by 0.5 deg")));
+            testCase.verifyTrue(any(contains(string(helpTextArea.Value), ...
+                "Left/Right arrows: adjust Tilt by 0.5 deg")));
         end
 
         function testCrosshairContextMenuToggleTracksPointer(testCase)
@@ -275,6 +279,44 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyLessThanOrEqual(bounds.Maximum(2), ax.YLim(2));
             testCase.verifyGreaterThanOrEqual(bounds.Minimum(3), ax.ZLim(1));
             testCase.verifyLessThanOrEqual(bounds.Maximum(3), ax.ZLim(2));
+        end
+
+        function testStartupBoundsSkipInvalidExtremeTipTiltSamples(testCase)
+            imageData = zeros(500, 500, "uint8");
+            scene = ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "wide-synthetic.tif", ...
+                struct(RowStride=64, ColumnStride=64));
+
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+
+            testCase.verifyNotEmpty(ax);
+            testCase.verifyTrue(all(isfinite(ax.XLim)));
+            testCase.verifyTrue(all(isfinite(ax.YLim)));
+            testCase.verifyTrue(all(isfinite(ax.ZLim)));
+        end
+
+        function testInitialViewFramesSurfaceToHalfViewport(testCase)
+            imageData = zeros(500, 500, "uint8");
+            scene = ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "wide-synthetic.tif", ...
+                struct(GSD=1, PlatformStepMeters=1, ...
+                RowStride=64, ColumnStride=64));
+
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            fillFraction = ProjectionViewerAppInteractionTest.surfaceViewportFill(ax);
+
+            testCase.verifyGreaterThan(fillFraction, 0.45);
+            testCase.verifyLessThan(fillFraction, 0.55);
         end
 
         function testDoubleLeftClickCyclesLayer(testCase)
@@ -576,6 +618,62 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             testCase.verifyEqual(tiltSlider.Value, 5, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
+
+        function testArrowKeysAdjustTipAndTiltWithoutZoom(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
+            tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
+            surfaceHandle = findall(ax, "Type", "surface");
+            initialXData = surfaceHandle(1).XData;
+            initialYData = surfaceHandle(1).YData;
+            initialZData = surfaceHandle(1).ZData;
+            initialCameraViewAngle = ax.CameraViewAngle;
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("uparrow"));
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("rightarrow"));
+            drawnow
+            adjustedState = app.exportState();
+
+            testCase.verifyEqual(tipSlider.Value, 0.5, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(tiltSlider.Value, 0.5, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(adjustedState.Projection.TipDegrees, 0.5, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(adjustedState.Projection.TiltDegrees, 0.5, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(ax.CameraViewAngle, initialCameraViewAngle, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyGreaterThan(ProjectionViewerAppInteractionTest.surfaceChange( ...
+                surfaceHandle(1), initialXData, initialYData, initialZData), 1e-9);
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("downarrow"));
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("leftarrow"));
+            drawnow
+            resetState = app.exportState();
+
+            testCase.verifyEqual(tipSlider.Value, 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(tiltSlider.Value, 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(resetState.Projection.TipDegrees, 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(resetState.Projection.TiltDegrees, 0, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(ax.CameraViewAngle, initialCameraViewAngle, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
@@ -1518,6 +1616,34 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             upVector = upVector / norm(upVector);
             rightVector = cross(viewDirection, upVector);
             rightVector = rightVector / norm(rightVector);
+        end
+
+        function fillFraction = surfaceViewportFill(ax)
+            surfaceHandles = findall(ax, "Type", "surface");
+            points = zeros(3, 0);
+            for k = 1:numel(surfaceHandles)
+                surfaceHandle = surfaceHandles(k);
+                points = [points, [surfaceHandle.XData(:).'; ...
+                    surfaceHandle.YData(:).'; ...
+                    surfaceHandle.ZData(:).']]; %#ok<AGROW>
+            end
+
+            [rightVector, upVector] = ...
+                ProjectionViewerAppInteractionTest.cameraScreenBasis(ax);
+            cameraPosition = campos(ax).';
+            cameraTarget = camtarget(ax).';
+            viewDistance = norm(cameraTarget - cameraPosition);
+            axesPosition = ax.InnerPosition;
+            viewHeight = 2 * viewDistance * tan( ...
+                deg2rad(ax.CameraViewAngle) / 2);
+            viewWidth = viewHeight * max(axesPosition(3), 1) / ...
+                max(axesPosition(4), 1);
+            projectedWidth = max(rightVector.' * points) - ...
+                min(rightVector.' * points);
+            projectedHeight = max(upVector.' * points) - ...
+                min(upVector.' * points);
+            fillFraction = max(projectedWidth / viewWidth, ...
+                projectedHeight / viewHeight);
         end
 
         function screenDelta = screenDeltaComponents(ax, worldDelta)

@@ -25,7 +25,9 @@ classdef ProjectionViewerApp < handle
         MinPreviewInterval double = 1 / 30
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
+        InitialViewportFillFraction double = 0.5
         ModifierWheelStepDegrees double = 1
+        ProjectionArrowStepDegrees double = 0.5
         ViewVectorDragProbeDegrees double = 0.01
         MinDragScreenJacobianRcond double = 1e-12
         FallbackViewVectorCorrectionStepDegrees double = 0.1
@@ -130,6 +132,8 @@ classdef ProjectionViewerApp < handle
             app.configureFrameCamera();
             if ~isempty(viewerState) && isfield(viewerState, "Camera")
                 app.applyCameraState(viewerState.Camera);
+            else
+                app.frameCurrentProjectionView(app.InitialViewportFillFraction);
             end
             app.refreshTiledProjectionSurfaces();
             app.updateControlsFromSelectedLayer();
@@ -184,6 +188,8 @@ classdef ProjectionViewerApp < handle
             app.configureFrameCamera();
             if isfield(state, "Camera")
                 app.applyCameraState(state.Camera);
+            else
+                app.frameCurrentProjectionView(app.InitialViewportFillFraction);
             end
             app.refreshTiledProjectionSurfaces();
             app.updateControlsFromSelectedLayer();
@@ -1482,7 +1488,7 @@ classdef ProjectionViewerApp < handle
             [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
             surfaceHandle = surface(app.Axes, X, Y, Z, ...
                 app.previewTextureForLayer(texture, layerIndex), ...
-                FaceColor="texturemap", EdgeColor="none", ...
+                FaceColor="texturemap", EdgeColor="none", LineStyle="none", ...
                 FaceAlpha=app.previewFaceAlphaForLayer(mesh.Alpha, layerIndex), ...
                 Visible=app.onOff(mesh.Visible), ...
                 ContextMenu=app.ImageContextMenu, Tag=tag);
@@ -2007,6 +2013,9 @@ classdef ProjectionViewerApp < handle
                 app.setSelectedLayerVisible(false);
                 return
             end
+            if app.adjustProjectionFromArrowKey(event)
+                return
+            end
             if app.nudgeSelectedLayerFromKey(event)
                 return
             end
@@ -2075,9 +2084,41 @@ classdef ProjectionViewerApp < handle
             app.PreviewTimer = tic;
         end
 
+        function handled = adjustProjectionFromArrowKey(app, event)
+            handled = true;
+            tipDelta = 0;
+            tiltDelta = 0;
+            if app.eventKeyIs(event, "uparrow")
+                tipDelta = app.ProjectionArrowStepDegrees;
+            elseif app.eventKeyIs(event, "downarrow")
+                tipDelta = -app.ProjectionArrowStepDegrees;
+            elseif app.eventKeyIs(event, "rightarrow")
+                tiltDelta = app.ProjectionArrowStepDegrees;
+            elseif app.eventKeyIs(event, "leftarrow")
+                tiltDelta = -app.ProjectionArrowStepDegrees;
+            else
+                handled = false;
+                return
+            end
+
+            tipDegrees = app.clampSliderValue( ...
+                app.TipSlider, app.TipSlider.Value + tipDelta);
+            tiltDegrees = app.clampSliderValue( ...
+                app.TiltSlider, app.TiltSlider.Value + tiltDelta);
+            app.TipSlider.Value = tipDegrees;
+            app.TiltSlider.Value = tiltDegrees;
+            app.updateProjection(tipDegrees, tiltDegrees, ...
+                app.AlphaSlider.Value, app.DefaultMeshSampling);
+            app.PreviewTimer = tic;
+        end
+
         function value = sliderWheelValue(app, slider, event)
             value = slider.Value - ...
                 event.VerticalScrollCount * app.ModifierWheelStepDegrees;
+            value = app.clampSliderValue(slider, value);
+        end
+
+        function value = clampSliderValue(~, slider, value)
             limits = slider.Limits;
             value = min(max(value, limits(1)), limits(2));
         end
@@ -2324,6 +2365,65 @@ classdef ProjectionViewerApp < handle
             viewWidth = viewHeight * widthPixels / heightPixels;
             viewWidth = max(viewWidth, eps);
             viewHeight = max(viewHeight, eps);
+        end
+
+        function frameCurrentProjectionView(app, fillFraction)
+            fillFraction = app.validateViewportFillFraction(fillFraction);
+            [projectedWidth, projectedHeight] = app.currentSurfaceProjectedSize();
+            if any(~isfinite([projectedWidth projectedHeight])) || ...
+                    max(projectedWidth, projectedHeight) <= eps
+                return
+            end
+
+            axesPosition = app.Axes.InnerPosition;
+            aspectRatio = max(axesPosition(3), 1) / max(axesPosition(4), 1);
+            desiredViewHeight = max(projectedHeight / fillFraction, ...
+                projectedWidth / (aspectRatio * fillFraction));
+            [~, ~, ~, viewDistance] = app.cameraScreenBasis();
+            desiredViewAngle = rad2deg(2 * atan(desiredViewHeight / ...
+                (2 * viewDistance)));
+            app.Axes.CameraViewAngle = min(max(desiredViewAngle, ...
+                app.MinCameraViewAngle), app.MaxCameraViewAngle);
+        end
+
+        function [projectedWidth, projectedHeight] = currentSurfaceProjectedSize(app)
+            layerIndices = find([app.Scene.layers.Visible]);
+            if isempty(layerIndices)
+                layerIndices = app.SelectedLayerIndex;
+            end
+
+            points = zeros(3, 0);
+            for layerIndex = reshape(layerIndices, 1, [])
+                surfaceHandles = app.validLayerSurfaces(layerIndex);
+                for surfaceIndex = 1:numel(surfaceHandles)
+                    surfaceHandle = surfaceHandles(surfaceIndex);
+                    points = [points, [surfaceHandle.XData(:).'; ...
+                        surfaceHandle.YData(:).'; ...
+                        surfaceHandle.ZData(:).']]; %#ok<AGROW>
+                end
+            end
+
+            if isempty(points)
+                projectedWidth = NaN;
+                projectedHeight = NaN;
+                return
+            end
+
+            [rightVector, upVector] = app.cameraScreenBasis();
+            projectedWidth = max(rightVector.' * points) - ...
+                min(rightVector.' * points);
+            projectedHeight = max(upVector.' * points) - ...
+                min(upVector.' * points);
+        end
+
+        function fillFraction = validateViewportFillFraction(~, fillFraction)
+            if ~isnumeric(fillFraction) || ~isscalar(fillFraction) || ...
+                    ~isfinite(fillFraction) || fillFraction <= 0 || ...
+                    fillFraction > 1
+                error("ProjectionViewerApp:invalidViewportFillFraction", ...
+                    "Viewport fill fraction must be in the range (0, 1].");
+            end
+            fillFraction = double(fillFraction);
         end
 
         function rotatedVector = rotateVectorAboutAxis(~, vector, axis, angle)
@@ -2615,8 +2715,15 @@ classdef ProjectionViewerApp < handle
                         layer = app.Scene.layers(layerIndex);
                         layer.CurrentProjectionPlane = plane;
                         layer.MeshSampling = app.DefaultMeshSampling(layerIndex);
-                        mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                            layer, plane, app.Scene.renderOrigin);
+                        try
+                            mesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                                layer, plane, app.Scene.renderOrigin);
+                        catch ME
+                            if app.isPreviewBoundsIntersectionError(ME)
+                                continue
+                            end
+                            rethrow(ME);
+                        end
                         [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
                         [minimums, maximums] = app.accumulatePreviewBounds( ...
                             minimums, maximums, X, Y, Z);
@@ -2636,6 +2743,12 @@ classdef ProjectionViewerApp < handle
                 min(Y, [], "all"); min(Z, [], "all")]);
             maximums = max(maximums, [max(X, [], "all"); ...
                 max(Y, [], "all"); max(Z, [], "all")]);
+        end
+
+        function tf = isPreviewBoundsIntersectionError(~, ME)
+            tf = any(string(ME.identifier) == ...
+                ["ProjectionMeshBuilder:behindSource", ...
+                "ProjectionMeshBuilder:parallelRay"]);
         end
 
         function updateLabels(app, tipDegrees, tiltDegrees, twistDegrees, alpha)
@@ -2701,6 +2814,7 @@ classdef ProjectionViewerApp < handle
             app.setAlignmentStatus("Alignment not run");
             app.rebuildSurfaces();
             app.configureFrameCamera();
+            app.frameCurrentProjectionView(app.InitialViewportFillFraction);
             app.updateLayerDropDownItems();
             app.updateControlsFromSelectedLayer();
             app.refreshTiledProjectionSurfaces();
@@ -2944,6 +3058,8 @@ classdef ProjectionViewerApp < handle
                 "Double left click: show the next layer and hide the others"
                 ""
                 "Keyboard"
+                "Up/Down arrows: adjust Tip by 0.5 deg"
+                "Left/Right arrows: adjust Tilt by 0.5 deg"
                 "W/A/S/D: nudge the selected layer"
                 "I/K: adjust phi"
                 "J/L: adjust omega"

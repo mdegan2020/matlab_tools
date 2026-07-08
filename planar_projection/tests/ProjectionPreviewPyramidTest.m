@@ -35,8 +35,10 @@ classdef ProjectionPreviewPyramidTest < matlab.unittest.TestCase
 
             testCase.verifyEqual(tiles(1).LevelRowLimits, [1 3]);
             testCase.verifyEqual(tiles(1).LevelColumnLimits, [1 3]);
-            testCase.verifyEqual(tiles(1).SourceRowLimits, [1 5]);
-            testCase.verifyEqual(tiles(1).SourceColumnLimits, [1 5]);
+            testCase.verifyEqual(tiles(1).SourceRowLimits, [1 6]);
+            testCase.verifyEqual(tiles(1).SourceColumnLimits, [1 6]);
+            testCase.verifyEqual(tiles(2).SourceColumnLimits(1), ...
+                tiles(1).SourceColumnLimits(2));
             testCase.verifyEqual(texture, imageData([1 3 5], [1 3 5]));
         end
 
@@ -49,10 +51,10 @@ classdef ProjectionPreviewPyramidTest < matlab.unittest.TestCase
             meshSampling = ProjectionPreviewPyramid.tileMeshSampling( ...
                 pyramid, tiles(1), 4);
 
-            testCase.verifyEqual(meshSampling.RowIndices, [1 3 5]);
-            testCase.verifyEqual(meshSampling.ColumnIndices, [1 3 5]);
-            testCase.verifyEqual(meshSampling.RowStride, 2);
-            testCase.verifyEqual(meshSampling.ColumnStride, 2);
+            testCase.verifyEqual(meshSampling.RowIndices, [1 4 6]);
+            testCase.verifyEqual(meshSampling.ColumnIndices, [1 4 6]);
+            testCase.verifyEqual(meshSampling.RowStride, 3);
+            testCase.verifyEqual(meshSampling.ColumnStride, 3);
         end
 
         function testSelectLevelUsesRequestedDownsample(testCase)
