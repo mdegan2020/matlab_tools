@@ -10,6 +10,7 @@ classdef ProjectionViewerApp < handle
         PreviewPyramids cell
         PreviewTilingOptions struct
         PreviewTiledLayerMask logical
+        PreviewTiles cell
         IsPreviewCameraReady logical = false
         ProjectionTipDegrees double = 0
         ProjectionTiltDegrees double = 0
@@ -33,6 +34,7 @@ classdef ProjectionViewerApp < handle
         FallbackViewVectorCorrectionStepDegrees double = 0.1
         KappaViewVectorCorrectionStepDegrees double = 0.1
         MinViewVectorIfovRadians double = 1e-12
+        InteractivePreviewMaxTileMeshVertices double = 17
         PreviewLayerDepthStepFraction double = 1e-4
         PreviewLayerDepthMinimumStepMeters double = 0.5
         AnaglyphPreviewFaceAlpha double = 0.55
@@ -1430,16 +1432,21 @@ classdef ProjectionViewerApp < handle
             app.Surfaces = cell(1, numel(app.Scene.layers));
             for layerIndex = 1:numel(app.Scene.layers)
                 layer = app.Scene.layers(layerIndex);
-                mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                    layer, layer.CurrentProjectionPlane, app.Scene.renderOrigin);
                 if app.usesTiledPreview(layerIndex)
                     app.Surfaces{layerIndex} = ...
                         app.createTiledLayerSurfaces(layerIndex);
-                else
-                    app.Surfaces{layerIndex} = app.createPreviewSurface( ...
-                        layerIndex, mesh, mesh.Texture, ...
-                        "ProjectionViewerLayerSurface");
+                    if layerIndex == app.SelectedLayerIndex
+                        app.Surface = app.primarySurfaceForLayer(layerIndex);
+                        app.CurrentMesh = struct();
+                    end
+                    continue
                 end
+
+                mesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                    layer, layer.CurrentProjectionPlane, app.Scene.renderOrigin);
+                app.Surfaces{layerIndex} = app.createPreviewSurface( ...
+                    layerIndex, mesh, mesh.Texture, ...
+                    "ProjectionViewerLayerSurface");
                 if layerIndex == app.SelectedLayerIndex
                     app.Surface = app.primarySurfaceForLayer(layerIndex);
                     app.CurrentMesh = mesh;
@@ -1466,6 +1473,7 @@ classdef ProjectionViewerApp < handle
             layerCount = numel(app.Scene.layers);
             app.PreviewPyramids = cell(1, layerCount);
             app.PreviewTiledLayerMask = false(1, layerCount);
+            app.PreviewTiles = cell(1, layerCount);
             for layerIndex = 1:layerCount
                 pyramid = ProjectionPreviewPyramid.build( ...
                     app.Scene.layers(layerIndex).Image, ...
@@ -1494,8 +1502,11 @@ classdef ProjectionViewerApp < handle
                 ContextMenu=app.ImageContextMenu, Tag=tag);
         end
 
-        function surfaceHandles = createTiledLayerSurfaces(app, layerIndex)
-            tiles = app.previewTilesForLayer(layerIndex);
+        function surfaceHandles = createTiledLayerSurfaces(app, layerIndex, tiles)
+            if nargin < 3
+                tiles = app.previewTilesForLayer(layerIndex);
+            end
+            app.PreviewTiles{layerIndex} = tiles;
             surfaceHandles = gobjects(1, numel(tiles));
             for tileIndex = 1:numel(tiles)
                 tileLayer = app.tilePreviewLayer(layerIndex, tiles(tileIndex));
@@ -1508,14 +1519,24 @@ classdef ProjectionViewerApp < handle
             end
         end
 
-        function tileLayer = tilePreviewLayer(app, layerIndex, tile)
+        function tileLayer = tilePreviewLayer(app, layerIndex, tile, ...
+                includeTexture, maxMeshVertices)
+            if nargin < 4
+                includeTexture = true;
+            end
+            if nargin < 5
+                maxMeshVertices = app.PreviewTilingOptions.MaxTileMeshVertices;
+            end
+
             pyramid = app.PreviewPyramids{layerIndex};
             tileLayer = app.Scene.layers(layerIndex);
-            tileImage = ProjectionPreviewPyramid.tileTexture(pyramid, tile);
-            tileLayer.DisplayTexture = ...
-                ProjectionViewerHarness.prepareDisplayTexture(tileImage);
+            if includeTexture
+                tileImage = ProjectionPreviewPyramid.tileTexture(pyramid, tile);
+                tileLayer.DisplayTexture = ...
+                    ProjectionViewerHarness.prepareDisplayTexture(tileImage);
+            end
             tileLayer.MeshSampling = ProjectionPreviewPyramid.tileMeshSampling( ...
-                pyramid, tile, app.PreviewTilingOptions.MaxTileMeshVertices);
+                pyramid, tile, maxMeshVertices);
         end
 
         function tiles = previewTilesForLayer(app, layerIndex)
@@ -1594,8 +1615,7 @@ classdef ProjectionViewerApp < handle
         function tf = previewTileOverlapsCameraView(app, layerIndex, tile)
             pyramid = app.PreviewPyramids{layerIndex};
             layer = app.Scene.layers(layerIndex);
-            layer.MeshSampling = ProjectionPreviewPyramid.tileMeshSampling( ...
-                pyramid, tile, 2);
+            layer.MeshSampling = ProjectionPreviewPyramid.tileMeshSampling(pyramid, tile, 2);
             mesh = ProjectionMeshBuilder.buildLayerMesh( ...
                 layer, layer.CurrentProjectionPlane, app.Scene.renderOrigin);
             [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
@@ -1619,9 +1639,30 @@ classdef ProjectionViewerApp < handle
 
             tiledLayerIndices = find(app.PreviewTiledLayerMask);
             for layerIndex = reshape(tiledLayerIndices, 1, [])
-                app.replaceTiledLayerSurfaces(layerIndex);
+                app.refreshTiledLayerSurfaces(layerIndex);
             end
             app.raiseCrosshairOverlay();
+        end
+
+        function refreshTiledLayerSurfaces(app, layerIndex)
+            tiles = app.previewTilesForLayer(layerIndex);
+            app.setTiledLayerSurfaces(layerIndex, tiles, false);
+        end
+
+        function updateTiledLayerSurfaceGeometry(app, layerIndex, maxMeshVertices)
+            if nargin < 3
+                maxMeshVertices = app.PreviewTilingOptions.MaxTileMeshVertices;
+            end
+
+            tiles = app.currentPreviewTilesForLayer(layerIndex);
+            surfaceHandles = app.validLayerSurfaces(layerIndex);
+            if isempty(tiles) || numel(surfaceHandles) ~= numel(tiles)
+                app.replaceTiledLayerSurfaces(layerIndex);
+                return
+            end
+
+            app.updateExistingTiledLayerSurfaces( ...
+                layerIndex, tiles, false, maxMeshVertices);
         end
 
         function replaceTiledLayerSurfaces(app, layerIndex)
@@ -1629,8 +1670,62 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
+            tiles = app.previewTilesForLayer(layerIndex);
+            app.setTiledLayerSurfaces(layerIndex, tiles, true);
+        end
+
+        function setTiledLayerSurfaces(app, layerIndex, tiles, updateTexture)
+            if nargin < 4
+                updateTexture = false;
+            end
+
+            surfaceHandles = app.validLayerSurfaces(layerIndex);
+            if app.canReuseTiledLayerSurfaces(layerIndex, tiles, surfaceHandles)
+                if updateTexture
+                    app.updateExistingTiledLayerSurfaces(layerIndex, tiles, true);
+                end
+                return
+            end
+
             app.deleteLayerSurfaces(layerIndex);
-            app.Surfaces{layerIndex} = app.createTiledLayerSurfaces(layerIndex);
+            app.Surfaces{layerIndex} = app.createTiledLayerSurfaces(layerIndex, tiles);
+            if layerIndex == app.SelectedLayerIndex
+                app.Surface = app.primarySurfaceForLayer(layerIndex);
+            end
+        end
+
+        function tf = canReuseTiledLayerSurfaces(app, layerIndex, tiles, surfaceHandles)
+            previousTiles = app.currentPreviewTilesForLayer(layerIndex);
+            tf = numel(surfaceHandles) == numel(tiles) && ...
+                isequal(previousTiles, tiles);
+        end
+
+        function tiles = currentPreviewTilesForLayer(app, layerIndex)
+            if isempty(app.PreviewTiles) || layerIndex > numel(app.PreviewTiles) || ...
+                    isempty(app.PreviewTiles{layerIndex})
+                tiles = ProjectionPreviewPyramid.emptyTiles();
+            else
+                tiles = app.PreviewTiles{layerIndex};
+            end
+        end
+
+        function updateExistingTiledLayerSurfaces(app, layerIndex, tiles, ...
+                updateTexture, maxMeshVertices)
+            if nargin < 5
+                maxMeshVertices = app.PreviewTilingOptions.MaxTileMeshVertices;
+            end
+
+            surfaceHandles = app.validLayerSurfaces(layerIndex);
+            for tileIndex = 1:numel(tiles)
+                tileLayer = app.tilePreviewLayer( ...
+                    layerIndex, tiles(tileIndex), updateTexture, maxMeshVertices);
+                mesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                    tileLayer, tileLayer.CurrentProjectionPlane, ...
+                    app.Scene.renderOrigin);
+                app.updatePreviewSurfaceHandle( ...
+                    surfaceHandles(tileIndex), layerIndex, mesh, updateTexture);
+            end
+            app.PreviewTiles{layerIndex} = tiles;
             if layerIndex == app.SelectedLayerIndex
                 app.Surface = app.primarySurfaceForLayer(layerIndex);
             end
@@ -1663,6 +1758,9 @@ classdef ProjectionViewerApp < handle
             end
             if ~isempty(app.Surfaces) && layerIndex <= numel(app.Surfaces)
                 app.Surfaces{layerIndex} = gobjects(0);
+            end
+            if ~isempty(app.PreviewTiles) && layerIndex <= numel(app.PreviewTiles)
+                app.PreviewTiles{layerIndex} = ProjectionPreviewPyramid.emptyTiles();
             end
         end
 
@@ -2513,6 +2611,7 @@ classdef ProjectionViewerApp < handle
             plane = ProjectionMeshBuilder.applyPlaneTipTilt( ...
                 app.Scene.layers(1).BaseProjectionPlane, ...
                 deg2rad(tipDegrees), deg2rad(tiltDegrees));
+            tileMeshVertexLimit = app.previewTileMeshVertexLimit(meshSamplings);
 
             for layerIndex = 1:numel(app.Scene.layers)
                 layer = app.Scene.layers(layerIndex);
@@ -2522,6 +2621,15 @@ classdef ProjectionViewerApp < handle
                 end
                 layer.MeshSampling = meshSamplings(layerIndex);
                 app.Scene.layers(layerIndex) = layer;
+
+                if app.usesTiledPreview(layerIndex)
+                    app.updateTiledLayerSurfaceGeometry(layerIndex, tileMeshVertexLimit);
+                    if layerIndex == selectedLayerIndex
+                        app.CurrentMesh = struct();
+                        app.Surface = app.primarySurfaceForLayer(layerIndex);
+                    end
+                    continue
+                end
 
                 mesh = ProjectionMeshBuilder.buildLayerMesh( ...
                     layer, plane, app.Scene.renderOrigin);
@@ -2548,6 +2656,15 @@ classdef ProjectionViewerApp < handle
                 layer.MeshSampling = meshSamplings(layerIndex);
                 app.Scene.layers(layerIndex) = layer;
 
+                if app.usesTiledPreview(layerIndex)
+                    app.replaceTiledLayerSurfaces(layerIndex);
+                    if layerIndex == app.SelectedLayerIndex
+                        app.CurrentMesh = struct();
+                        app.Surface = app.primarySurfaceForLayer(layerIndex);
+                    end
+                    continue
+                end
+
                 mesh = ProjectionMeshBuilder.buildLayerMesh( ...
                     layer, plane, app.Scene.renderOrigin);
                 app.updateSurfaceFromMesh(layerIndex, mesh);
@@ -2560,26 +2677,40 @@ classdef ProjectionViewerApp < handle
 
         function updateSurfaceFromMesh(app, layerIndex, mesh)
             if app.usesTiledPreview(layerIndex)
-                app.replaceTiledLayerSurfaces(layerIndex);
+                app.updateTiledLayerSurfaceGeometry(layerIndex);
                 return
             end
 
             surfaceHandle = app.Surfaces{layerIndex};
+            app.updatePreviewSurfaceHandle(surfaceHandle, layerIndex, mesh, true);
+        end
+
+        function updatePreviewSurfaceHandle(app, surfaceHandle, layerIndex, ...
+                mesh, updateTexture)
             [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
             surfaceHandle.XData = X;
             surfaceHandle.YData = Y;
             surfaceHandle.ZData = Z;
-            surfaceHandle.CData = app.previewTextureForLayer( ...
-                mesh.Texture, layerIndex);
+            if updateTexture
+                surfaceHandle.CData = app.previewTextureForLayer( ...
+                    mesh.Texture, layerIndex);
+            end
             surfaceHandle.FaceAlpha = app.previewFaceAlphaForLayer( ...
                 mesh.Alpha, layerIndex);
             surfaceHandle.Visible = app.onOff(mesh.Visible);
         end
 
+        function maxVertices = previewTileMeshVertexLimit(app, meshSamplings)
+            maxVertices = app.PreviewTilingOptions.MaxTileMeshVertices;
+            if isequal(meshSamplings, app.DragMeshSampling)
+                maxVertices = min(maxVertices, app.InteractivePreviewMaxTileMeshVertices);
+            end
+        end
+
         function updateAllSurfaceBlendAppearance(app)
             for layerIndex = 1:numel(app.Surfaces)
                 if app.usesTiledPreview(layerIndex)
-                    app.replaceTiledLayerSurfaces(layerIndex);
+                    app.updateTiledLayerSurfaceAppearance(layerIndex);
                     continue
                 end
 
@@ -2593,6 +2724,24 @@ classdef ProjectionViewerApp < handle
                 surfaceHandle.FaceAlpha = app.previewFaceAlphaForLayer( ...
                     layer.Alpha, layerIndex);
                 surfaceHandle.Visible = app.onOff(layer.Visible);
+            end
+        end
+
+        function updateTiledLayerSurfaceAppearance(app, layerIndex)
+            tiles = app.currentPreviewTilesForLayer(layerIndex);
+            surfaceHandles = app.validLayerSurfaces(layerIndex);
+            if isempty(tiles) || numel(surfaceHandles) ~= numel(tiles)
+                app.replaceTiledLayerSurfaces(layerIndex);
+                return
+            end
+
+            for tileIndex = 1:numel(tiles)
+                tileLayer = app.tilePreviewLayer(layerIndex, tiles(tileIndex));
+                surfaceHandles(tileIndex).CData = app.previewTextureForLayer( ...
+                    tileLayer.DisplayTexture, layerIndex);
+                surfaceHandles(tileIndex).FaceAlpha = app.previewFaceAlphaForLayer( ...
+                    tileLayer.Alpha, layerIndex);
+                surfaceHandles(tileIndex).Visible = app.onOff(tileLayer.Visible);
             end
         end
 

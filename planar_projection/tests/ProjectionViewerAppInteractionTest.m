@@ -1254,13 +1254,28 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Projection Viewer Prototype");
             ax = findall(fig, "Type", "axes");
+            tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
             tileSurfaces = findall(ax, "Type", "surface", ...
+                "Tag", "ProjectionViewerPreviewTileSurface");
+            testCase.assertNotEmpty(tileSurfaces);
+            firstTileSurface = tileSurfaces(1);
+            firstTileX = firstTileSurface.XData;
+            firstTileY = firstTileSurface.YData;
+            firstTileZ = firstTileSurface.ZData;
+
+            tipSlider.Value = 5;
+            tipSlider.ValueChangedFcn(tipSlider, struct());
+            drawnow
+            updatedTileSurfaces = findall(ax, "Type", "surface", ...
                 "Tag", "ProjectionViewerPreviewTileSurface");
 
             job = app.exportBackendJob(struct(RenderOptions=struct( ...
                 OutputSize=[5 6])));
 
-            testCase.verifyNotEmpty(tileSurfaces);
+            testCase.verifyTrue(ProjectionViewerAppInteractionTest.sameGraphicsHandles( ...
+                tileSurfaces, updatedTileSurfaces));
+            testCase.verifyGreaterThan(ProjectionViewerAppInteractionTest.surfaceChange( ...
+                firstTileSurface, firstTileX, firstTileY, firstTileZ), 1e-9);
             testCase.verifyTrue(size(scene.layers.DisplayTexture, 1) < ...
                 size(imageData, 1));
             testCase.verifySize(job.Scene.layers.Image, [2001 2001]);
@@ -1693,6 +1708,18 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             change = max([max(abs(surfaceHandle.XData - x0), [], "all"), ...
                 max(abs(surfaceHandle.YData - y0), [], "all"), ...
                 max(abs(surfaceHandle.ZData - z0), [], "all")]);
+        end
+
+        function tf = sameGraphicsHandles(firstHandles, secondHandles)
+            if numel(firstHandles) ~= numel(secondHandles)
+                tf = false;
+                return
+            end
+
+            tf = true;
+            for k = 1:numel(firstHandles)
+                tf = tf && any(firstHandles(k) == secondHandles);
+            end
         end
     end
 end

@@ -8,6 +8,8 @@ test_data/*.tiff
 # Local backend evaluation artifacts
 artifacts/backend_evaluation/*
 !artifacts/backend_evaluation/.gitkeep
+artifacts/viewer_big_data_profile/*
+!artifacts/viewer_big_data_profile/.gitkeep
 
 # Local development notes
 tracked_issues.md
