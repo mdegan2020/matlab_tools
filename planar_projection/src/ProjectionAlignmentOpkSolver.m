@@ -456,6 +456,8 @@ classdef ProjectionAlignmentOpkSolver
                 comparisonDiagnostics, options, totalSeconds)
             [solvedCorrections, sharedScale] = ProjectionAlignmentOpkSolver.vectorToCorrections( ...
                 xSolved, layerIndices);
+            boundHits = ProjectionAlignmentOpkSolver.boundHitDiagnostics( ...
+                layerIndices, startCorrections, solvedCorrections, boundsDegrees);
             result = struct();
             result.Status = "solved";
             result.RequestSummary = ProjectionAlignmentOpkSolver.requestSummary( ...
@@ -476,16 +478,45 @@ classdef ProjectionAlignmentOpkSolver
                 Success=exitFlag > 0, Iterations=output.iterations, ...
                 ExitFlag=exitFlag, Objective=sum(solverResiduals.^2), ...
                 FirstOrderOptimality=[], Message=string(output.message));
-            result.Warnings = strings(1, 0);
+            if any([boundHits.Any])
+                result.Warnings = "OPK solve hit one or more configured correction bounds.";
+            else
+                result.Warnings = strings(1, 0);
+            end
             result.Timing = struct(StartedAt="", FinishedAt="", ...
                 TotalSeconds=totalSeconds, StageSeconds=struct(Solver=totalSeconds));
             result.Diagnostics = struct();
             result.Diagnostics.StartingCorrections = startCorrections;
             result.Diagnostics.BoundsDegrees = boundsDegrees;
+            result.Diagnostics.BoundHits = boundHits;
+            result.Diagnostics.AnyBoundHit = any([boundHits.Any]);
             result.Diagnostics.SharedScale = sharedScale;
             result.Diagnostics.Comparison = comparisonDiagnostics;
             result.Diagnostics.RmsBefore = rms(result.Residuals.Before);
             result.Diagnostics.RmsAfter = rms(result.Residuals.After);
+        end
+
+        function diagnostics = boundHitDiagnostics(layerIndices, startCorrections, ...
+                solvedCorrections, boundsDegrees)
+            parameterNames = ["omega", "phi", "kappa"];
+            diagnostics = struct("LayerIndex", {}, "Parameters", {}, ...
+                "DeltaDegrees", {}, "BoundsDegrees", {}, "HitMask", {}, ...
+                "HitParameters", {}, "Any", {});
+            for k = 1:numel(layerIndices)
+                startOpk = startCorrections(k).ViewVectorAngularOffsetsDegrees(:).';
+                solvedOpk = solvedCorrections(k).ViewVectorAngularOffsetsDegrees(:).';
+                delta = solvedOpk - startOpk;
+                bounds = boundsDegrees(k, :);
+                tolerance = max(1e-8, 1e-6 * max(bounds, 1));
+                hitMask = abs(abs(delta) - bounds) <= tolerance;
+                diagnostics(k).LayerIndex = layerIndices(k);
+                diagnostics(k).Parameters = parameterNames;
+                diagnostics(k).DeltaDegrees = delta;
+                diagnostics(k).BoundsDegrees = bounds;
+                diagnostics(k).HitMask = hitMask;
+                diagnostics(k).HitParameters = parameterNames(hitMask);
+                diagnostics(k).Any = any(hitMask);
+            end
         end
 
         function summary = requestSummary(matchResult, layerIndices, options)

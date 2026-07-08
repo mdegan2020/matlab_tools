@@ -77,6 +77,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 "similarity");
             testCase.verifyEqual( ...
                 diagnostics.Request.FilterNativeDisplacementMethod, "mad");
+            testCase.verifyEqual(diagnostics.Request.KappaBoundDegrees, 15);
             testCase.verifyEqual(string(roiButton.Enable), "on");
             testCase.verifyEqual(string(clearRoiButton.Enable), "on");
             testCase.verifyEqual(string(clearOverlaysButton.Enable), "on");

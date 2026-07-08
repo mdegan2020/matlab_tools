@@ -206,7 +206,8 @@ Core controls:
   and Clear. Match reports stage progress, applies geometric and native-pixel
   displacement filtering, updates raw/filtered match counts, and draws match
   overlays; Solve reuses the stored filtered matches and reports residual/OPK
-  summaries in the status text.
+  summaries in the status text, including warnings when corrections hit OPK
+  bounds.
 
 Manual auto-alignment validation loop:
 

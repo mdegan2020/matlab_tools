@@ -156,6 +156,13 @@ Acceptance criteria:
   bound.
 - A bound-hit warning appears in the GUI status/result summary.
 
+Implementation note:
+
+- The solver reports `Diagnostics.BoundsDegrees`, `Diagnostics.BoundHits`, and
+  `Diagnostics.AnyBoundHit`, and emits a warning when any OPK correction hits a
+  configured bound. GUI defaults keep omega/phi FOV-derived and cap kappa at
+  `15` degrees.
+
 ### 1.5 Add robust solve diagnostics
 
 Extend solver output with practical quality information:

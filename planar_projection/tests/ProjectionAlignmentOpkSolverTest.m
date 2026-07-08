@@ -62,6 +62,28 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
                 scene.layers(2).ViewVectorAngularOffsetsDegrees(1) + 0.001 + ...
                 ProjectionAlignmentOpkSolverTest.Tol);
             testCase.verifyGreaterThan(result.Diagnostics.RmsAfter, 1e-3);
+            testCase.verifyTrue(result.Diagnostics.AnyBoundHit);
+            testCase.verifyTrue(any([result.Diagnostics.BoundHits.Any]));
+            testCase.verifyTrue(any(contains(result.Warnings, "bounds")));
+        end
+
+        function testFovDerivedBoundsAndKappaCapAreReported(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makeFovMetadataScene();
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+            options = struct();
+            options.Bounds = struct(KappaDegrees=15);
+            options.Regularization = struct(OverallWeight=1e-3, RobustLoss="none");
+            expectedFovBound = 0.25 * rad2deg(20 * 0.1 / 1000);
+
+            result = ProjectionAlignmentOpkSolver.solve(scene, matchResult, options);
+
+            testCase.verifyEqual(result.Diagnostics.BoundsDegrees(:, 1), ...
+                expectedFovBound * ones(2, 1), AbsTol=1e-10);
+            testCase.verifyEqual(result.Diagnostics.BoundsDegrees(:, 2), ...
+                expectedFovBound * ones(2, 1), AbsTol=1e-10);
+            testCase.verifyEqual(result.Diagnostics.BoundsDegrees(:, 3), ...
+                15 * ones(2, 1), AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
+            testCase.verifyFalse(result.Diagnostics.AnyBoundHit);
         end
 
         function testRegularizationKeepsPerfectInitialState(testCase)
@@ -220,6 +242,15 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
             scene = ProjectionAlignmentOpkSolverTest.makeBaseTwoLayerScene();
             scene.layers(1).ViewVectorAngularOffsetsDegrees = [0.006; 0; 0];
             scene.layers(2).ViewVectorAngularOffsetsDegrees = [-0.006; 0; 0];
+        end
+
+        function scene = makeFovMetadataScene()
+            scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
+            for layerIndex = 1:numel(scene.layers)
+                scene.layers(layerIndex).SourceGeometry.NominalRange = 1000;
+                scene.layers(layerIndex).SourceGeometry.GSD = 0.1;
+                scene.layers(layerIndex).SourceGeometry.PlatformStepMeters = 0.2;
+            end
         end
 
         function scene = makeRegularizedScene()
