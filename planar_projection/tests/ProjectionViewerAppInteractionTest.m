@@ -1282,6 +1282,48 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(job.Scene.layers.Image, imageData);
         end
 
+        function testSpacebarVisibilityReusesTiledPreviewSurfaces(testCase)
+            imageData = zeros(2001, 2001, "uint8");
+            options = struct();
+            options.GSD = 0.01;
+            options.NominalRange = 1e6;
+            options.PlatformStepMeters = 0.01;
+            options.RowStride = 250;
+            options.ColumnStride = 250;
+            options.DisplayTextureMaxPixels = 10000;
+            scene = ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "large.tif", options);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            tileSurfaces = findall(ax, "Type", "surface", ...
+                "Tag", "ProjectionViewerPreviewTileSurface");
+            testCase.assertNotEmpty(tileSurfaces);
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("space"));
+            drawnow
+            hiddenTileSurfaces = findall(ax, "Type", "surface", ...
+                "Tag", "ProjectionViewerPreviewTileSurface");
+
+            testCase.verifyTrue(ProjectionViewerAppInteractionTest.sameGraphicsHandles( ...
+                tileSurfaces, hiddenTileSurfaces));
+            testCase.verifyTrue(all(string([hiddenTileSurfaces.Visible]) == "off"));
+
+            fig.WindowKeyReleaseFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("space"));
+            drawnow
+            shownTileSurfaces = findall(ax, "Type", "surface", ...
+                "Tag", "ProjectionViewerPreviewTileSurface");
+
+            testCase.verifyTrue(ProjectionViewerAppInteractionTest.sameGraphicsHandles( ...
+                tileSurfaces, shownTileSurfaces));
+            testCase.verifyTrue(all(string([shownTileSurfaces.Visible]) == "on"));
+        end
+
         function testConstructorAcceptsViewerState(testCase)
             scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
             state = ProjectionViewerAppInteractionTest.makeViewerState(scene);

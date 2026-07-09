@@ -3096,17 +3096,19 @@ classdef ProjectionViewerApp < handle
 
         function setLayerSurfaceVisible(app, layerIndex, isVisible)
             surfaceHandles = app.validLayerSurfaces(layerIndex);
-            for surfaceIndex = 1:numel(surfaceHandles)
-                surfaceHandles(surfaceIndex).Visible = app.onOff(isVisible);
+            if isempty(surfaceHandles)
+                return
             end
+            set(surfaceHandles, "Visible", char(app.onOff(isVisible)));
         end
 
         function setLayerSurfaceAlpha(app, layerIndex, alpha)
             surfaceHandles = app.validLayerSurfaces(layerIndex);
-            faceAlpha = app.previewFaceAlphaForLayer(alpha, layerIndex);
-            for surfaceIndex = 1:numel(surfaceHandles)
-                surfaceHandles(surfaceIndex).FaceAlpha = faceAlpha;
+            if isempty(surfaceHandles)
+                return
             end
+            faceAlpha = app.previewFaceAlphaForLayer(alpha, layerIndex);
+            set(surfaceHandles, "FaceAlpha", faceAlpha);
         end
 
         function raiseCrosshairOverlay(app)
@@ -3919,6 +3921,9 @@ classdef ProjectionViewerApp < handle
         function updateSelectedLayerAlpha(app, alpha)
             layerIndex = app.SelectedLayerIndex;
             layer = app.Scene.layers(layerIndex);
+            if layer.Alpha == alpha
+                return
+            end
             layer.Alpha = alpha;
             app.Scene.layers(layerIndex) = layer;
             app.setLayerSurfaceAlpha(layerIndex, alpha);
@@ -4423,10 +4428,24 @@ classdef ProjectionViewerApp < handle
         function setSelectedLayerVisible(app, isVisible)
             layerIndex = app.SelectedLayerIndex;
             layer = app.Scene.layers(layerIndex);
-            layer.Visible = logical(isVisible);
+            isVisible = logical(isVisible);
+            if layer.Visible == isVisible
+                app.VisibleCheckBox.Value = layer.Visible;
+                return
+            end
+            layer.Visible = isVisible;
             app.Scene.layers(layerIndex) = layer;
-            app.updateAllSurfaceBlendAppearance();
+            if app.layerVisibilityRequiresBlendRefresh(layerIndex)
+                app.updateAllSurfaceBlendAppearance();
+            else
+                app.setLayerSurfaceVisible(layerIndex, layer.Visible);
+            end
             app.VisibleCheckBox.Value = layer.Visible;
+        end
+
+        function tf = layerVisibilityRequiresBlendRefresh(app, layerIndex)
+            blendMode = lower(string(app.Scene.layers(layerIndex).BlendMode));
+            tf = blendMode == "redblueanaglyph";
         end
 
         function updateBlendMenuChecks(app)
