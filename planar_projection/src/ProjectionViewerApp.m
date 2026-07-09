@@ -95,6 +95,8 @@ classdef ProjectionViewerApp < handle
         AlignmentRejectedOverlayCheckBox matlab.ui.control.StateButton
         AlignmentWorstOverlayCheckBox matlab.ui.control.StateButton
         AlignmentFeatureOverlayCheckBox matlab.ui.control.StateButton
+        AlignmentDeleteMatchButton matlab.ui.control.Button
+        AlignmentUndoCurationButton matlab.ui.control.Button
         AlignmentStatusLabel matlab.ui.control.Label
         AlignmentPairTable matlab.ui.control.Table
         AlignmentMatchTable matlab.ui.control.Table
@@ -103,6 +105,9 @@ classdef ProjectionViewerApp < handle
         AlignmentRawMatchResult struct = struct()
         AlignmentFilteredMatchResult struct = struct()
         AlignmentCuratedMatchMask cell = {}
+        AlignmentDeletedMatchMask cell = {}
+        AlignmentCurationUndoStack cell = {}
+        AlignmentSelectedMatchRows double = []
         AlignmentResult struct = struct()
         AlignmentOverlayLines = gobjects(0)
         AlignmentSelectedMatchOverlay = gobjects(0)
@@ -588,7 +593,21 @@ classdef ProjectionViewerApp < handle
                 Tag="ProjectionViewerAlignmentFeatureOverlayCheckBox", ...
                 ValueChangedFcn=@(~, ~) app.refreshAlignmentOverlays(true));
             app.AlignmentFeatureOverlayCheckBox.Layout.Row = 1;
-            app.AlignmentFeatureOverlayCheckBox.Layout.Column = [13 14];
+            app.AlignmentFeatureOverlayCheckBox.Layout.Column = 13;
+
+            app.AlignmentDeleteMatchButton = uibutton(app.AlignmentGrid, ...
+                Text="Delete", Tooltip="Delete selected match rows", ...
+                Tag="ProjectionViewerAlignmentDeleteMatchButton", ...
+                ButtonPushedFcn=@(~, ~) app.deleteSelectedAlignmentMatches());
+            app.AlignmentDeleteMatchButton.Layout.Row = 1;
+            app.AlignmentDeleteMatchButton.Layout.Column = 14;
+
+            app.AlignmentUndoCurationButton = uibutton(app.AlignmentGrid, ...
+                Text="Undo", Tooltip="Undo last match curation", ...
+                Tag="ProjectionViewerAlignmentUndoCurationButton", ...
+                ButtonPushedFcn=@(~, ~) app.undoAlignmentCuration());
+            app.AlignmentUndoCurationButton.Layout.Row = 1;
+            app.AlignmentUndoCurationButton.Layout.Column = 15;
 
             app.AlignmentStatusLabel = uilabel(app.AlignmentGrid, ...
                 Text="Alignment not run", ...
@@ -725,6 +744,10 @@ classdef ProjectionViewerApp < handle
                 app.AlignmentFilteredMatchResult = filteredMatches;
                 app.AlignmentCuratedMatchMask = ...
                     app.defaultAlignmentCuratedMatchMask(filteredMatches);
+                app.AlignmentDeletedMatchMask = ...
+                    app.defaultAlignmentDeletedMatchMask(filteredMatches);
+                app.AlignmentCurationUndoStack = {};
+                app.AlignmentSelectedMatchRows = [];
                 app.updateAlignmentPairTable(workingImages.Schedule, ...
                     enabledPairs, matchResult, filteredMatches);
                 app.updateAlignmentMatchTable(filteredMatches, []);
@@ -1133,12 +1156,15 @@ classdef ProjectionViewerApp < handle
                 recordIndices = app.matchRecordIndices(pairMatch);
                 curatedMask = app.curatedMaskForPair( ...
                     pairMatch.Pair, pairMatch.Count);
+                deletedMask = app.deletedMaskForPair( ...
+                    pairMatch.Pair, pairMatch.Count);
                 for matchIndex = 1:pairMatch.Count
                     rowIndex = rowIndex + 1;
                     recordIndex = recordIndices(matchIndex);
                     residualRecord = app.residualRecordForMatch( ...
                         result, pairMatch.Pair, recordIndex);
-                    enabled(rowIndex) = curatedMask(matchIndex);
+                    enabled(rowIndex) = curatedMask(matchIndex) && ...
+                        ~deletedMask(matchIndex);
                     labels(rowIndex) = app.pairKey(pairMatch.Pair);
                     matchIndices(rowIndex) = recordIndex;
                     scores(rowIndex) = pairMatch.Scores(matchIndex);
@@ -1159,7 +1185,9 @@ classdef ProjectionViewerApp < handle
                         pairMatch.ReferenceFeatureLocations(matchIndex, 2);
                     residualBefore(rowIndex) = residualRecord.Before;
                     residualAfter(rowIndex) = residualRecord.After;
-                    if ~enabled(rowIndex)
+                    if deletedMask(matchIndex)
+                        states(rowIndex) = "deleted";
+                    elseif ~enabled(rowIndex)
                         states(rowIndex) = "disabled";
                     elseif residualRecord.Found
                         states(rowIndex) = "solverObservation";
@@ -1374,6 +1402,25 @@ classdef ProjectionViewerApp < handle
             if numel(candidate) == count
                 mask = logical(candidate(:));
             end
+            mask = mask & ~app.deletedMaskForPair(pair, count);
+        end
+
+        function mask = deletedMaskForPair(app, pair, count)
+            mask = false(count, 1);
+            if isempty(app.AlignmentDeletedMatchMask) || ...
+                    ~app.hasMatchResult(app.AlignmentFilteredMatchResult)
+                return
+            end
+
+            pairIndex = app.filteredMatchPairIndex(pair);
+            if isnan(pairIndex) || pairIndex > numel(app.AlignmentDeletedMatchMask)
+                return
+            end
+
+            candidate = app.AlignmentDeletedMatchMask{pairIndex};
+            if numel(candidate) == count
+                mask = logical(candidate(:));
+            end
         end
 
         function pairIndex = filteredMatchPairIndex(app, pair)
@@ -1404,9 +1451,12 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
-            masks = cell(1, numel(app.AlignmentFilteredMatchResult.Matches));
-            for pairIndex = 1:numel(masks)
-                masks{pairIndex} = false( ...
+            enabledMasks = cell(1, numel(app.AlignmentFilteredMatchResult.Matches));
+            deletedMasks = cell(1, numel(app.AlignmentFilteredMatchResult.Matches));
+            for pairIndex = 1:numel(enabledMasks)
+                enabledMasks{pairIndex} = false( ...
+                    app.AlignmentFilteredMatchResult.Matches(pairIndex).Count, 1);
+                deletedMasks{pairIndex} = false( ...
                     app.AlignmentFilteredMatchResult.Matches(pairIndex).Count, 1);
             end
 
@@ -1420,11 +1470,17 @@ classdef ProjectionViewerApp < handle
                 recordIndices = app.matchRecordIndices(pairMatch);
                 matchMask = recordIndices == data.MatchIndex(rowIndex);
                 if any(matchMask)
-                    masks{pairIndex}(matchMask) = logical(data.Enabled(rowIndex));
+                    isDeleted = ismember("State", ...
+                        string(data.Properties.VariableNames)) && ...
+                        string(data.State(rowIndex)) == "deleted";
+                    enabledMasks{pairIndex}(matchMask) = ...
+                        logical(data.Enabled(rowIndex)) && ~isDeleted;
+                    deletedMasks{pairIndex}(matchMask) = isDeleted;
                 end
             end
 
-            app.AlignmentCuratedMatchMask = masks;
+            app.AlignmentCuratedMatchMask = enabledMasks;
+            app.AlignmentDeletedMatchMask = deletedMasks;
         end
 
         function pair = pairFromKey(~, key)
@@ -1497,6 +1553,13 @@ classdef ProjectionViewerApp < handle
             masks = cell(1, numel(matchResult.Matches));
             for k = 1:numel(matchResult.Matches)
                 masks{k} = true(matchResult.Matches(k).Count, 1);
+            end
+        end
+
+        function masks = defaultAlignmentDeletedMatchMask(~, matchResult)
+            masks = cell(1, numel(matchResult.Matches));
+            for k = 1:numel(matchResult.Matches)
+                masks{k} = false(matchResult.Matches(k).Count, 1);
             end
         end
 
@@ -1732,6 +1795,9 @@ classdef ProjectionViewerApp < handle
             app.AlignmentRawMatchResult = struct();
             app.AlignmentFilteredMatchResult = struct();
             app.AlignmentCuratedMatchMask = {};
+            app.AlignmentDeletedMatchMask = {};
+            app.AlignmentCurationUndoStack = {};
+            app.AlignmentSelectedMatchRows = [];
             app.AlignmentResult = struct();
             app.updateAlignmentMatchTable([], []);
             app.clearSelectedAlignmentMatchOverlay();
@@ -1787,7 +1853,12 @@ classdef ProjectionViewerApp < handle
         end
 
         function alignmentMatchTableEdited(app)
+            app.pushAlignmentCurationUndoState();
             app.syncCuratedMaskFromMatchTable();
+            app.finishAlignmentCurationEdit("Match curation updated. Solve again.");
+        end
+
+        function finishAlignmentCurationEdit(app, statusText)
             app.AlignmentResult = struct();
             app.setAlignmentActionEnabled(false);
             app.setAlignmentSolveEnabled(app.hasSolvableFilteredMatches());
@@ -1795,7 +1866,56 @@ classdef ProjectionViewerApp < handle
             visibleMatches = app.applyCuratedMaskToMatchResult( ...
                 app.AlignmentFilteredMatchResult);
             app.drawAlignmentMatchOverlays(visibleMatches);
-            app.setAlignmentStatus("Match curation updated. Solve again.");
+            app.setAlignmentStatus(statusText);
+        end
+
+        function pushAlignmentCurationUndoState(app)
+            snapshot = struct( ...
+                CuratedMatchMask={app.AlignmentCuratedMatchMask}, ...
+                DeletedMatchMask={app.AlignmentDeletedMatchMask});
+            app.AlignmentCurationUndoStack{end + 1} = snapshot;
+        end
+
+        function deleteSelectedAlignmentMatches(app)
+            if isempty(app.AlignmentSelectedMatchRows)
+                app.setAlignmentStatus("Select match rows before Delete.");
+                return
+            end
+            if isempty(app.AlignmentMatchTable) || ~isvalid(app.AlignmentMatchTable)
+                return
+            end
+
+            data = app.AlignmentMatchTable.Data;
+            if ~istable(data) || height(data) == 0
+                return
+            end
+
+            rows = unique(app.AlignmentSelectedMatchRows(:));
+            rows = rows(rows >= 1 & rows <= height(data));
+            if isempty(rows)
+                app.setAlignmentStatus("Select match rows before Delete.");
+                return
+            end
+
+            app.pushAlignmentCurationUndoState();
+            data.Enabled(rows) = false;
+            data.State(rows) = "deleted";
+            app.AlignmentMatchTable.Data = data;
+            app.syncCuratedMaskFromMatchTable();
+            app.finishAlignmentCurationEdit("Deleted selected matches. Solve again.");
+        end
+
+        function undoAlignmentCuration(app)
+            if isempty(app.AlignmentCurationUndoStack)
+                app.setAlignmentStatus("No match curation to undo.");
+                return
+            end
+
+            snapshot = app.AlignmentCurationUndoStack{end};
+            app.AlignmentCurationUndoStack(end) = [];
+            app.AlignmentCuratedMatchMask = snapshot.CuratedMatchMask;
+            app.AlignmentDeletedMatchMask = snapshot.DeletedMatchMask;
+            app.finishAlignmentCurationEdit("Undid match curation. Solve again.");
         end
 
         function alignmentMatchTableSelected(app, event)
@@ -1806,10 +1926,12 @@ classdef ProjectionViewerApp < handle
                 indices = [];
             end
             if isempty(indices)
+                app.AlignmentSelectedMatchRows = [];
                 app.clearSelectedAlignmentMatchOverlay();
                 return
             end
             rowIndex = indices(1, 1);
+            app.AlignmentSelectedMatchRows = unique(indices(:, 1)).';
             data = app.AlignmentMatchTable.Data;
             if ~istable(data) || rowIndex < 1 || rowIndex > height(data)
                 app.clearSelectedAlignmentMatchOverlay();
@@ -1839,12 +1961,26 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
+            pairSubset = pairMatch;
+            pairSubset.MovingSourceRows = pairMatch.MovingSourceRows(matchIndex);
+            pairSubset.MovingSourceColumns = ...
+                pairMatch.MovingSourceColumns(matchIndex);
+            pairSubset.ReferenceSourceRows = ...
+                pairMatch.ReferenceSourceRows(matchIndex);
+            pairSubset.ReferenceSourceColumns = ...
+                pairMatch.ReferenceSourceColumns(matchIndex);
+            pairSubset.MovingPlaneCoordinates = ...
+                pairMatch.MovingPlaneCoordinates(matchIndex, :);
+            pairSubset.ReferencePlaneCoordinates = ...
+                pairMatch.ReferencePlaneCoordinates(matchIndex, :);
+            [movingProjectionPoint, referenceProjectionPoint] = ...
+                app.currentAlignmentProjectionPoints(pairSubset);
             plane = app.currentProjectionPlane();
             movingWorld = PlanarProjection.reconstruct3d( ...
-                pairMatch.MovingPlaneCoordinates(matchIndex, :).', plane) - ...
+                movingProjectionPoint.', plane) - ...
                 app.Scene.renderOrigin;
             referenceWorld = PlanarProjection.reconstruct3d( ...
-                pairMatch.ReferencePlaneCoordinates(matchIndex, :).', plane) - ...
+                referenceProjectionPoint.', plane) - ...
                 app.Scene.renderOrigin;
             selectedLine = line(app.Axes, ...
                 [movingWorld(1) referenceWorld(1)], ...
@@ -2281,8 +2417,10 @@ classdef ProjectionViewerApp < handle
 
             [lineX, lineY, lineZ] = app.alignmentOverlayLineCoordinates(records);
             handles = line(app.Axes, lineX(:), lineY(:), lineZ(:), ...
-                Color=color, LineWidth=lineWidth, HitTest="off", ...
-                PickableParts="none", Tag=tag);
+                Color=color, LineWidth=lineWidth, HitTest="on", ...
+                PickableParts="visible", Tag=tag, UserData=records, ...
+                ButtonDownFcn=@(src, event) ...
+                app.selectAlignmentMatchFromOverlay(src, event));
         end
 
         function handles = drawAlignmentOverlayMarkers(app, records, ...
@@ -2297,13 +2435,99 @@ classdef ProjectionViewerApp < handle
             movingMarkers = line(app.Axes, movingPoints(1, :), ...
                 movingPoints(2, :), movingPoints(3, :), LineStyle="none", ...
                 Marker="o", MarkerSize=4, MarkerEdgeColor=movingColor, ...
-                HitTest="off", PickableParts="none", Tag=movingTag);
+                HitTest="on", PickableParts="visible", Tag=movingTag, ...
+                UserData=records, ButtonDownFcn=@(src, event) ...
+                app.selectAlignmentMatchFromOverlay(src, event));
             referenceMarkers = line(app.Axes, referencePoints(1, :), ...
                 referencePoints(2, :), referencePoints(3, :), ...
                 LineStyle="none", Marker="+", MarkerSize=5, ...
-                MarkerEdgeColor=referenceColor, HitTest="off", ...
-                PickableParts="none", Tag=referenceTag);
+                MarkerEdgeColor=referenceColor, HitTest="on", ...
+                PickableParts="visible", Tag=referenceTag, UserData=records, ...
+                ButtonDownFcn=@(src, event) ...
+                app.selectAlignmentMatchFromOverlay(src, event));
             handles = [movingMarkers referenceMarkers];
+        end
+
+        function selectAlignmentMatchFromOverlay(app, source, event)
+            records = source.UserData;
+            if isempty(records)
+                return
+            end
+
+            clickPoint = app.alignmentOverlayClickPoint(event);
+            recordIndex = app.nearestAlignmentOverlayRecordIndex( ...
+                records, clickPoint);
+            if isnan(recordIndex)
+                return
+            end
+            app.selectAlignmentMatchRecord(records(recordIndex));
+        end
+
+        function clickPoint = alignmentOverlayClickPoint(app, event)
+            if (isstruct(event) && isfield(event, "IntersectionPoint")) || ...
+                    (isobject(event) && isprop(event, "IntersectionPoint"))
+                clickPoint = double(event.IntersectionPoint(1, :));
+            else
+                currentPoint = app.Axes.CurrentPoint;
+                clickPoint = double(currentPoint(1, :));
+            end
+        end
+
+        function recordIndex = nearestAlignmentOverlayRecordIndex(app, ...
+                records, clickPoint)
+            recordIndex = NaN;
+            if isempty(records)
+                return
+            end
+
+            [movingPoints, referencePoints] = ...
+                app.alignmentOverlayWorldPoints(records);
+            distances = inf(1, numel(records));
+            for k = 1:numel(records)
+                distances(k) = app.pointToSegmentDistance(clickPoint(:), ...
+                    movingPoints(:, k), referencePoints(:, k));
+            end
+            [~, recordIndex] = min(distances);
+        end
+
+        function distance = pointToSegmentDistance(~, point, endpointA, endpointB)
+            segment = endpointB - endpointA;
+            segmentLengthSquared = dot(segment, segment);
+            if segmentLengthSquared <= eps
+                closestPoint = endpointA;
+            else
+                fraction = dot(point - endpointA, segment) / ...
+                    segmentLengthSquared;
+                fraction = min(max(fraction, 0), 1);
+                closestPoint = endpointA + fraction * segment;
+            end
+            distance = norm(point - closestPoint);
+        end
+
+        function selectAlignmentMatchRecord(app, record)
+            if isempty(app.AlignmentMatchTable) || ~isvalid(app.AlignmentMatchTable)
+                return
+            end
+
+            data = app.AlignmentMatchTable.Data;
+            if ~istable(data) || height(data) == 0
+                return
+            end
+
+            row = find(data.Pair == record.PairKey & ...
+                data.MatchIndex == record.MatchIndex, 1, "first");
+            if isempty(row)
+                return
+            end
+
+            app.AlignmentSelectedMatchRows = row;
+            try
+                if isprop(app.AlignmentMatchTable, "Selection")
+                    app.AlignmentMatchTable.Selection = [row 1];
+                end
+            catch
+            end
+            app.drawSelectedAlignmentMatchOverlay(data(row, :));
         end
 
         function [lineX, lineY, lineZ] = alignmentOverlayLineCoordinates( ...

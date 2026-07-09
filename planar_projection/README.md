@@ -216,6 +216,9 @@ Core controls:
   revert updates. Alignment-panel overlay toggles show accepted lines and
   feature points by default, with optional faint rejected matches and post-solve
   worst-residual highlights.
+  Overlay clicks select the nearest match-table row; Delete marks selected
+  rows as session-local deleted observations, and Undo restores curation from
+  a stack.
 
 Manual auto-alignment validation loop:
 

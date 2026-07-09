@@ -313,6 +313,14 @@ Acceptance criteria:
 - Manual deletion updates the match table and solve input.
 - Curated match state is preserved until reset or rematch.
 
+Implementation note:
+
+- Overlay clicks select the nearest match-table row. The alignment panel also
+  has Delete and Undo controls: Delete marks selected rows as session-local
+  `deleted`, excludes them from Solve, and leaves them visible in the table;
+  Undo restores curation snapshots from a stack. Curation remains session-only
+  and is cleared by rematching or reset.
+
 ## Feature Pack 4: Overlay State Correctness
 
 Current overlays are diagnostic drawings tied to the state at draw time. Future

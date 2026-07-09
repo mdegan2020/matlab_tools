@@ -58,6 +58,10 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentWorstOverlayCheckBox");
             featureOverlayCheckBox = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentFeatureOverlayCheckBox");
+            deleteMatchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDeleteMatchButton");
+            undoCurationButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentUndoCurationButton");
             matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentMatchButton");
             solveButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -95,6 +99,8 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyFalse(rejectedOverlayCheckBox.Value);
             testCase.verifyFalse(worstOverlayCheckBox.Value);
             testCase.verifyTrue(featureOverlayCheckBox.Value);
+            testCase.verifyEqual(string(deleteMatchButton.Enable), "on");
+            testCase.verifyEqual(string(undoCurationButton.Enable), "on");
             testCase.verifyEqual(string(matchButton.Enable), "on");
             testCase.verifyEqual(string(solveButton.Enable), "off");
             testCase.verifyEqual(string(cancelButton.Enable), "off");
@@ -508,6 +514,92 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyFalse(dataAfterSecondSolve.Enabled(disabledMask));
             testCase.verifyEqual( ...
                 string(dataAfterSecondSolve.State(disabledMask)), "disabled");
+        end
+
+        function testOverlayClickDeleteAndUndoCuration(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(true);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
+            matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchButton");
+            solveButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentSolveButton");
+            previewButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentPreviewButton");
+            matchTable = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchTable");
+            deleteButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDeleteMatchButton");
+            undoButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentUndoCurationButton");
+
+            detectorDropDown.Value = "sift";
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            solveButton.ButtonPushedFcn(solveButton, struct());
+            drawnow
+            diagnosticsAfterSolve = app.alignmentDiagnostics();
+            acceptedOverlay = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchOverlay");
+            overlayRecord = acceptedOverlay.UserData(1);
+            clickPoint = [acceptedOverlay.XData(1), acceptedOverlay.YData(1), ...
+                acceptedOverlay.ZData(1)];
+
+            acceptedOverlay.ButtonDownFcn(acceptedOverlay, ...
+                struct(IntersectionPoint=clickPoint));
+            drawnow
+            tableData = matchTable.Data;
+            selectedMask = tableData.Pair == overlayRecord.PairKey & ...
+                tableData.MatchIndex == overlayRecord.MatchIndex;
+            selectedRow = find(selectedMask, 1, "first");
+
+            testCase.verifyNotEmpty(selectedRow);
+            testCase.verifyNotEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentSelectedMatchOverlay"));
+            if isprop(matchTable, "Selection")
+                testCase.verifyEqual(matchTable.Selection(1), selectedRow);
+            end
+
+            deleteButton.ButtonPushedFcn(deleteButton, struct());
+            drawnow
+            dataAfterDelete = matchTable.Data;
+            deletedMask = dataAfterDelete.Pair == overlayRecord.PairKey & ...
+                dataAfterDelete.MatchIndex == overlayRecord.MatchIndex;
+            diagnosticsAfterDelete = app.alignmentDiagnostics();
+
+            testCase.verifyTrue(any(deletedMask));
+            testCase.verifyFalse(dataAfterDelete.Enabled(deletedMask));
+            testCase.verifyEqual(string(dataAfterDelete.State(deletedMask)), ...
+                "deleted");
+            testCase.verifyEqual( ...
+                diagnosticsAfterDelete.Stage.CuratedMatchCount, ...
+                diagnosticsAfterSolve.Stage.FilteredMatchCount - 1);
+            testCase.verifyFalse(diagnosticsAfterDelete.Stage.HasSolveResult);
+            testCase.verifyEqual(string(previewButton.Enable), "off");
+
+            undoButton.ButtonPushedFcn(undoButton, struct());
+            drawnow
+            dataAfterUndo = matchTable.Data;
+            restoredMask = dataAfterUndo.Pair == overlayRecord.PairKey & ...
+                dataAfterUndo.MatchIndex == overlayRecord.MatchIndex;
+            diagnosticsAfterUndo = app.alignmentDiagnostics();
+
+            testCase.verifyTrue(any(restoredMask));
+            testCase.verifyTrue(dataAfterUndo.Enabled(restoredMask));
+            testCase.verifyNotEqual(string(dataAfterUndo.State(restoredMask)), ...
+                "deleted");
+            testCase.verifyEqual( ...
+                diagnosticsAfterUndo.Stage.CuratedMatchCount, ...
+                diagnosticsAfterSolve.Stage.FilteredMatchCount);
         end
 
         function testAlignmentOverlaysRefreshAfterLayerNudge(testCase)
