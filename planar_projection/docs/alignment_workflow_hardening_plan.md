@@ -390,6 +390,16 @@ Acceptance criteria:
 - The operator sees whether the solve is match-limited, bound-limited, or
   residual-limited.
 
+Implementation note:
+
+- GUI alignment options now include a safe solve policy with a hard three
+  observation solver minimum, a preferred ten solver observations per enabled
+  pair, failure on OPK bound hits, and a default ten percent residual
+  improvement threshold. Unsafe solves keep result diagnostics and table
+  residuals visible, but are marked `failed` and leave Preview, Apply, and
+  Revert disabled. Residual policy checks use the active solver loss residuals,
+  including ray-3D residuals when `rayToRay3D` is selected.
+
 ## Suggested Implementation Order
 
 1. Add Clear Overlays.

@@ -92,6 +92,14 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual( ...
                 diagnostics.Request.FilterNativeDisplacementMethod, "mad");
             testCase.verifyEqual(diagnostics.Request.KappaBoundDegrees, 15);
+            testCase.verifyEqual( ...
+                diagnostics.Request.SafeMinSolverObservationsPerPair, 3);
+            testCase.verifyEqual( ...
+                diagnostics.Request.SafeMinPreferredObservationsPerPair, 10);
+            testCase.verifyTrue(diagnostics.Request.SafeFailOnBoundHit);
+            testCase.verifyEqual( ...
+                diagnostics.Request.SafeMinResidualImprovementFraction, 0.10, ...
+                AbsTol=ProjectionViewerAlignmentWorkflowTest.Tol);
             testCase.verifyEqual(string(roiButton.Enable), "on");
             testCase.verifyEqual(string(clearRoiButton.Enable), "on");
             testCase.verifyEqual(string(clearOverlaysButton.Enable), "on");
@@ -514,6 +522,63 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyFalse(dataAfterSecondSolve.Enabled(disabledMask));
             testCase.verifyEqual( ...
                 string(dataAfterSecondSolve.State(disabledMask)), "disabled");
+        end
+
+        function testMatchLimitedSolveFailsAndDisablesActions(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(true);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
+            matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchButton");
+            solveButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentSolveButton");
+            previewButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentPreviewButton");
+            applyButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentApplyButton");
+            revertButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentRevertButton");
+            matchTable = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchTable");
+            statusLabel = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentStatusLabel");
+
+            detectorDropDown.Value = "sift";
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            dataAfterMatch = matchTable.Data;
+            testCase.assumeGreaterThanOrEqual(height(dataAfterMatch), 10);
+
+            editedData = dataAfterMatch;
+            editedData.Enabled(:) = false;
+            editedData.Enabled(1:3) = true;
+            matchTable.Data = editedData;
+            matchTable.CellEditCallback(matchTable, struct());
+            drawnow
+
+            testCase.verifyEqual(string(solveButton.Enable), "on");
+            solveButton.ButtonPushedFcn(solveButton, struct());
+            drawnow
+
+            diagnosticsAfterSolve = app.alignmentDiagnostics();
+            solvedData = matchTable.Data;
+            testCase.verifyTrue(contains(string(statusLabel.Text), ...
+                "match-limited"));
+            testCase.verifyTrue(diagnosticsAfterSolve.Stage.HasSolveResult);
+            testCase.verifyEqual(diagnosticsAfterSolve.Stage.SolvedMatchCount, 3);
+            testCase.verifyEqual(nnz(solvedData.Enabled), 3);
+            testCase.verifyEqual(string(previewButton.Enable), "off");
+            testCase.verifyEqual(string(applyButton.Enable), "off");
+            testCase.verifyEqual(string(revertButton.Enable), "off");
         end
 
         function testOverlayClickDeleteAndUndoCuration(testCase)

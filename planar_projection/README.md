@@ -207,7 +207,9 @@ Core controls:
   displacement filtering, updates raw/filtered match counts, and draws match
   overlays; Solve reuses the stored filtered matches and reports residual/OPK
   summaries in the status text, including warnings when corrections hit OPK
-  bounds. Solver diagnostics also include max residuals, worst residual match
+  bounds. GUI solves are marked failed, with Preview/Apply/Revert disabled, if
+  they are match-limited, bound-limited, or residual-limited by the safe default
+  policy. Solver diagnostics also include max residuals, worst residual match
   references, per-pair residual summaries, and table-ready match records for
   follow-up review workflows. The match table can sort residuals, highlight a
   selected correspondence, and disable individual observations before solving
@@ -231,9 +233,10 @@ pair table, match overlays, and RMS summary, then switch to the quality preset
 or `rayToRay3D` when the fast solve looks plausible. Use the ROI button when
 background features dominate the overlap, uncheck weak pair rows before rerun,
 preview the solved OPK corrections, apply or revert them, and save the viewer
-state from the context menu. Common failure modes are too few filtered matches,
-disabled or hidden layers leaving no enabled pairs, an ROI that clips all
-features, or a detector that is unavailable in the current MATLAB installation.
+state from the context menu. Common failure modes are too few filtered or
+solver-used matches, disabled or hidden layers leaving no enabled pairs, a solve
+that hits OPK bounds, weak residual improvement, an ROI that clips all features,
+or a detector that is unavailable in the current MATLAB installation.
 Real-data alignment quality follow-up work, including staged match/solve
 controls, outlier filtering, OPK bounds, overlay clearing, and future manual
 match curation, is tracked in `docs/alignment_workflow_hardening_plan.md`.
