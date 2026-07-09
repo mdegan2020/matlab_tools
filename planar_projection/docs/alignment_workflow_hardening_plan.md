@@ -265,6 +265,14 @@ Acceptance criteria:
 - Catastrophic long matches are immediately visible.
 - The operator can toggle rejected matches on/off for diagnosis.
 
+Implementation note:
+
+- The alignment panel now has overlay toggles for accepted match lines,
+  rejected match lines, worst residual matches, and feature points. Accepted
+  match lines and feature points default on; rejected and worst overlays default
+  off. Rejected categories are drawn the same faint style for now. Worst
+  highlighting uses the post-solve worst ten percent of finite residuals.
+
 ### 3.2 Add a match table
 
 The match table should include:
@@ -346,6 +354,11 @@ Add toggles for:
 Acceptance criteria:
 
 - Operators can reduce clutter without clearing stored alignment state.
+
+Implementation note:
+
+- Accepted, rejected, worst-residual, and feature-point overlays can be toggled
+  from the alignment panel without clearing the stored match or solve state.
 
 ## Feature Pack 5: Safe Default Solve Policy
 

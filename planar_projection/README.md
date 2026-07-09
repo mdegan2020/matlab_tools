@@ -213,7 +213,9 @@ Core controls:
   selected correspondence, and disable individual observations before solving
   again without re-matching. Visible match overlays redraw from source
   observations after finalized projection, layer-offset, preview, apply, and
-  revert updates.
+  revert updates. Alignment-panel overlay toggles show accepted lines and
+  feature points by default, with optional faint rejected matches and post-solve
+  worst-residual highlights.
 
 Manual auto-alignment validation loop:
 

@@ -91,6 +91,10 @@ classdef ProjectionViewerApp < handle
         AlignmentApplyButton matlab.ui.control.Button
         AlignmentRevertButton matlab.ui.control.Button
         AlignmentClearOverlaysButton matlab.ui.control.Button
+        AlignmentAcceptedOverlayCheckBox matlab.ui.control.StateButton
+        AlignmentRejectedOverlayCheckBox matlab.ui.control.StateButton
+        AlignmentWorstOverlayCheckBox matlab.ui.control.StateButton
+        AlignmentFeatureOverlayCheckBox matlab.ui.control.StateButton
         AlignmentStatusLabel matlab.ui.control.Label
         AlignmentPairTable matlab.ui.control.Table
         AlignmentMatchTable matlab.ui.control.Table
@@ -557,6 +561,34 @@ classdef ProjectionViewerApp < handle
                 ButtonPushedFcn=@(~, ~) app.clearAlignmentOverlaysFromControls());
             app.AlignmentClearOverlaysButton.Layout.Row = 2;
             app.AlignmentClearOverlaysButton.Layout.Column = 15;
+
+            app.AlignmentAcceptedOverlayCheckBox = uibutton( ...
+                app.AlignmentGrid, "state", Text="Accepted", Value=true, ...
+                Tag="ProjectionViewerAlignmentAcceptedOverlayCheckBox", ...
+                ValueChangedFcn=@(~, ~) app.refreshAlignmentOverlays(true));
+            app.AlignmentAcceptedOverlayCheckBox.Layout.Row = 1;
+            app.AlignmentAcceptedOverlayCheckBox.Layout.Column = [7 8];
+
+            app.AlignmentRejectedOverlayCheckBox = uibutton( ...
+                app.AlignmentGrid, "state", Text="Rejected", Value=false, ...
+                Tag="ProjectionViewerAlignmentRejectedOverlayCheckBox", ...
+                ValueChangedFcn=@(~, ~) app.refreshAlignmentOverlays(true));
+            app.AlignmentRejectedOverlayCheckBox.Layout.Row = 1;
+            app.AlignmentRejectedOverlayCheckBox.Layout.Column = [9 10];
+
+            app.AlignmentWorstOverlayCheckBox = uibutton( ...
+                app.AlignmentGrid, "state", Text="Worst", Value=false, ...
+                Tag="ProjectionViewerAlignmentWorstOverlayCheckBox", ...
+                ValueChangedFcn=@(~, ~) app.refreshAlignmentOverlays(true));
+            app.AlignmentWorstOverlayCheckBox.Layout.Row = 1;
+            app.AlignmentWorstOverlayCheckBox.Layout.Column = [11 12];
+
+            app.AlignmentFeatureOverlayCheckBox = uibutton( ...
+                app.AlignmentGrid, "state", Text="Points", Value=true, ...
+                Tag="ProjectionViewerAlignmentFeatureOverlayCheckBox", ...
+                ValueChangedFcn=@(~, ~) app.refreshAlignmentOverlays(true));
+            app.AlignmentFeatureOverlayCheckBox.Layout.Row = 1;
+            app.AlignmentFeatureOverlayCheckBox.Layout.Column = [13 14];
 
             app.AlignmentStatusLabel = uilabel(app.AlignmentGrid, ...
                 Text="Alignment not run", ...
@@ -1975,8 +2007,11 @@ classdef ProjectionViewerApp < handle
             planePoints = PlanarProjection.worldToPlane(worldPoints, plane).';
         end
 
-        function refreshAlignmentOverlays(app)
-            if ~app.hasAlignmentOverlayGraphics()
+        function refreshAlignmentOverlays(app, force)
+            if nargin < 2
+                force = false;
+            end
+            if ~force && ~app.hasAlignmentOverlayGraphics()
                 return
             end
 
@@ -1998,68 +2033,303 @@ classdef ProjectionViewerApp < handle
             end
         end
 
+        function records = alignmentOverlayRecords(app, result)
+            acceptedRecords = app.emptyAlignmentOverlayRecords();
+            rejectedRecords = app.emptyAlignmentOverlayRecords();
+
+            if app.hasFilteredAlignmentMatches()
+                acceptedMatches = app.applyCuratedMaskToMatchResult( ...
+                    app.AlignmentFilteredMatchResult);
+                acceptedRecords = app.alignmentOverlayRecordsFromMatchResult( ...
+                    acceptedMatches, "accepted", result);
+                if app.hasMatchResult(app.AlignmentRawMatchResult)
+                    rawRecords = app.alignmentOverlayRecordsFromMatchResult( ...
+                        app.AlignmentRawMatchResult, "rejected", []);
+                    acceptedKeys = app.alignmentOverlayRecordKeys( ...
+                        acceptedRecords);
+                    rawKeys = app.alignmentOverlayRecordKeys(rawRecords);
+                    rejectedRecords = rawRecords(~ismember(rawKeys, acceptedKeys));
+                end
+            elseif isfield(result, "Diagnostics") && ...
+                    isfield(result.Diagnostics, "MatchRecords") && ...
+                    ~isempty(result.Diagnostics.MatchRecords)
+                acceptedRecords = app.alignmentOverlayRecordsFromSolverRecords( ...
+                    result.Diagnostics.MatchRecords);
+            elseif isfield(result, "Matches") && ~isempty(result.Matches)
+                acceptedRecords = app.alignmentOverlayRecordsFromOverlayMatches( ...
+                    result.Matches);
+            end
+
+            records = [acceptedRecords rejectedRecords];
+            records = app.markWorstAlignmentOverlayRecords(records);
+        end
+
+        function records = emptyAlignmentOverlayRecords(~)
+            records = struct("Pair", {}, "PairKey", {}, "MatchIndex", {}, ...
+                "State", {}, "MovingProjectionPoint", {}, ...
+                "ReferenceProjectionPoint", {}, "ResidualAfter", {}, ...
+                "IsWorst", {});
+        end
+
+        function records = alignmentOverlayRecordsFromMatchResult(app, ...
+                matchResult, state, result)
+            records = app.emptyAlignmentOverlayRecords();
+            if ~app.hasMatchResult(matchResult)
+                return
+            end
+            if nargin < 4
+                result = [];
+            end
+
+            cursor = 0;
+            totalCount = sum([matchResult.Matches.Count]);
+            if totalCount == 0
+                return
+            end
+            records(1, totalCount) = app.defaultAlignmentOverlayRecord();
+            for pairIndex = 1:numel(matchResult.Matches)
+                pairMatch = matchResult.Matches(pairIndex);
+                recordIndices = app.matchRecordIndices(pairMatch);
+                [movingPoints, referencePoints] = ...
+                    app.currentAlignmentProjectionPoints(pairMatch);
+                for matchIndex = 1:pairMatch.Count
+                    cursor = cursor + 1;
+                    recordIndex = recordIndices(matchIndex);
+                    residualRecord = app.residualRecordForMatch( ...
+                        result, pairMatch.Pair, recordIndex);
+                    record = app.defaultAlignmentOverlayRecord();
+                    record.Pair = pairMatch.Pair;
+                    record.PairKey = app.pairKey(pairMatch.Pair);
+                    record.MatchIndex = recordIndex;
+                    record.State = state;
+                    record.MovingProjectionPoint = movingPoints(matchIndex, :);
+                    record.ReferenceProjectionPoint = ...
+                        referencePoints(matchIndex, :);
+                    record.ResidualAfter = residualRecord.After;
+                    records(cursor) = record;
+                end
+            end
+            records = records(1:cursor);
+        end
+
+        function records = alignmentOverlayRecordsFromSolverRecords(app, ...
+                solverRecords)
+            records = app.emptyAlignmentOverlayRecords();
+            if isempty(solverRecords)
+                return
+            end
+
+            records(1, numel(solverRecords)) = ...
+                app.defaultAlignmentOverlayRecord();
+            for k = 1:numel(solverRecords)
+                solverRecord = solverRecords(k);
+                pairMatch = struct();
+                pairMatch.Pair = solverRecord.Pair;
+                pairMatch.MovingSourceRows = solverRecord.MovingSourceRow;
+                pairMatch.MovingSourceColumns = solverRecord.MovingSourceColumn;
+                pairMatch.ReferenceSourceRows = ...
+                    solverRecord.ReferenceSourceRow;
+                pairMatch.ReferenceSourceColumns = ...
+                    solverRecord.ReferenceSourceColumn;
+                pairMatch.MovingPlaneCoordinates = ...
+                    [solverRecord.MovingProjectionX solverRecord.MovingProjectionY];
+                pairMatch.ReferencePlaneCoordinates = ...
+                    [solverRecord.ReferenceProjectionX ...
+                    solverRecord.ReferenceProjectionY];
+                [movingPoints, referencePoints] = ...
+                    app.currentAlignmentProjectionPoints(pairMatch);
+
+                record = app.defaultAlignmentOverlayRecord();
+                record.Pair = solverRecord.Pair;
+                record.PairKey = string(solverRecord.PairKey);
+                record.MatchIndex = solverRecord.MatchIndex;
+                record.State = "accepted";
+                record.MovingProjectionPoint = movingPoints(1, :);
+                record.ReferenceProjectionPoint = referencePoints(1, :);
+                record.ResidualAfter = solverRecord.ResidualAfter;
+                records(k) = record;
+            end
+        end
+
+        function records = alignmentOverlayRecordsFromOverlayMatches(app, matches)
+            records = app.emptyAlignmentOverlayRecords();
+            if isempty(matches)
+                return
+            end
+
+            totalCount = sum([matches.Count]);
+            if totalCount == 0
+                return
+            end
+            records(1, totalCount) = app.defaultAlignmentOverlayRecord();
+            cursor = 0;
+            for pairIndex = 1:numel(matches)
+                pairMatch = matches(pairIndex);
+                for matchIndex = 1:pairMatch.Count
+                    cursor = cursor + 1;
+                    record = app.defaultAlignmentOverlayRecord();
+                    record.Pair = pairMatch.Pair;
+                    record.PairKey = app.pairKey(pairMatch.Pair);
+                    record.MatchIndex = matchIndex;
+                    record.State = "accepted";
+                    record.MovingProjectionPoint = ...
+                        pairMatch.MovingProjectionPoints(matchIndex, :);
+                    record.ReferenceProjectionPoint = ...
+                        pairMatch.ReferenceProjectionPoints(matchIndex, :);
+                    records(cursor) = record;
+                end
+            end
+        end
+
+        function record = defaultAlignmentOverlayRecord(~)
+            record = struct(Pair=[0 0], PairKey="", MatchIndex=0, ...
+                State="accepted", MovingProjectionPoint=[NaN NaN], ...
+                ReferenceProjectionPoint=[NaN NaN], ResidualAfter=NaN, ...
+                IsWorst=false);
+        end
+
+        function keys = alignmentOverlayRecordKeys(~, records)
+            keys = strings(1, numel(records));
+            for k = 1:numel(records)
+                keys(k) = records(k).PairKey + "#" + string(records(k).MatchIndex);
+            end
+        end
+
+        function records = markWorstAlignmentOverlayRecords(~, records)
+            if isempty(records)
+                return
+            end
+
+            residuals = [records.ResidualAfter];
+            finiteMask = isfinite(residuals);
+            if ~any(finiteMask)
+                return
+            end
+
+            finiteIndices = find(finiteMask);
+            [~, order] = sort(residuals(finiteMask), "descend");
+            worstCount = max(1, ceil(0.10 * numel(finiteIndices)));
+            worstIndices = finiteIndices(order(1:worstCount));
+            for k = reshape(worstIndices, 1, [])
+                records(k).IsWorst = true;
+            end
+        end
+
         function drawAlignmentOverlays(app, result)
             app.clearAlignmentOverlays();
-            if isempty(result.Matches) || sum([result.Matches.Count]) == 0
+            records = app.alignmentOverlayRecords(result);
+            if isempty(records)
                 return
             end
 
-            plane = app.currentProjectionPlane();
-            matchCount = sum([result.Matches.Count]);
-            lineX = nan(3, matchCount);
-            lineY = nan(3, matchCount);
-            lineZ = nan(3, matchCount);
-            movingPoints = nan(3, matchCount);
-            referencePoints = nan(3, matchCount);
-            cursor = 0;
-            for pairIndex = 1:numel(result.Matches)
-                pairMatch = result.Matches(pairIndex);
-                pairCount = pairMatch.Count;
-                if pairCount == 0
-                    continue
+            handles = gobjects(0);
+            acceptedMask = string([records.State]) == "accepted";
+            rejectedMask = ~acceptedMask;
+            if app.alignmentOverlayToggleValue( ...
+                    "AlignmentAcceptedOverlayCheckBox", true)
+                handles = [handles app.drawAlignmentOverlayLines( ...
+                    records(acceptedMask), [1 0.9 0.1], 0.75, ...
+                    "ProjectionViewerAlignmentMatchOverlay")];
+            end
+            if app.alignmentOverlayToggleValue( ...
+                    "AlignmentRejectedOverlayCheckBox", false)
+                handles = [handles app.drawAlignmentOverlayLines( ...
+                    records(rejectedMask), [0.55 0.55 0.55], 0.5, ...
+                    "ProjectionViewerAlignmentRejectedMatchOverlay")];
+            end
+            if app.alignmentOverlayToggleValue( ...
+                    "AlignmentFeatureOverlayCheckBox", true)
+                handles = [handles app.drawAlignmentOverlayMarkers( ...
+                    records(acceptedMask), [1 0.9 0.1], [0 1 0.3], ...
+                    "ProjectionViewerAlignmentMovingMatchOverlay", ...
+                    "ProjectionViewerAlignmentReferenceMatchOverlay")];
+                if app.alignmentOverlayToggleValue( ...
+                        "AlignmentRejectedOverlayCheckBox", false)
+                    handles = [handles app.drawAlignmentOverlayMarkers( ...
+                        records(rejectedMask), [0.55 0.55 0.55], ...
+                        [0.45 0.65 0.45], ...
+                        "ProjectionViewerAlignmentRejectedMovingMatchOverlay", ...
+                        "ProjectionViewerAlignmentRejectedReferenceMatchOverlay")];
                 end
-                movingWorld = PlanarProjection.reconstruct3d( ...
-                    pairMatch.MovingProjectionPoints.', plane) - ...
-                    app.Scene.renderOrigin;
-                referenceWorld = PlanarProjection.reconstruct3d( ...
-                    pairMatch.ReferenceProjectionPoints.', plane) - ...
-                    app.Scene.renderOrigin;
-                idx = cursor + (1:pairCount);
-                lineX(:, idx) = [movingWorld(1, :); referenceWorld(1, :); ...
-                    nan(1, pairCount)];
-                lineY(:, idx) = [movingWorld(2, :); referenceWorld(2, :); ...
-                    nan(1, pairCount)];
-                lineZ(:, idx) = [movingWorld(3, :); referenceWorld(3, :); ...
-                    nan(1, pairCount)];
-                movingPoints(:, idx) = movingWorld;
-                referencePoints(:, idx) = referenceWorld;
-                cursor = cursor + pairCount;
             end
+            if app.alignmentOverlayToggleValue( ...
+                    "AlignmentWorstOverlayCheckBox", false)
+                worstMask = [records.IsWorst];
+                handles = [handles app.drawAlignmentOverlayLines( ...
+                    records(worstMask), [1 0 1], 2, ...
+                    "ProjectionViewerAlignmentWorstMatchOverlay")];
+            end
+            app.AlignmentOverlayLines = handles;
+            app.raiseCrosshairOverlay();
+        end
 
-            if cursor == 0
+        function value = alignmentOverlayToggleValue(app, propertyName, defaultValue)
+            control = app.(propertyName);
+            if isempty(control) || ~isvalid(control)
+                value = defaultValue;
+            else
+                value = logical(control.Value);
+            end
+        end
+
+        function handles = drawAlignmentOverlayLines(app, records, color, ...
+                lineWidth, tag)
+            handles = gobjects(0);
+            if isempty(records)
                 return
             end
-            lineX = lineX(:, 1:cursor);
-            lineY = lineY(:, 1:cursor);
-            lineZ = lineZ(:, 1:cursor);
-            movingPoints = movingPoints(:, 1:cursor);
-            referencePoints = referencePoints(:, 1:cursor);
 
-            matchLines = line(app.Axes, lineX(:), lineY(:), lineZ(:), ...
-                Color=[1 0.9 0.1], LineWidth=0.75, HitTest="off", ...
-                PickableParts="none", Tag="ProjectionViewerAlignmentMatchOverlay");
+            [lineX, lineY, lineZ] = app.alignmentOverlayLineCoordinates(records);
+            handles = line(app.Axes, lineX(:), lineY(:), lineZ(:), ...
+                Color=color, LineWidth=lineWidth, HitTest="off", ...
+                PickableParts="none", Tag=tag);
+        end
+
+        function handles = drawAlignmentOverlayMarkers(app, records, ...
+                movingColor, referenceColor, movingTag, referenceTag)
+            handles = gobjects(0);
+            if isempty(records)
+                return
+            end
+
+            [movingPoints, referencePoints] = ...
+                app.alignmentOverlayWorldPoints(records);
             movingMarkers = line(app.Axes, movingPoints(1, :), ...
                 movingPoints(2, :), movingPoints(3, :), LineStyle="none", ...
-                Marker="o", MarkerSize=4, MarkerEdgeColor=[1 0.9 0.1], ...
-                HitTest="off", PickableParts="none", ...
-                Tag="ProjectionViewerAlignmentMovingMatchOverlay");
+                Marker="o", MarkerSize=4, MarkerEdgeColor=movingColor, ...
+                HitTest="off", PickableParts="none", Tag=movingTag);
             referenceMarkers = line(app.Axes, referencePoints(1, :), ...
-                referencePoints(2, :), referencePoints(3, :), LineStyle="none", ...
-                Marker="+", MarkerSize=5, MarkerEdgeColor=[0 1 0.3], ...
-                HitTest="off", PickableParts="none", ...
-                Tag="ProjectionViewerAlignmentReferenceMatchOverlay");
-            app.AlignmentOverlayLines = [matchLines movingMarkers referenceMarkers];
-            app.raiseCrosshairOverlay();
+                referencePoints(2, :), referencePoints(3, :), ...
+                LineStyle="none", Marker="+", MarkerSize=5, ...
+                MarkerEdgeColor=referenceColor, HitTest="off", ...
+                PickableParts="none", Tag=referenceTag);
+            handles = [movingMarkers referenceMarkers];
+        end
+
+        function [lineX, lineY, lineZ] = alignmentOverlayLineCoordinates( ...
+                app, records)
+            [movingPoints, referencePoints] = ...
+                app.alignmentOverlayWorldPoints(records);
+            matchCount = numel(records);
+            lineX = [movingPoints(1, :); referencePoints(1, :); ...
+                nan(1, matchCount)];
+            lineY = [movingPoints(2, :); referencePoints(2, :); ...
+                nan(1, matchCount)];
+            lineZ = [movingPoints(3, :); referencePoints(3, :); ...
+                nan(1, matchCount)];
+        end
+
+        function [movingPoints, referencePoints] = ...
+                alignmentOverlayWorldPoints(app, records)
+            plane = app.currentProjectionPlane();
+            movingPlanePoints = reshape([records.MovingProjectionPoint], ...
+                2, []).';
+            referencePlanePoints = reshape([records.ReferenceProjectionPoint], ...
+                2, []).';
+            movingPoints = PlanarProjection.reconstruct3d( ...
+                movingPlanePoints.', plane) - app.Scene.renderOrigin;
+            referencePoints = PlanarProjection.reconstruct3d( ...
+                referencePlanePoints.', plane) - app.Scene.renderOrigin;
         end
 
         function clearAlignmentOverlays(app)

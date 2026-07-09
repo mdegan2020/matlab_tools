@@ -50,6 +50,14 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentClearRoiButton");
             clearOverlaysButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentClearOverlaysButton");
+            acceptedOverlayCheckBox = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentAcceptedOverlayCheckBox");
+            rejectedOverlayCheckBox = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentRejectedOverlayCheckBox");
+            worstOverlayCheckBox = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentWorstOverlayCheckBox");
+            featureOverlayCheckBox = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentFeatureOverlayCheckBox");
             matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentMatchButton");
             solveButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -83,6 +91,10 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(roiButton.Enable), "on");
             testCase.verifyEqual(string(clearRoiButton.Enable), "on");
             testCase.verifyEqual(string(clearOverlaysButton.Enable), "on");
+            testCase.verifyTrue(acceptedOverlayCheckBox.Value);
+            testCase.verifyFalse(rejectedOverlayCheckBox.Value);
+            testCase.verifyFalse(worstOverlayCheckBox.Value);
+            testCase.verifyTrue(featureOverlayCheckBox.Value);
             testCase.verifyEqual(string(matchButton.Enable), "on");
             testCase.verifyEqual(string(solveButton.Enable), "off");
             testCase.verifyEqual(string(cancelButton.Enable), "off");
@@ -404,6 +416,12 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentPreviewButton");
             matchTable = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentMatchTable");
+            rejectedOverlayCheckBox = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentRejectedOverlayCheckBox");
+            worstOverlayCheckBox = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentWorstOverlayCheckBox");
+            featureOverlayCheckBox = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentFeatureOverlayCheckBox");
             statusLabel = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentStatusLabel");
 
@@ -426,6 +444,26 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 diagnosticsAfterFirstSolve.Stage.SolvedMatchCount, ...
                 diagnosticsAfterFirstSolve.Stage.FilteredMatchCount);
 
+            worstOverlayCheckBox.Value = true;
+            worstOverlayCheckBox.ValueChangedFcn(worstOverlayCheckBox, struct());
+            drawnow
+            worstOverlay = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentWorstMatchOverlay");
+            testCase.verifyEqual( ...
+                ProjectionViewerAlignmentWorkflowTest.overlaySegmentCount(worstOverlay), ...
+                max(1, ceil(0.10 * numel(finiteResiduals))));
+
+            featureOverlayCheckBox.Value = false;
+            featureOverlayCheckBox.ValueChangedFcn(featureOverlayCheckBox, struct());
+            drawnow
+            testCase.verifyEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentMovingMatchOverlay"));
+            testCase.verifyNotEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentMatchOverlay"));
+            featureOverlayCheckBox.Value = true;
+            featureOverlayCheckBox.ValueChangedFcn(featureOverlayCheckBox, struct());
+            drawnow
+
             matchTable.CellSelectionCallback(matchTable, struct(Indices=[1 1]));
             drawnow
             testCase.verifyNotEmpty(findall(fig, "Tag", ...
@@ -440,6 +478,14 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             drawnow
             diagnosticsAfterEdit = app.alignmentDiagnostics();
 
+            testCase.verifyEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentRejectedMatchOverlay"));
+            rejectedOverlayCheckBox.Value = true;
+            rejectedOverlayCheckBox.ValueChangedFcn(rejectedOverlayCheckBox, ...
+                struct());
+            drawnow
+            testCase.verifyNotEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentRejectedMatchOverlay"));
             testCase.verifyFalse(diagnosticsAfterEdit.Stage.HasSolveResult);
             testCase.verifyEqual( ...
                 diagnosticsAfterEdit.Stage.CuratedMatchCount, ...
@@ -588,6 +634,10 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
         function delta = finiteCoordinateDelta(before, after)
             finiteMask = isfinite(before) & isfinite(after);
             delta = norm(after(finiteMask) - before(finiteMask));
+        end
+
+        function count = overlaySegmentCount(overlay)
+            count = nnz(isnan(overlay.XData));
         end
     end
 end
