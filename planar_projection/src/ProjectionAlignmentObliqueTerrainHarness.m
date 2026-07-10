@@ -138,6 +138,13 @@ classdef ProjectionAlignmentObliqueTerrainHarness
             end
         end
 
+        function metrics = truthMetrics(matchResult, truth)
+            %truthMetrics Compare matched source observations with terrain truth.
+            ProjectionAlignmentObliqueTerrainHarness.validateTruth(truth);
+            metrics = ProjectionAlignmentObliqueTerrainHarness.matchTruthMetrics( ...
+                matchResult, truth);
+        end
+
         function artifacts = writeSimulationArtifacts(outputDirectory, scene, truth)
             %writeSimulationArtifacts Write DEM and rendered sensor review PNGs.
             ProjectionAlignmentObliqueTerrainHarness.validateTruth(truth);

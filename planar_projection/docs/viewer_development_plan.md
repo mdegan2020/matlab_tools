@@ -800,7 +800,11 @@ Implementation status:
   exhaustive-matcher dispatch, stable feature/match ordering, and public
   feature/filter-stage diagnostics. The nondeterministic approximate matcher
   is no longer a public option. The final fresh-class Pack 3 suite passes 348
-  tests.
+  tests. Reliability Pack 4 replaces the mislabeled translation gate with
+  deterministic working-pixel similarity/affine fits, makes native-coordinate
+  MAD opt-in, and adds a normalized robust-centered coplanarity filter with
+  explicit ray-degeneracy diagnostics. The final fresh-class Pack 4 suite
+  passes 360 tests.
 
 ### Auto Alignment Design Decisions
 

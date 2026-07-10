@@ -16,7 +16,7 @@ classdef ProjectionAlignmentMatchFilterTest < matlab.unittest.TestCase
             options.FilterPipeline = struct( ...
                 Stages=["overlapMask", "descriptorScore", "geometricOutlier"], ...
                 MinMatchScore=0.5, ...
-                GeometricMethod="ransac", ...
+                GeometricMethod="similarity", ...
                 GeometricMaxDistancePixels=1);
 
             filtered = ProjectionAlignmentMatchFilter.filter(matchResult, options);
@@ -30,6 +30,9 @@ classdef ProjectionAlignmentMatchFilterTest < matlab.unittest.TestCase
             testCase.verifyEqual(diagnostics.FinalCount, 2);
             testCase.verifyEqual(filtered.Matches.Count, 2);
             testCase.verifyEqual(filtered.Matches.IndexPairs, [1 1; 2 2]);
+            testCase.verifyEqual(diagnostics.GeometricModel.Method, "similarity");
+            testCase.verifyEqual( ...
+                diagnostics.GeometricModel.CoordinateSpace, "workingPixels");
         end
 
         function testRatioUniquenessStageRemovesMetricAndDuplicateMatches(testCase)
@@ -78,6 +81,10 @@ classdef ProjectionAlignmentMatchFilterTest < matlab.unittest.TestCase
                 filtered.Diagnostics.FilterPipeline.StageCounts.GeometricOutlier, ...
                 20);
             testCase.verifyTrue(all(filtered.Matches.IndexPairs(:, 1) <= 20));
+            model = filtered.Diagnostics.FilterPipeline.GeometricModel;
+            testCase.verifyEqual(model.Status, "fitted");
+            testCase.verifyEqual(model.AcceptedCount, 20);
+            testCase.verifyLessThan(model.RmsAcceptedPixels, 1e-10);
         end
 
         function testNativeDisplacementFilterRejectsNativePixelOutliers(testCase)
@@ -97,6 +104,53 @@ classdef ProjectionAlignmentMatchFilterTest < matlab.unittest.TestCase
                 filtered.Diagnostics.FilterPipeline.StageCounts.NativeDisplacement, ...
                 20);
             testCase.verifyTrue(all(filtered.Matches.IndexPairs(:, 1) <= 20));
+        end
+
+        function testCoplanarityFilterUsesRobustCenteredNormalizedResidual( ...
+                testCase)
+            [matchResult, scene] = ...
+                ProjectionAlignmentMatchFilterTest.makeCoplanarityInputs();
+            options = struct(FilterPipeline=struct( ...
+                Stages="epipolarCoplanarity", ...
+                CoplanarityMethod="robustMad", ...
+                CoplanarityMadScale=4, CoplanarityMinResidual=1e-5));
+
+            first = ProjectionAlignmentMatchFilter.filter( ...
+                matchResult, options, scene);
+            second = ProjectionAlignmentMatchFilter.filter( ...
+                matchResult, options, scene);
+            diagnostics = first.Diagnostics.FilterPipeline.Coplanarity;
+            records = first.Matches.MatchLedger;
+            stageMasks = [records.StageMasks];
+
+            testCase.verifyEqual(first.Matches.Count, 10);
+            testCase.verifyEqual(first.Matches.IndexPairs, [(1:10).' (1:10).']);
+            testCase.verifyEqual(diagnostics.Status, "filtered");
+            testCase.verifyEqual(diagnostics.Unit, "normalizedAngular");
+            testCase.verifyEqual(diagnostics.Center, 0, AbsTol=1e-12);
+            testCase.verifyEqual([stageMasks.EpipolarCoplanarity], ...
+                [true(1, 10) false false]);
+            testCase.verifyEqual(records(11).FirstRejectedStage, ...
+                "epipolarCoplanarity");
+            testCase.verifyTrue(isfinite( ...
+                records(11).Residuals.EpipolarCoplanarityBeforeRadians));
+            testCase.verifyEqual(first.Matches.MatchRecordIndices, ...
+                second.Matches.MatchRecordIndices);
+            testCase.verifyEqual( ...
+                first.Diagnostics.FilterPipeline.Coplanarity.AcceptedMask, ...
+                second.Diagnostics.FilterPipeline.Coplanarity.AcceptedMask);
+        end
+
+        function testCoplanarityFilterRequiresScene(testCase)
+            [matchResult, ~] = ...
+                ProjectionAlignmentMatchFilterTest.makeCoplanarityInputs();
+            options = struct(FilterPipeline=struct( ...
+                Stages="epipolarCoplanarity", ...
+                CoplanarityMethod="robustMad"));
+
+            testCase.verifyError(@() ProjectionAlignmentMatchFilter.filter( ...
+                matchResult, options), ...
+                "ProjectionAlignmentMatchFilter:sceneRequired");
         end
 
         function testRadialFilterCallbackControlsSurvivingMatches(testCase)
@@ -127,6 +181,11 @@ classdef ProjectionAlignmentMatchFilterTest < matlab.unittest.TestCase
                 [0.1; 0.2; 0.3; 0.4; 0.5], ...
                 [0.9; 0.8; 0.95; 0.1; 0.9]);
             matchResult.Matches.ReferencePlaneCoordinates(5, :) = [30 30];
+            matchResult.Matches.ReferenceFeatureLocations(5, :) = [30 30];
+            overlapMask = false(30, 30);
+            overlapMask(1:5, 1:5) = true;
+            overlapMask(30, 30) = true;
+            matchResult.Matches.OverlapMask = overlapMask;
         end
 
         function matchResult = makeDuplicateMatchResult()
@@ -192,6 +251,52 @@ classdef ProjectionAlignmentMatchFilterTest < matlab.unittest.TestCase
             mask = false(pairMatch.Count, 1);
             mask(1:2) = true;
             mask = mask & currentMask(:);
+        end
+
+        function [matchResult, scene] = makeCoplanarityInputs()
+            count = 12;
+            rows = (1:count).';
+            columns = (1:count).';
+            movingLocations = [columns rows];
+            referenceLocations = movingLocations;
+            pairMatch = ProjectionAlignmentMatchFilterTest.makePairMatch( ...
+                movingLocations, referenceLocations, ...
+                [(1:count).' (1:count).'], 0.1 * ones(count, 1), ...
+                ones(count, 1));
+            pairMatch.PairLayerIds = ["moving-id" "reference-id"];
+            pairMatch.MovingLayerId = "moving-id";
+            pairMatch.ReferenceLayerId = "reference-id";
+            pairMatch.MovingSourceRows = rows;
+            pairMatch.MovingSourceColumns = columns;
+            pairMatch.ReferenceSourceRows = rows;
+            pairMatch.ReferenceSourceColumns = columns;
+            pairMatch.ReferenceSourceRows(end - 1:end) = [1; 2];
+            matchResult = struct(Matches=pairMatch);
+
+            plane = PlanarProjection.definePlaneFromBasis( ...
+                zeros(3, 1), [1; 0; 0], [0; 1; 0]);
+            movingGeometry = struct(ImageSize=[count count], ...
+                SampleRayFcn=@(sampleRows, sampleColumns) ...
+                ProjectionAlignmentMatchFilterTest.raysToTargets( ...
+                [0; 0; 0], sampleRows, sampleColumns));
+            referenceGeometry = struct(ImageSize=[count count], ...
+                SampleRayFcn=@(sampleRows, sampleColumns) ...
+                ProjectionAlignmentMatchFilterTest.raysToTargets( ...
+                [1; 0; 0], sampleRows, sampleColumns));
+            layer = struct(LayerId="moving-id", ...
+                SourceGeometry=movingGeometry, CurrentProjectionPlane=plane, ...
+                ViewVectorAngularOffsetsDegrees=zeros(3, 1));
+            layers = repmat(layer, 1, 2);
+            layers(2).LayerId = "reference-id";
+            layers(2).SourceGeometry = referenceGeometry;
+            scene = struct(layers=layers, renderOrigin=zeros(3, 1));
+        end
+
+        function [origins, vectors] = raysToTargets(origin, rows, columns)
+            count = numel(rows);
+            origins = repmat(origin, 1, count);
+            targets = [columns(:).'; 20 * ones(1, count); rows(:).'];
+            vectors = targets - origins;
         end
     end
 end

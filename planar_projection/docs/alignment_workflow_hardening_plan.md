@@ -595,7 +595,8 @@ Reliability Pack 0: complete
 Reliability Pack 1: complete
 Reliability Pack 2: complete
 Reliability Pack 3: complete
-Reliability Packs 4-8: pending
+Reliability Pack 4: complete
+Reliability Packs 5-8: pending
 ```
 
 ### Reliability Pack 0: Observable records, units, and layer identity
@@ -952,6 +953,55 @@ Acceptance criteria:
   documented threshold is crossed.
 - Every filter option is either honored and tested or removed from the public
   schema.
+
+Implementation note:
+
+- `ProjectionAlignmentGeometricModel` now fits the named model in
+  moving-to-reference working-pixel coordinates. Similarity uses scale,
+  rotation, and translation; affine additionally permits shear and independent
+  axis scale. A deterministic bounded hypothesis schedule is scored by inlier
+  count, inlier residual, total robust residual, and minimum linear departure
+  from identity, then refined by least squares over the configured
+  `GeometricMaxDistancePixels` inliers. Diagnostics retain the homogeneous
+  model matrix, threshold, every residual, hypothesis count, and accepted raw
+  match indices.
+- The prior implementation compared projection-plane displacement vectors to
+  their median while labeling its threshold as pixels. That was a
+  translation-only gate in the wrong coordinate units and explains severe
+  twist-case over-rejection. Similarity and affine no longer share that path.
+  The undefined generic `ransac` option was removed from the public schema.
+- Native-coordinate MAD remains available as an explicit advanced stage, but
+  GUI presets no longer enable it. Independent oblique sensors do not generally
+  share a global native-pixel displacement field, so it is not a physically
+  sound default filter.
+- `ProjectionAlignmentCoplanarity` evaluates
+  `bHat dot (vm cross vr)` with a Sampson denominator from derivatives with
+  respect to both unit ray directions. The residual is normalized-angular and
+  invariant to uniform baseline scale. Negligible baselines, zero directions,
+  nearly parallel rays, nonfinite samples, and degenerate denominators receive
+  explicit per-observation statuses.
+- The optional `epipolarCoplanarity` filter samples current per-observation
+  rays, fits a robust residual center, and thresholds deviations with a
+  configurable MAD scale. It therefore tolerates a shared initial pointing
+  bias instead of applying a tight zero-centered gate. Stage masks, rejection
+  reason, normalized residual, center, scale, threshold, and degeneracy status
+  are preserved independently in diagnostics and the match ledger. Filtering
+  requires the source scene and never uses a display or alignment image as ray
+  geometry.
+- `scripts/alignment_filter_model_evaluation.m` compares similarity, affine,
+  coplanarity, and combined filters against the oblique-terrain truth fixture.
+  On the selected TIFF, similarity retained `48/58` matches with `3.57 m`
+  median and `11.34 m` p95 terrain separation. A `0.01 degree` perturbation
+  retained `49`, avoiding a count cliff. Affine also retained `48`,
+  coplanarity alone `49`, and combined filtering `48`; every variant was
+  exactly repeatable. Affine provided no benefit on this case and remains an
+  advanced option.
+- The default preset remains similarity-only pending Workbench controls.
+  Coplanarity is available through reusable options now and becomes an exposed
+  operator choice in the staged Workbench. Its solver loss is implemented in
+  Reliability Pack 6, not conflated with this pre-solve filter.
+- Pack 4 final validation passes with 360 tests after
+  `close all force; clear classes; rehash; results = runTests;`.
 
 ### Reliability Pack 5: Alignment Workbench and staged session
 

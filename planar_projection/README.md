@@ -510,6 +510,31 @@ addpath("scripts");
 The JSON/MAT report is written under the ignored
 `artifacts/alignment_feature_repeatability` directory.
 
+Geometric filtering now uses the model named by the option in
+moving-to-reference working-pixel coordinates. `similarity` fits rotation,
+uniform scale, and translation; `affine` is an advanced shear/nonuniform-scale
+model. The former translation-only projection-metre gate and undefined generic
+`ransac` label are gone. GUI presets use similarity and leave native-coordinate
+MAD disabled because independent oblique images need not share a global native
+pixel displacement.
+
+An optional `epipolarCoplanarity` filter evaluates normalized angular/Sampson
+ray coplanarity, robustly centers the current residual distribution, and keeps
+its stage state separate in the match ledger. Configure it programmatically
+with `FilterPipeline.CoplanarityMethod="robustMad"`; the separate Workbench will
+expose it as a staged filter control. Compare all filter models against terrain
+truth with:
+
+```matlab
+addpath("scripts");
+[summary, artifacts] = alignment_filter_model_evaluation();
+```
+
+The selected fixture retained `48/58` similarity-filtered matches at `3.57 m`
+median and `11.34 m` p95 terrain separation. A `0.01 degree` OPK perturbation
+changed the survivor count from `48` to `49`. Reports are written under the
+ignored `artifacts/alignment_filter_model_evaluation` directory.
+
 Manual auto-alignment validation loop:
 
 ```matlab

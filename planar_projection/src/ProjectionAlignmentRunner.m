@@ -29,7 +29,7 @@ classdef ProjectionAlignmentRunner
 
             filteringTimer = tic;
             filteredMatches = ProjectionAlignmentMatchFilter.filter( ...
-                matchResult, options);
+                matchResult, options, scene);
             filteringSeconds = toc(filteringTimer);
 
             solveTimer = tic;

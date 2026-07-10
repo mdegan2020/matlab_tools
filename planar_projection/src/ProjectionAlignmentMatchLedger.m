@@ -3,7 +3,7 @@ classdef ProjectionAlignmentMatchLedger
 
     properties (Constant)
         Format = "ProjectionAlignmentMatchLedgerRecord"
-        Version = 1
+        Version = 2
     end
 
     methods (Static)
@@ -302,6 +302,7 @@ classdef ProjectionAlignmentMatchLedger
                 DescriptorScore=true, ...
                 RatioUniqueness=true, ...
                 GeometricOutlier=true, ...
+                EpipolarCoplanarity=true, ...
                 NativeDisplacement=true, ...
                 Radial=true, ...
                 Roi=true, ...
@@ -445,6 +446,9 @@ classdef ProjectionAlignmentMatchLedger
                 case "geometricoutlier"
                     fieldName = "GeometricOutlier";
                     reasonName = "geometricOutlier";
+                case "epipolarcoplanarity"
+                    fieldName = "EpipolarCoplanarity";
+                    reasonName = "epipolarCoplanarity";
                 case "nativedisplacement"
                     fieldName = "NativeDisplacement";
                     reasonName = "nativeDisplacement";

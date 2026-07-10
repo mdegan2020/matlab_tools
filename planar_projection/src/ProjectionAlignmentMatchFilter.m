@@ -7,10 +7,13 @@ classdef ProjectionAlignmentMatchFilter
     end
 
     methods (Static)
-        function filtered = filter(matchResult, options)
+        function filtered = filter(matchResult, options, scene)
             %filter Apply the configured match-filter pipeline.
             if nargin < 2
                 options = struct();
+            end
+            if nargin < 3
+                scene = [];
             end
             ProjectionAlignmentMatchFilter.validateMatchResult(matchResult);
             options = ProjectionAlignmentOptions.validate(options);
@@ -37,7 +40,7 @@ classdef ProjectionAlignmentMatchFilter
             for k = 1:numel(matchResult.Matches)
                 [filtered.Matches(k), pairDiagnostics{k}] = ...
                     ProjectionAlignmentMatchFilter.filterPair( ...
-                    filtered.Matches(k), options);
+                    filtered.Matches(k), options, scene);
             end
             filtered.MatchLedger = ProjectionAlignmentMatchLedger.combine(filtered);
             filtered.FilterOptions = options.FilterPipeline;
@@ -46,7 +49,8 @@ classdef ProjectionAlignmentMatchFilter
     end
 
     methods (Static, Access = private)
-        function [pairMatch, diagnostics] = filterPair(pairMatch, options)
+        function [pairMatch, diagnostics] = filterPair( ...
+                pairMatch, options, scene)
             pipeline = options.FilterPipeline;
             pairMatch = ProjectionAlignmentMatchLedger.ensurePair(pairMatch);
             pairMatch = ProjectionAlignmentMatchFilter.ensureMatchRecordIndices( ...
@@ -71,10 +75,23 @@ classdef ProjectionAlignmentMatchFilter
                             pairMatch, pipeline);
                         diagnostics.StageCounts.RatioUniqueness = nnz(keepMask);
                     case "geometricOutlier"
-                        keepMask = keepMask & ...
+                        [geometricMask, geometricModel] = ...
                             ProjectionAlignmentMatchFilter.geometricMask( ...
                             pairMatch, pipeline, keepMask);
+                        keepMask = keepMask & geometricMask;
+                        diagnostics.GeometricModel = geometricModel;
                         diagnostics.StageCounts.GeometricOutlier = nnz(keepMask);
+                    case "epipolarCoplanarity"
+                        [coplanarityMask, coplanarity] = ...
+                            ProjectionAlignmentMatchFilter.coplanarityMask( ...
+                            pairMatch, pipeline, keepMask, scene);
+                        keepMask = keepMask & coplanarityMask;
+                        diagnostics.Coplanarity = coplanarity;
+                        pairMatch.MatchLedger = ...
+                            ProjectionAlignmentMatchFilter.attachCoplanarityResiduals( ...
+                            pairMatch.MatchLedger, coplanarity);
+                        diagnostics.StageCounts.EpipolarCoplanarity = ...
+                            nnz(keepMask);
                     case "nativeDisplacement"
                         keepMask = keepMask & ...
                             ProjectionAlignmentMatchFilter.nativeDisplacementMask( ...
@@ -109,8 +126,14 @@ classdef ProjectionAlignmentMatchFilter
             diagnostics.StageCounts.DescriptorScore = pairMatch.Count;
             diagnostics.StageCounts.RatioUniqueness = pairMatch.Count;
             diagnostics.StageCounts.GeometricOutlier = pairMatch.Count;
+            diagnostics.StageCounts.EpipolarCoplanarity = pairMatch.Count;
             diagnostics.StageCounts.NativeDisplacement = pairMatch.Count;
             diagnostics.StageCounts.Radial = pairMatch.Count;
+            diagnostics.GeometricModel = ...
+                ProjectionAlignmentGeometricModel.empty("none", 0);
+            diagnostics.GeometricModel.MatchRecordIndices = zeros(0, 1);
+            diagnostics.Coplanarity = ...
+                ProjectionAlignmentMatchFilter.emptyCoplanarityDiagnostics();
         end
 
         function mask = overlapMask(pairMatch)
@@ -141,18 +164,103 @@ classdef ProjectionAlignmentMatchFilter
                 pairMatch.IndexPairs);
         end
 
-        function mask = geometricMask(pairMatch, pipeline, currentMask)
+        function [mask, model] = geometricMask( ...
+                pairMatch, pipeline, currentMask)
             mask = true(pairMatch.Count, 1);
-            if pipeline.GeometricMethod == "none" || nnz(currentMask) < 3
+            model = ProjectionAlignmentGeometricModel.empty( ...
+                pipeline.GeometricMethod, 0);
+            model.MatchRecordIndices = zeros(0, 1);
+            if pipeline.GeometricMethod == "none"
+                model.Status = "disabled";
                 return
             end
+            inputIndices = find(currentMask);
+            model = ProjectionAlignmentGeometricModel.fit( ...
+                pairMatch.MovingFeatureLocations(currentMask, :), ...
+                pairMatch.ReferenceFeatureLocations(currentMask, :), ...
+                pipeline.GeometricMethod, struct(MaxDistancePixels= ...
+                pipeline.GeometricMaxDistancePixels));
+            model.MatchRecordIndices = pairMatch.MatchRecordIndices(inputIndices);
+            mask(currentMask) = model.AcceptedMask;
+        end
 
-            moving = pairMatch.MovingPlaneCoordinates(currentMask, :);
-            reference = pairMatch.ReferencePlaneCoordinates(currentMask, :);
-            displacement = reference - moving;
-            medianDisplacement = median(displacement, 1);
-            residuals = sqrt(sum((displacement - medianDisplacement).^2, 2));
-            mask(currentMask) = residuals <= pipeline.GeometricMaxDistancePixels;
+        function [mask, diagnostics] = coplanarityMask( ...
+                pairMatch, pipeline, currentMask, scene)
+            mask = true(pairMatch.Count, 1);
+            diagnostics = ...
+                ProjectionAlignmentMatchFilter.emptyCoplanarityDiagnostics();
+            if pipeline.CoplanarityMethod == "none"
+                diagnostics.Status = "disabled";
+                return
+            end
+            if isempty(scene)
+                error("ProjectionAlignmentMatchFilter:sceneRequired", ...
+                    "Coplanarity filtering requires the source scene.");
+            end
+            if ~any(currentMask)
+                diagnostics.Status = "noCandidates";
+                return
+            end
+            candidatePair = ProjectionAlignmentMatchFilter.subsetPair( ...
+                pairMatch, currentMask);
+            geometry = ProjectionAlignmentCoplanarity.evaluate( ...
+                scene, candidatePair);
+            residuals = geometry.Residuals;
+            validMask = geometry.ValidMask;
+            diagnostics.Method = pipeline.CoplanarityMethod;
+            diagnostics.Unit = geometry.Unit;
+            diagnostics.Geometry = geometry;
+            diagnostics.MatchRecordIndices = ...
+                candidatePair.MatchRecordIndices(:);
+            diagnostics.Residuals = residuals;
+            diagnostics.ValidMask = validMask;
+            if nnz(validMask) < 3
+                accepted = validMask;
+                diagnostics.Status = "insufficientValidGeometry";
+                diagnostics.AcceptedMask = accepted;
+                mask(currentMask) = accepted;
+                return
+            end
+            center = median(residuals(validMask));
+            robustScale = max(1.4826 * median(abs( ...
+                residuals(validMask) - center)), ...
+                pipeline.CoplanarityMinResidual);
+            threshold = pipeline.CoplanarityMadScale * robustScale;
+            if ~isempty(pipeline.CoplanarityMaxResidual)
+                threshold = min(threshold, ...
+                    pipeline.CoplanarityMaxResidual);
+            end
+            deviations = abs(residuals - center);
+            accepted = validMask & deviations <= threshold;
+            diagnostics.Status = "filtered";
+            diagnostics.Center = center;
+            diagnostics.RobustScale = robustScale;
+            diagnostics.Threshold = threshold;
+            diagnostics.Deviations = deviations;
+            diagnostics.AcceptedMask = accepted;
+            mask(currentMask) = accepted;
+        end
+
+        function records = attachCoplanarityResiduals(records, diagnostics)
+            if isempty(diagnostics.MatchRecordIndices)
+                return
+            end
+            for k = 1:numel(diagnostics.MatchRecordIndices)
+                recordIndex = diagnostics.MatchRecordIndices(k);
+                residualRecord = records(recordIndex).Residuals;
+                residualRecord.EpipolarCoplanarityBeforeRadians = ...
+                    diagnostics.Residuals(k);
+                records(recordIndex).Residuals = residualRecord;
+            end
+        end
+
+        function diagnostics = emptyCoplanarityDiagnostics()
+            diagnostics = struct(Method="none", Status="notRun", ...
+                Unit="normalizedAngular", Center=NaN, RobustScale=NaN, ...
+                Threshold=NaN, MatchRecordIndices=zeros(0, 1), ...
+                Residuals=zeros(0, 1), Deviations=zeros(0, 1), ...
+                ValidMask=false(0, 1), AcceptedMask=false(0, 1), ...
+                Geometry=struct());
         end
 
         function mask = nativeDisplacementMask(pairMatch, pipeline, currentMask)
