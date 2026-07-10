@@ -36,8 +36,8 @@ initialState = app.exportState();
 initialDiagnostics = app.performanceDiagnostics();
 scenarioNames = ["alpha", "crosshair", "twist", "pan", "zoomSlow", ...
     "zoomFast", "zoomReverse", "wasd", "opk"];
-records = repmat(struct(Name="", WallSeconds=0, Diagnostics=struct(), ...
-    Trace=struct()), ...
+records = repmat(struct(Name="", ActiveWallSeconds=0, WallSeconds=0, ...
+    ActiveDiagnostics=struct(), Diagnostics=struct(), Trace=struct()), ...
     1, numel(scenarioNames));
 
 for scenarioIndex = 1:numel(scenarioNames)
@@ -47,8 +47,14 @@ for scenarioIndex = 1:numel(scenarioNames)
     scenarioTimer = tic;
     trace = runScenario(app, scenarioNames(scenarioIndex), options);
     drawnow
+    activeWallSeconds = toc(scenarioTimer);
+    activeDiagnostics = app.performanceDiagnostics();
+    app.flushPreviewUpdates();
+    drawnow
     records(scenarioIndex).Name = scenarioNames(scenarioIndex);
+    records(scenarioIndex).ActiveWallSeconds = activeWallSeconds;
     records(scenarioIndex).WallSeconds = toc(scenarioTimer);
+    records(scenarioIndex).ActiveDiagnostics = activeDiagnostics;
     records(scenarioIndex).Diagnostics = app.performanceDiagnostics();
     records(scenarioIndex).Trace = trace;
 end
@@ -201,7 +207,6 @@ switch name
             "Unknown viewer scenario %s.", name);
 end
 drawnow
-app.performanceDiagnostics();
 end
 
 function runAlphaScenario(fig, iterations)
@@ -318,6 +323,7 @@ writelines(json, fullfile(outputDirectory, ...
 scenarioCount = numel(summary.Scenarios);
 names = strings(scenarioCount, 1);
 wallSeconds = zeros(scenarioCount, 1);
+activeWallSeconds = zeros(scenarioCount, 1);
 frameRequests = zeros(scenarioCount, 1);
 renderedFrames = zeros(scenarioCount, 1);
 meshBuilds = zeros(scenarioCount, 1);
@@ -328,6 +334,7 @@ for k = 1:scenarioCount
     record = summary.Scenarios(k);
     counters = record.Diagnostics.Counters;
     names(k) = record.Name;
+    activeWallSeconds(k) = record.ActiveWallSeconds;
     wallSeconds(k) = record.WallSeconds;
     frameRequests(k) = counters.FrameRequests;
     renderedFrames(k) = counters.RenderedFrames;
@@ -336,10 +343,11 @@ for k = 1:scenarioCount
     surfaceDeletions(k) = counters.SurfaceDeletions;
     tileCandidates(k) = counters.TileCandidates;
 end
-scenarioTable = table(names, wallSeconds, frameRequests, renderedFrames, ...
+scenarioTable = table(names, activeWallSeconds, wallSeconds, ...
+    frameRequests, renderedFrames, ...
     meshBuilds, surfaceCreations, surfaceDeletions, tileCandidates, ...
-    VariableNames=["Scenario", "WallSeconds", "FrameRequests", ...
-    "RenderedFrames", "MeshBuilds", "SurfaceCreations", ...
+    VariableNames=["Scenario", "ActiveWallSeconds", "WallSeconds", ...
+    "FrameRequests", "RenderedFrames", "MeshBuilds", "SurfaceCreations", ...
     "SurfaceDeletions", "TileCandidates"]);
 writetable(scenarioTable, fullfile(outputDirectory, ...
     "viewer_performance_scenarios.csv"));
@@ -352,8 +360,9 @@ fprintf("  Fixture: %s, launch: %.3f s\n", ...
 for k = 1:numel(summary.Scenarios)
     record = summary.Scenarios(k);
     counters = record.Diagnostics.Counters;
-    fprintf("  %-10s %.3f s, frames %d/%d, meshes %d, surfaces +%d/-%d\n", ...
-        record.Name, record.WallSeconds, counters.RenderedFrames, ...
+    fprintf("  %-10s active %.3f s, settled %.3f s, frames %d/%d, meshes %d, surfaces +%d/-%d\n", ...
+        record.Name, record.ActiveWallSeconds, record.WallSeconds, ...
+        counters.RenderedFrames, ...
         counters.FrameRequests, counters.MeshBuilds, ...
         counters.SurfaceCreations, counters.SurfaceDeletions);
 end

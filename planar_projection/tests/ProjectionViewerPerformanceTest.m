@@ -152,6 +152,99 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.verifyEmpty(fig.WindowButtonMotionFcn);
         end
 
+        function testRapidZoomDefersAndCoalescesTileReconciliation(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
+            initialAngle = ax.CameraViewAngle;
+            app.resetPerformanceDiagnostics();
+
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=-1));
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=-1));
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=-1));
+            activeDiagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual(activeDiagnostics.Counters.TileRefreshes, 0);
+            testCase.verifyEqual(activeDiagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual(activeDiagnostics.Counters.SurfaceCreations, 0);
+            testCase.verifyEqual(activeDiagnostics.Counters.SurfaceDeletions, 0);
+            testCase.verifyEqual( ...
+                activeDiagnostics.Counters.CameraScheduleRequests, 3);
+            testCase.verifyEqual(activeDiagnostics.Counters.CoalescedRequests, 2);
+            testCase.verifyTrue(activeDiagnostics.Viewer.CameraReconcilePending);
+            expectedAngle = max(initialAngle / 1.12 ^ 3, 0.05);
+            testCase.verifyEqual(ax.CameraViewAngle, expectedAngle, ...
+                AbsTol=1e-10);
+
+            app.flushPreviewUpdates();
+            settledDiagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual(settledDiagnostics.Counters.TileRefreshes, 1);
+            testCase.verifyEqual( ...
+                settledDiagnostics.Counters.CameraReconciliations, 1);
+            testCase.verifyFalse(settledDiagnostics.Viewer.CameraReconcilePending);
+            testCase.verifyEqual( ...
+                settledDiagnostics.Counters.BlankPreviewTransitions, 0);
+        end
+
+        function testTwistChangingAvoidsActiveTileAndMeshWork(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            twistSlider = ProjectionViewerPerformanceTest.findSlider(fig, 4);
+            app.resetPerformanceDiagnostics();
+
+            twistSlider.ValueChangingFcn(twistSlider, struct(Value=2));
+            twistSlider.ValueChangingFcn(twistSlider, struct(Value=4));
+            activeDiagnostics = app.performanceDiagnostics();
+            state = app.exportState();
+
+            testCase.verifyEqual(activeDiagnostics.Counters.TileRefreshes, 0);
+            testCase.verifyEqual(activeDiagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual(activeDiagnostics.Counters.SurfaceCreations, 0);
+            testCase.verifyEqual(activeDiagnostics.Counters.SurfaceDeletions, 0);
+            testCase.verifyEqual(activeDiagnostics.Counters.CoalescedRequests, 1);
+            testCase.verifyEqual(state.View.TwistDegrees, 4, ...
+                AbsTol=1e-12);
+
+            app.flushPreviewUpdates();
+            settledDiagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual( ...
+                settledDiagnostics.Counters.CameraReconciliations, 1);
+            testCase.verifyFalse(settledDiagnostics.Viewer.CameraReconcilePending);
+        end
+
+        function testCameraTimerReconcilesLatestStateAfterQuietPeriod(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
+            app.resetPerformanceDiagnostics();
+
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=1));
+            pause(0.18);
+            drawnow
+            diagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual(diagnostics.Counters.CameraScheduleRequests, 1);
+            testCase.verifyEqual(diagnostics.Counters.CameraReconciliations, 1);
+            testCase.verifyEqual(diagnostics.Counters.TileRefreshes, 1);
+            testCase.verifyFalse(diagnostics.Viewer.CameraReconcilePending);
+        end
+
         function testEvaluationRunsAllScenariosAndRestoresState(testCase)
             options = struct(SyntheticImageSize=[64 64], ...
                 ScenarioIterations=2, UseSynthetic=true, ...
@@ -179,6 +272,15 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             scene = ProjectionViewerHarness.createSceneFromImage( ...
                 imageData, "synthetic.tif", ...
                 struct(RowStride=2, ColumnStride=2));
+        end
+
+        function scene = makeTiledScene()
+            imageData = zeros(2001, 2001, "uint8");
+            options = struct(GSD=0.01, NominalRange=1e6, ...
+                PlatformStepMeters=0.01, RowStride=250, ...
+                ColumnStride=250, DisplayTextureMaxPixels=10000);
+            scene = ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "large.tif", options);
         end
 
         function slider = findSlider(fig, column)

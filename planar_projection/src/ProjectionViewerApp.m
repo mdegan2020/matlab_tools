@@ -11,6 +11,10 @@ classdef ProjectionViewerApp < handle
         PreviewTilingOptions struct
         PreviewTiledLayerMask logical
         PreviewTiles cell
+        PreviewCurrentLevelIndices double
+        PreviewDesiredLevelIndices double
+        PreviewDesiredDownsamples double
+        PreviewPendingLevelIndices double
         IsPreviewCameraReady logical = false
         ProjectionTipDegrees double = 0
         ProjectionTiltDegrees double = 0
@@ -23,8 +27,15 @@ classdef ProjectionViewerApp < handle
         LastPointerLocation double = [NaN NaN]
         NeedsDragFinalize logical = false
         PreviewTimer
+        CameraSettleTimer
+        CameraScheduleGeneration uint64 = uint64(0)
+        IsCameraReconciliationPending logical = false
         PerformanceMonitor
         MinPreviewInterval double = 1 / 30
+        CameraSettleDelaySeconds double = 0.12
+        PreviewLodPromoteThreshold double = 0.75
+        PreviewLodDemoteThreshold double = 1.75
+        PreviewViewportHaloFraction double = 0.2
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
         InitialViewportFillFraction double = 0.5
@@ -77,6 +88,7 @@ classdef ProjectionViewerApp < handle
         MoveLayerDownButton matlab.ui.control.Button
         IsCrosshairEnabled logical = false
         IsCrosshairVisible logical = false
+        IsPointerMotionBusy logical = false
         AlignmentGrid matlab.ui.container.GridLayout
         AlignmentReferenceDropDown matlab.ui.control.DropDown
         AlignmentMovingDropDown matlab.ui.control.DropDown
@@ -145,6 +157,7 @@ classdef ProjectionViewerApp < handle
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
             app.initializePreviewPyramids();
+            app.initializeCameraSettleTimer();
             app.PreviewTimer = tic;
             if ~isempty(viewerState)
                 viewerState = ProjectionViewerState.validate( ...
@@ -168,6 +181,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function delete(app)
+            app.deleteCameraSettleTimer();
             app.clearAlignmentOverlays();
             app.clearAlignmentRoi(false);
             if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
@@ -206,6 +220,7 @@ classdef ProjectionViewerApp < handle
 
         function importState(app, state)
             %importState Apply a validated viewer state to the app.
+            app.cancelCameraReconciliation();
             state = ProjectionViewerState.validate(state, numel(app.Scene.layers));
             app.applyViewerStateToScene(state);
             app.refreshProjectionSurfaces(app.DefaultMeshSampling);
@@ -331,6 +346,11 @@ classdef ProjectionViewerApp < handle
         function resetPerformanceDiagnostics(app)
             %resetPerformanceDiagnostics Clear viewer work metrics only.
             app.PerformanceMonitor.reset();
+        end
+
+        function flushPreviewUpdates(app)
+            %flushPreviewUpdates Apply the latest pending camera reconciliation.
+            app.flushCameraReconciliation();
         end
     end
 
@@ -2826,6 +2846,10 @@ classdef ProjectionViewerApp < handle
             app.PreviewPyramids = cell(1, layerCount);
             app.PreviewTiledLayerMask = false(1, layerCount);
             app.PreviewTiles = cell(1, layerCount);
+            app.PreviewCurrentLevelIndices = ones(1, layerCount);
+            app.PreviewDesiredLevelIndices = ones(1, layerCount);
+            app.PreviewDesiredDownsamples = ones(1, layerCount);
+            app.PreviewPendingLevelIndices = zeros(1, layerCount);
             for layerIndex = 1:layerCount
                 pyramid = ProjectionPreviewPyramid.build( ...
                     app.Scene.layers(layerIndex).Image, ...
@@ -2834,7 +2858,101 @@ classdef ProjectionViewerApp < handle
                 app.PreviewTiledLayerMask(layerIndex) = ...
                     ProjectionPreviewPyramid.shouldUseTiling( ...
                     pyramid, app.PreviewTilingOptions);
+                if app.PreviewTiledLayerMask(layerIndex)
+                    app.PreviewCurrentLevelIndices(layerIndex) = 0;
+                    app.PreviewDesiredLevelIndices(layerIndex) = 0;
+                    app.PreviewDesiredDownsamples(layerIndex) = NaN;
+                end
             end
+        end
+
+        function initializeCameraSettleTimer(app)
+            app.CameraSettleTimer = timer( ...
+                ExecutionMode="singleShot", ...
+                BusyMode="drop", ...
+                StartDelay=app.CameraSettleDelaySeconds, ...
+                TimerFcn=@(source, ~) app.cameraSettleTimerFired(source), ...
+                Name="ProjectionViewerCameraSettleTimer");
+        end
+
+        function deleteCameraSettleTimer(app)
+            app.IsCameraReconciliationPending = false;
+            if isempty(app.CameraSettleTimer) || ...
+                    ~isvalid(app.CameraSettleTimer)
+                return
+            end
+            if string(app.CameraSettleTimer.Running) == "on"
+                stop(app.CameraSettleTimer);
+            end
+            delete(app.CameraSettleTimer);
+            app.CameraSettleTimer = [];
+        end
+
+        function scheduleCameraReconciliation(app)
+            if ~any(app.PreviewTiledLayerMask)
+                return
+            end
+            app.PerformanceMonitor.increment("CameraScheduleRequests");
+            if app.IsCameraReconciliationPending
+                app.PerformanceMonitor.increment("CoalescedRequests");
+            end
+            app.CameraScheduleGeneration = app.CameraScheduleGeneration + 1;
+            app.IsCameraReconciliationPending = true;
+            if string(app.CameraSettleTimer.Running) == "on"
+                stop(app.CameraSettleTimer);
+            end
+            app.CameraSettleTimer.StartDelay = app.CameraSettleDelaySeconds;
+            app.CameraSettleTimer.UserData = app.CameraScheduleGeneration;
+            start(app.CameraSettleTimer);
+        end
+
+        function suspendCameraReconciliationTimer(app)
+            if ~app.IsCameraReconciliationPending
+                return
+            end
+            if string(app.CameraSettleTimer.Running) == "on"
+                stop(app.CameraSettleTimer);
+            end
+            app.CameraScheduleGeneration = app.CameraScheduleGeneration + 1;
+        end
+
+        function cameraSettleTimerFired(app, timerObject)
+            app.reconcileCameraPreview(uint64(timerObject.UserData));
+        end
+
+        function flushCameraReconciliation(app)
+            if ~app.IsCameraReconciliationPending
+                return
+            end
+            if string(app.CameraSettleTimer.Running) == "on"
+                stop(app.CameraSettleTimer);
+            end
+            app.reconcileCameraPreview(app.CameraScheduleGeneration);
+        end
+
+        function cancelCameraReconciliation(app)
+            if ~app.IsCameraReconciliationPending
+                return
+            end
+            if string(app.CameraSettleTimer.Running) == "on"
+                stop(app.CameraSettleTimer);
+            end
+            app.IsCameraReconciliationPending = false;
+            app.CameraScheduleGeneration = app.CameraScheduleGeneration + 1;
+            app.PerformanceMonitor.increment("DroppedRequests");
+        end
+
+        function reconcileCameraPreview(app, generation)
+            if generation ~= app.CameraScheduleGeneration
+                app.PerformanceMonitor.increment("DroppedRequests");
+                return
+            end
+            app.IsCameraReconciliationPending = false;
+            frameTimer = app.beginPerformanceFrame();
+            app.PerformanceMonitor.increment("CameraReconciliations");
+            app.refreshTiledProjectionSurfaces();
+            drawnow limitrate
+            app.finishPerformanceFrame(frameTimer, "CameraSettleSeconds");
         end
 
         function tf = usesTiledPreview(app, layerIndex)
@@ -2865,7 +2983,6 @@ classdef ProjectionViewerApp < handle
             if nargin < 3
                 tiles = app.previewTilesForLayer(layerIndex);
             end
-            app.PreviewTiles{layerIndex} = tiles;
             surfaceHandles = gobjects(1, numel(tiles));
             for tileIndex = 1:numel(tiles)
                 tileLayer = app.tilePreviewLayer(layerIndex, tiles(tileIndex));
@@ -2875,6 +2992,8 @@ classdef ProjectionViewerApp < handle
                     layerIndex, mesh, tileLayer.DisplayTexture, ...
                     "ProjectionViewerPreviewTileSurface");
             end
+            app.PreviewTiles{layerIndex} = tiles;
+            app.recordAppliedPreviewLevel(layerIndex, tiles);
         end
 
         function tileLayer = tilePreviewLayer(app, layerIndex, tile, ...
@@ -2908,6 +3027,10 @@ classdef ProjectionViewerApp < handle
             pyramid = app.PreviewPyramids{layerIndex};
             if ~app.IsPreviewCameraReady
                 coarsestLevelIndex = numel(pyramid.Levels);
+                app.PreviewDesiredLevelIndices(layerIndex) = coarsestLevelIndex;
+                app.PreviewDesiredDownsamples(layerIndex) = ...
+                    pyramid.Levels(coarsestLevelIndex).Downsample;
+                app.PreviewPendingLevelIndices(layerIndex) = coarsestLevelIndex;
                 tiles = ProjectionPreviewPyramid.tileBounds( ...
                     pyramid, coarsestLevelIndex, ...
                     app.PreviewTilingOptions.TileSize);
@@ -2920,6 +3043,7 @@ classdef ProjectionViewerApp < handle
             tiles = ProjectionPreviewPyramid.emptyTiles();
 
             for levelIndex = startLevelIndex:numel(pyramid.Levels)
+                app.PreviewPendingLevelIndices(layerIndex) = levelIndex;
                 levelTiles = ProjectionPreviewPyramid.tileBounds( ...
                     pyramid, levelIndex, app.PreviewTilingOptions.TileSize);
                 app.PerformanceMonitor.increment( ...
@@ -2938,8 +3062,24 @@ classdef ProjectionViewerApp < handle
         function levelIndex = previewLevelIndexForLayer(app, layerIndex)
             pyramid = app.PreviewPyramids{layerIndex};
             desiredDownsample = app.previewDesiredDownsampleForLayer(layerIndex);
-            levelIndex = ProjectionPreviewPyramid.selectLevel( ...
+            app.PreviewDesiredDownsamples(layerIndex) = desiredDownsample;
+            desiredLevelIndex = ProjectionPreviewPyramid.selectLevel( ...
                 pyramid, desiredDownsample);
+            app.PreviewDesiredLevelIndices(layerIndex) = desiredLevelIndex;
+            currentLevelIndex = app.PreviewCurrentLevelIndices(layerIndex);
+            if currentLevelIndex < 1
+                levelIndex = desiredLevelIndex;
+                return
+            end
+
+            [levelIndex, diagnostics] = ...
+                ProjectionPreviewPyramid.selectLevelWithHysteresis( ...
+                pyramid, desiredDownsample, currentLevelIndex, ...
+                app.PreviewLodPromoteThreshold, ...
+                app.PreviewLodDemoteThreshold);
+            if diagnostics.WasSuppressed
+                app.PerformanceMonitor.increment("SuppressedLodTransitions");
+            end
         end
 
         function desiredDownsample = previewDesiredDownsampleForLayer(app, layerIndex)
@@ -2994,8 +3134,9 @@ classdef ProjectionViewerApp < handle
             center = camtarget(app.Axes).';
             screenX = rightVector.' * (points - center);
             screenY = upVector.' * (points - center);
-            halfWidth = 0.5 * viewWidth;
-            halfHeight = 0.5 * viewHeight;
+            haloScale = 1 + app.PreviewViewportHaloFraction;
+            halfWidth = 0.5 * viewWidth * haloScale;
+            halfHeight = 0.5 * viewHeight * haloScale;
             tf = max(screenX) >= -halfWidth && min(screenX) <= halfWidth && ...
                 max(screenY) >= -halfHeight && min(screenY) <= halfHeight;
         end
@@ -3058,11 +3199,13 @@ classdef ProjectionViewerApp < handle
                 if updateTexture
                     app.updateExistingTiledLayerSurfaces(layerIndex, tiles, true);
                 end
+                app.recordAppliedPreviewLevel(layerIndex, tiles);
                 return
             end
 
-            app.deleteLayerSurfaces(layerIndex);
-            app.Surfaces{layerIndex} = app.createTiledLayerSurfaces(layerIndex, tiles);
+            replacementHandles = app.createTiledLayerSurfaces(layerIndex, tiles);
+            app.deleteSurfaceHandles(surfaceHandles);
+            app.Surfaces{layerIndex} = replacementHandles;
             if layerIndex == app.SelectedLayerIndex
                 app.Surface = app.primarySurfaceForLayer(layerIndex);
             end
@@ -3126,17 +3269,38 @@ classdef ProjectionViewerApp < handle
 
         function deleteLayerSurfaces(app, layerIndex)
             surfaceHandles = app.validLayerSurfaces(layerIndex);
-            if ~isempty(surfaceHandles)
-                app.PerformanceMonitor.increment( ...
-                    "SurfaceDeletions", numel(surfaceHandles));
-                delete(surfaceHandles);
-            end
+            app.deleteSurfaceHandles(surfaceHandles);
             if ~isempty(app.Surfaces) && layerIndex <= numel(app.Surfaces)
                 app.Surfaces{layerIndex} = gobjects(0);
             end
             if ~isempty(app.PreviewTiles) && layerIndex <= numel(app.PreviewTiles)
                 app.PreviewTiles{layerIndex} = ProjectionPreviewPyramid.emptyTiles();
             end
+        end
+
+        function deleteSurfaceHandles(app, surfaceHandles)
+            if isempty(surfaceHandles)
+                return
+            end
+            app.PerformanceMonitor.increment( ...
+                "SurfaceDeletions", numel(surfaceHandles));
+            delete(surfaceHandles);
+        end
+
+        function recordAppliedPreviewLevel(app, layerIndex, tiles)
+            levelIndex = app.PreviewPendingLevelIndices(layerIndex);
+            if ~isempty(tiles)
+                levelIndex = tiles(1).LevelIndex;
+            end
+            previousLevelIndex = app.PreviewCurrentLevelIndices(layerIndex);
+            if previousLevelIndex > 0 && levelIndex > 0 && ...
+                    previousLevelIndex ~= levelIndex
+                app.PerformanceMonitor.increment("LodTransitions");
+            end
+            if levelIndex > 0
+                app.PreviewCurrentLevelIndices(layerIndex) = levelIndex;
+            end
+            app.PreviewPendingLevelIndices(layerIndex) = 0;
         end
 
         function setLayerSurfaceVisible(app, layerIndex, isVisible)
@@ -3200,13 +3364,14 @@ classdef ProjectionViewerApp < handle
 
         function updateViewTwistFromSlider(app)
             app.updateViewTwist(app.TwistSlider.Value);
+            app.flushCameraReconciliation();
         end
 
         function updateViewTwist(app, twistDegrees)
             frameTimer = app.beginPerformanceFrame();
+            app.suspendCameraReconciliationTimer();
             app.ViewTwistDegrees = twistDegrees;
             app.applyViewTwist();
-            app.refreshTiledProjectionSurfaces();
 
             layer = app.Scene.layers(app.SelectedLayerIndex);
             app.updateLabels(app.ProjectionTipDegrees, ...
@@ -3214,6 +3379,7 @@ classdef ProjectionViewerApp < handle
                 app.ViewTwistDegrees, layer.Alpha);
             drawnow limitrate
             app.finishPerformanceFrame(frameTimer, "TwistSeconds");
+            app.scheduleCameraReconciliation();
         end
 
         function applyViewTwist(app)
@@ -3515,9 +3681,20 @@ classdef ProjectionViewerApp < handle
         end
 
         function pointerMoved(app)
+            if app.IsPointerMotionBusy
+                app.PerformanceMonitor.increment("DroppedRequests");
+                return
+            end
+            app.IsPointerMotionBusy = true;
+            cleanup = onCleanup(@() app.finishPointerMotion());
             app.PerformanceMonitor.increment("PointerMotionCallbacks");
             app.updatePan();
             app.updateCrosshair();
+            clear cleanup
+        end
+
+        function finishPointerMotion(app)
+            app.IsPointerMotionBusy = false;
         end
 
         function scrollWheel(app, event)
@@ -3607,13 +3784,14 @@ classdef ProjectionViewerApp < handle
             end
 
             frameTimer = app.beginPerformanceFrame();
+            app.suspendCameraReconciliationTimer();
             zoomFactor = 1.12 ^ event.VerticalScrollCount;
             newAngle = app.Axes.CameraViewAngle * zoomFactor;
             newAngle = min(max(newAngle, app.MinCameraViewAngle), app.MaxCameraViewAngle);
             app.Axes.CameraViewAngle = newAngle;
-            app.refreshTiledProjectionSurfaces();
             drawnow limitrate
             app.finishPerformanceFrame(frameTimer, "ZoomSeconds");
+            app.scheduleCameraReconciliation();
         end
 
         function beginPan(app, event)
@@ -3673,6 +3851,9 @@ classdef ProjectionViewerApp < handle
             app.DragMode = "none";
             app.LastPointerLocation = [NaN NaN];
             app.refreshPointerMotionCallback();
+            if dragMode == "panCamera"
+                app.flushCameraReconciliation();
+            end
             if app.NeedsDragFinalize && ...
                     any(dragMode == ["translateLayer", "adjustViewVectors"])
                 layer = app.Scene.layers(app.SelectedLayerIndex);
@@ -3685,12 +3866,13 @@ classdef ProjectionViewerApp < handle
 
         function panCameraByPixelDelta(app, pixelDelta)
             frameTimer = app.beginPerformanceFrame();
+            app.suspendCameraReconciliationTimer();
             panOffset = app.pixelDeltaToWorldPan(pixelDelta);
             campos(app.Axes, campos(app.Axes) + panOffset.');
             camtarget(app.Axes, camtarget(app.Axes) + panOffset.');
-            app.refreshTiledProjectionSurfaces();
             drawnow limitrate
             app.finishPerformanceFrame(frameTimer, "PanSeconds");
+            app.scheduleCameraReconciliation();
         end
 
         function translateSelectedLayerByPixelDelta(app, pixelDelta)
@@ -4332,6 +4514,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function resetView(app)
+            app.cancelCameraReconciliation();
             app.Scene = app.ResetScene;
             app.SelectedLayerIndex = numel(app.Scene.layers);
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
@@ -4444,6 +4627,14 @@ classdef ProjectionViewerApp < handle
                 app.PreviewPyramids(fliplr(swapIndices));
             app.PreviewTiledLayerMask(swapIndices) = ...
                 app.PreviewTiledLayerMask(fliplr(swapIndices));
+            app.PreviewCurrentLevelIndices(swapIndices) = ...
+                app.PreviewCurrentLevelIndices(fliplr(swapIndices));
+            app.PreviewDesiredLevelIndices(swapIndices) = ...
+                app.PreviewDesiredLevelIndices(fliplr(swapIndices));
+            app.PreviewDesiredDownsamples(swapIndices) = ...
+                app.PreviewDesiredDownsamples(fliplr(swapIndices));
+            app.PreviewPendingLevelIndices(swapIndices) = ...
+                app.PreviewPendingLevelIndices(fliplr(swapIndices));
             app.SelectedLayerIndex = targetIndex;
             app.refreshProjectionSurfaces(app.DefaultMeshSampling);
             app.updateLayerDropDownItems();
@@ -4524,7 +4715,7 @@ classdef ProjectionViewerApp < handle
         function runtime = viewerPerformanceRuntimeState(app)
             layerCount = numel(app.Scene.layers);
             imageSizes = zeros(layerCount, 3);
-            currentLevelIndices = zeros(1, layerCount);
+            currentLevelIndices = app.PreviewCurrentLevelIndices;
             currentDownsamples = ones(1, layerCount);
             currentTileCounts = zeros(1, layerCount);
             fullLevelCandidateCounts = zeros(1, layerCount);
@@ -4539,11 +4730,15 @@ classdef ProjectionViewerApp < handle
                     size(imageData, 2), size(imageData, 3)];
                 tiles = app.currentPreviewTilesForLayer(layerIndex);
                 currentTileCounts(layerIndex) = numel(tiles);
+                currentLevelIndex = currentLevelIndices(layerIndex);
+                if currentLevelIndex > 0
+                    currentDownsamples(layerIndex) = ...
+                        app.PreviewPyramids{layerIndex}.Levels( ...
+                        currentLevelIndex).Downsample;
+                end
                 if ~isempty(tiles)
-                    currentLevelIndices(layerIndex) = tiles(1).LevelIndex;
-                    currentDownsamples(layerIndex) = tiles(1).Downsample;
                     levelSize = app.PreviewPyramids{layerIndex}.Levels( ...
-                        tiles(1).LevelIndex).ImageSize;
+                        currentLevelIndex).ImageSize;
                     tileSize = app.PreviewTilingOptions.TileSize;
                     fullLevelCandidateCounts(layerIndex) = ...
                         prod(ceil(double(levelSize) / tileSize));
@@ -4578,6 +4773,9 @@ classdef ProjectionViewerApp < handle
             runtime.CameraViewAngleDegrees = app.Axes.CameraViewAngle;
             runtime.DisplayTileSize = app.PreviewTilingOptions.TileSize;
             runtime.CurrentLevelIndices = currentLevelIndices;
+            runtime.DesiredLevelIndices = app.PreviewDesiredLevelIndices;
+            runtime.DesiredDownsamples = app.PreviewDesiredDownsamples;
+            runtime.PendingLevelIndices = app.PreviewPendingLevelIndices;
             runtime.CurrentDownsamples = currentDownsamples;
             runtime.CurrentTileCounts = currentTileCounts;
             runtime.FullLevelCandidateCounts = fullLevelCandidateCounts;
@@ -4585,6 +4783,14 @@ classdef ProjectionViewerApp < handle
             runtime.VisibleTileSurfaceCount = visibleTileSurfaceCount;
             runtime.VisibleTexturePixels = visibleTexturePixels;
             runtime.VisibleTextureBytes = visibleTextureBytes;
+            runtime.CameraReconcilePending = ...
+                app.IsCameraReconciliationPending;
+            runtime.CameraScheduleGeneration = ...
+                double(app.CameraScheduleGeneration);
+            runtime.CameraSettleDelaySeconds = app.CameraSettleDelaySeconds;
+            runtime.LodPromoteThreshold = app.PreviewLodPromoteThreshold;
+            runtime.LodDemoteThreshold = app.PreviewLodDemoteThreshold;
+            runtime.ViewportHaloFraction = app.PreviewViewportHaloFraction;
         end
 
         function bytes = arrayBytes(~, value)

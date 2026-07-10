@@ -187,6 +187,13 @@ Crosshair pointer tracking is demand-activated. When enabled, steady movement
 updates stable line handles without restacking projection graphics; when
 disabled and no drag is active, the figure motion callback is removed.
 
+Camera-only twist, pan, and zoom use a latest-state settle scheduler. Camera
+properties update immediately, while tiled visibility and LOD reconciliation
+wait for a `120 ms` quiet period or an explicit final flush. The display-only
+LOD policy uses asymmetric promotion/demotion hysteresis and a viewport halo;
+it does not change backend inputs or serialized viewer state. The performance
+evaluation reports active and settled diagnostics separately.
+
 ## Projection Viewer Prototype
 
 The interactive prototype is programmatic MATLAB app code, not an `.mlapp` file. From MATLAB:

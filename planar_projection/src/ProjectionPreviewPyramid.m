@@ -120,6 +120,52 @@ classdef ProjectionPreviewPyramid
             levelIndex = min(levelIndex, numel(pyramid.Levels));
         end
 
+        function [levelIndex, diagnostics] = selectLevelWithHysteresis( ...
+                pyramid, desiredDownsample, currentLevelIndex, ...
+                promoteThreshold, demoteThreshold)
+            %selectLevelWithHysteresis Choose a stable stateful preview LOD.
+            ProjectionPreviewPyramid.validatePyramid(pyramid);
+            desiredDownsample = ProjectionPreviewPyramid.validatePositiveScalar( ...
+                desiredDownsample, "desiredDownsample");
+            currentLevelIndex = ProjectionPreviewPyramid.validateLevelIndex( ...
+                currentLevelIndex, numel(pyramid.Levels));
+            promoteThreshold = ProjectionPreviewPyramid.validatePositiveScalar( ...
+                promoteThreshold, "promoteThreshold");
+            demoteThreshold = ProjectionPreviewPyramid.validatePositiveScalar( ...
+                demoteThreshold, "demoteThreshold");
+            if promoteThreshold >= 1 || demoteThreshold <= 1 || ...
+                    promoteThreshold >= demoteThreshold
+                error("ProjectionPreviewPyramid:invalidHysteresis", ...
+                    "LOD promotion must be below one and demotion must be above one.");
+            end
+
+            levelCount = numel(pyramid.Levels);
+            desiredLevelIndex = ProjectionPreviewPyramid.selectLevel( ...
+                pyramid, desiredDownsample);
+            currentDownsample = ...
+                pyramid.Levels(currentLevelIndex).Downsample;
+            levelTexelsPerScreenPixel = ...
+                desiredDownsample / currentDownsample;
+            levelIndex = currentLevelIndex;
+
+            if levelTexelsPerScreenPixel < promoteThreshold && ...
+                    currentLevelIndex > 1
+                levelIndex = min(desiredLevelIndex, currentLevelIndex - 1);
+            elseif levelTexelsPerScreenPixel > demoteThreshold && ...
+                    currentLevelIndex < levelCount
+                levelIndex = max(desiredLevelIndex, currentLevelIndex + 1);
+            end
+
+            diagnostics = struct();
+            diagnostics.CurrentLevelIndex = currentLevelIndex;
+            diagnostics.DesiredLevelIndex = desiredLevelIndex;
+            diagnostics.SelectedLevelIndex = levelIndex;
+            diagnostics.LevelTexelsPerScreenPixel = ...
+                levelTexelsPerScreenPixel;
+            diagnostics.WasSuppressed = levelIndex == currentLevelIndex && ...
+                desiredLevelIndex ~= currentLevelIndex;
+        end
+
         function tiles = tileBounds(pyramid, levelIndex, tileSize)
             %tileBounds Return level and source-image bounds for each tile.
             ProjectionPreviewPyramid.validatePyramid(pyramid);

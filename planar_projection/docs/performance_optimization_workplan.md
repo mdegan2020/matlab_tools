@@ -13,11 +13,12 @@ expected `15000 x 10000` through `30000 x 20000` source and output sizes.
 
 The audit and local measurements are complete. Performance implementation is in
 progress and was explicitly prioritized on July 10, 2026. Viewer Performance
-Packs 0 and 1 are complete: the app now exposes bounded runtime diagnostics and
+Packs 0-2 are complete: the app now exposes bounded runtime diagnostics and
 the repeatable evaluation harness exercises alpha, crosshair, twist, pan,
 slow/fast/reversing LOD-boundary zoom, WASD, and OPK scenarios. Crosshair motion
 is demand-activated and no longer restacks overlay lines during steady pointer
-movement. Viewer Performance Pack 2 is next.
+movement. Camera interaction is latest-state scheduled with a settle timer,
+viewport halo, and stateful LOD hysteresis. Viewer Performance Pack 3 is next.
 
 Use the pack order in this document and commit and push each coherent, validated
 pack separately.
@@ -767,6 +768,23 @@ Viewer Performance Pack 1: Streamline crosshair updates
 ```
 
 ### Viewer Performance Pack 2: Latest-State Camera Scheduler
+
+Status: complete on July 10, 2026.
+
+One runtime-only single-shot timer now owns camera tile reconciliation. Twist,
+pan, and zoom update camera state and draw immediately, suspend any older timer
+during that frame, and restart a `120 ms` quiet window afterward. Rapid requests
+coalesce by generation; final slider release and pan release can flush the
+latest state synchronously. Per-layer current, desired, and pending LOD state is
+reported in performance diagnostics. The initial hysteresis thresholds are
+`0.75` for promotion and `1.75` for demotion, and tile visibility includes a
+20% viewport halo. Replacement surfaces are created before old coverage is
+deleted.
+
+On the local two-TIFF scene, ten rapid twist changes recorded ten immediate
+camera frames, nine coalesced requests, zero active tile refreshes/mesh builds/
+surface changes, and one settled reconciliation. The benchmark harness records
+active and settled diagnostics separately.
 
 Deliverables:
 

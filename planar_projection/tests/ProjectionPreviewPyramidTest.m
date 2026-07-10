@@ -70,5 +70,36 @@ classdef ProjectionPreviewPyramidTest < matlab.unittest.TestCase
             testCase.verifyEqual(middleLevel, 2);
             testCase.verifyEqual(coarsestLevel, numel(pyramid.Levels));
         end
+
+        function testHysteresisSuppressesBoundaryOscillation(testCase)
+            pyramid = ProjectionPreviewPyramid.build( ...
+                uint8(zeros(64, 64)), struct(TileSize=8));
+
+            [heldCoarse, coarseDiagnostics] = ...
+                ProjectionPreviewPyramid.selectLevelWithHysteresis( ...
+                pyramid, 6.1, 4, 0.75, 1.75);
+            promoted = ProjectionPreviewPyramid.selectLevelWithHysteresis( ...
+                pyramid, 5.9, 4, 0.75, 1.75);
+            heldFine = ProjectionPreviewPyramid.selectLevelWithHysteresis( ...
+                pyramid, 6.9, 3, 0.75, 1.75);
+            demoted = ProjectionPreviewPyramid.selectLevelWithHysteresis( ...
+                pyramid, 7.1, 3, 0.75, 1.75);
+
+            testCase.verifyEqual(heldCoarse, 4);
+            testCase.verifyTrue(coarseDiagnostics.WasSuppressed);
+            testCase.verifyEqual(promoted, 3);
+            testCase.verifyEqual(heldFine, 3);
+            testCase.verifyEqual(demoted, 4);
+        end
+
+        function testHysteresisRejectsInvalidThresholds(testCase)
+            pyramid = ProjectionPreviewPyramid.build( ...
+                uint8(zeros(64, 64)), struct(TileSize=8));
+
+            testCase.verifyError(@() ...
+                ProjectionPreviewPyramid.selectLevelWithHysteresis( ...
+                pyramid, 4, 3, 1, 1.75), ...
+                "ProjectionPreviewPyramid:invalidHysteresis");
+        end
     end
 end
