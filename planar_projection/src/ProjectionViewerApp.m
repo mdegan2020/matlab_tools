@@ -140,6 +140,10 @@ classdef ProjectionViewerApp < handle
         AlignmentMatchTable matlab.ui.control.Table
         AlignmentRequest struct = struct()
         AlignmentWorkingImages struct = struct()
+        AlignmentWorkingImageCacheKey struct = struct()
+        AlignmentWorkingImageCacheValue struct = struct()
+        AlignmentWorkingImageCacheHits double = 0
+        AlignmentWorkingImageCacheMisses double = 0
         AlignmentRawMatchResult struct = struct()
         AlignmentPreRoiMatchResult struct = struct()
         AlignmentFilteredMatchResult struct = struct()
@@ -947,8 +951,8 @@ classdef ProjectionViewerApp < handle
 
                 app.setAlignmentStatus("Rendering working images...");
                 app.throwIfAlignmentCancelled();
-                workingImages = ProjectionAlignmentWorkingImageRenderer.render( ...
-                    app.Scene, request, app.alignmentRenderOptions());
+                workingImages = app.renderAlignmentWorkingImages( ...
+                    request, app.alignmentRenderOptions());
                 workingImages = app.applyEnabledPairsToWorkingImages( ...
                     workingImages, enabledPairs);
 
@@ -1257,6 +1261,10 @@ classdef ProjectionViewerApp < handle
                 app.AlignmentRequest);
             stageDiagnostics.HasWorkingImages = app.hasScalarStruct( ...
                 app.AlignmentWorkingImages);
+            stageDiagnostics.WorkingImageCacheHits = ...
+                app.AlignmentWorkingImageCacheHits;
+            stageDiagnostics.WorkingImageCacheMisses = ...
+                app.AlignmentWorkingImageCacheMisses;
             stageDiagnostics.HasRawMatches = app.hasMatchResult( ...
                 app.AlignmentRawMatchResult);
             stageDiagnostics.HasFilteredMatches = app.hasMatchResult( ...
@@ -1295,6 +1303,34 @@ classdef ProjectionViewerApp < handle
 
         function tf = hasScalarStruct(~, value)
             tf = isstruct(value) && isscalar(value) && ~isempty(fieldnames(value));
+        end
+
+        function workingImages = renderAlignmentWorkingImages(app, request, options)
+            key = ProjectionAlignmentWorkingImageRenderer.cacheKey( ...
+                app.Scene, request, options);
+            if app.hasScalarStruct(app.AlignmentWorkingImageCacheKey) && ...
+                    isequaln(key, app.AlignmentWorkingImageCacheKey) && ...
+                    app.hasScalarStruct(app.AlignmentWorkingImageCacheValue)
+                workingImages = ProjectionAlignmentLayerResolver.reindex( ...
+                    app.Scene, app.AlignmentWorkingImageCacheValue);
+                app.AlignmentWorkingImageCacheValue = workingImages;
+                app.AlignmentWorkingImageCacheHits = ...
+                    app.AlignmentWorkingImageCacheHits + 1;
+                return
+            end
+            workingImages = ProjectionAlignmentWorkingImageRenderer.render( ...
+                app.Scene, request, options);
+            app.AlignmentWorkingImageCacheKey = key;
+            app.AlignmentWorkingImageCacheValue = workingImages;
+            app.AlignmentWorkingImageCacheMisses = ...
+                app.AlignmentWorkingImageCacheMisses + 1;
+        end
+
+        function clearAlignmentWorkingImageCache(app)
+            app.AlignmentWorkingImageCacheKey = struct();
+            app.AlignmentWorkingImageCacheValue = struct();
+            app.AlignmentWorkingImageCacheHits = 0;
+            app.AlignmentWorkingImageCacheMisses = 0;
         end
 
         function tf = hasMatchResult(~, value)
@@ -1527,6 +1563,20 @@ classdef ProjectionViewerApp < handle
             workingImages.Schedule.LayerIndices = unique(enabledPairs(:).', ...
                 "stable");
             workingImages.PairOverlapMasks = workingImages.PairOverlapMasks(keepMask);
+            if isfield(workingImages, "PairWorkingImages")
+                workingImages.PairWorkingImages = ...
+                    workingImages.PairWorkingImages(keepMask);
+                workingImages.GridKeys = workingImages.GridKeys(keepMask);
+                outputSizes = reshape( ...
+                    [workingImages.PairWorkingImages.OutputSize], 2, []).';
+                workingImages.OutputSize = outputSizes;
+                firstPair = workingImages.PairWorkingImages(1);
+                workingImages.ProjectionPlane = firstPair.ProjectionPlane;
+                workingImages.OutputGrid = firstPair.OutputGrid;
+                workingImages.PixelToPlane = firstPair.PixelToPlane;
+                workingImages.LayerImages = firstPair.LayerImages;
+                workingImages.LayerMasks = firstPair.LayerMasks;
+            end
         end
 
         function matchResult = applyEnabledPairsToMatchResult(app, ...
@@ -5623,6 +5673,7 @@ classdef ProjectionViewerApp < handle
             app.NeedsDragFinalize = false;
             app.IsPreviewCameraReady = false;
             app.clearAlignmentComputationState();
+            app.clearAlignmentWorkingImageCache();
             app.AlignmentCancelRequested = false;
             app.clearAlignmentOverlays();
             app.clearAlignmentRoi(false);

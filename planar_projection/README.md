@@ -437,6 +437,30 @@ remains a compatibility alias. Projection-plane residuals are reported in
 These alignment records and working products remain analysis-only and never
 replace full-source backend radiometry.
 
+Alignment working images use stable, isotropic, projection-plane grids planned
+from each scheduled pair's footprint overlap. `OutputSize` is a maximum working
+size rather than a demand to stretch every pair into a square; physical
+resolution is coarsened on a power-of-two schedule and bounds are quantized so
+tiny geometry changes normally keep the same grid. Multi-image matching detects
+features on each pair's own grid. Repeating Match with unchanged radiometry and
+mapping reuses the app's runtime-only working-image cache; display alpha does
+not invalidate it. Working images retain compact mesh summaries, not display
+textures or full sampled-mesh payloads.
+
+The incumbent sparse alignment radiometry can be compared with alignment-only
+full-source inverse warp without changing backend behavior:
+
+```matlab
+addpath("scripts");
+[comparison, artifacts] = alignment_working_image_evaluation( ...
+    scene, request, struct(OutputDirectory="artifacts/my_alignment_review"));
+```
+
+The comparison writes JSON/MAT metrics, normalized layer PNGs, and match-overlay
+PNGs. The alignment default remains `sparseIntensityScatteredInterpolant` until
+a representative oblique/relief-rich real pair is reviewed; backend radiometry
+continues to default independently to `fullSourceInverseWarp`.
+
 Manual auto-alignment validation loop:
 
 ```matlab

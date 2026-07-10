@@ -792,6 +792,37 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyTrue(cleared.Stage.HasWorkingImages);
         end
 
+        function testRepeatedMatchReusesStableWorkingImages(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(false);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
+            matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchButton");
+            detectorDropDown.Value = "sift";
+
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            first = app.alignmentDiagnostics();
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            second = app.alignmentDiagnostics();
+
+            testCase.verifyEqual(first.Stage.WorkingImageCacheMisses, 1);
+            testCase.verifyEqual(first.Stage.WorkingImageCacheHits, 0);
+            testCase.verifyEqual(second.Stage.WorkingImageCacheMisses, 1);
+            testCase.verifyEqual(second.Stage.WorkingImageCacheHits, 1);
+            testCase.verifyEqual(second.Stage.RawMatchCount, ...
+                first.Stage.RawMatchCount);
+        end
+
         function testAlignmentOverlaysRefreshAfterLayerNudge(testCase)
             capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
             testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));

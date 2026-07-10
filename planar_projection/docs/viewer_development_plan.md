@@ -791,9 +791,12 @@ Implementation status:
   Current overlay reprojection uses exact sampled rays when available, reports
   endpoint validity independently, and remains invariant to layer reorder.
   Projection-plane ROI redraw/clear re-filters the stored pre-ROI match result
-  without rerunning feature matching. Reliability Pack 2 is next and contains
-  the explicit sparse-versus-full-source alignment-working-image comparison
-  and user-review gate.
+  without rerunning feature matching. Reliability Pack 2 engineering is also
+  complete: working images use stable isotropic pair-overlap grids, multi-image
+  matching uses one grid per scheduled pair, repeated Match actions can reuse a
+  runtime-only working-image cache, and a sparse-versus-full-source comparison
+  harness writes review artifacts. Sparse remains the alignment default until
+  the required representative real-data/user review gate is completed.
 
 ### Auto Alignment Design Decisions
 

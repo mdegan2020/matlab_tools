@@ -76,10 +76,12 @@ classdef ProjectionAlignmentFeatureMatcher
             end
 
             pairMatch = matchResult.Matches(pairIndex);
+            pairWorking = ProjectionAlignmentFeatureMatcher.pairWorkingImage( ...
+                workingImages, pairIndex);
             movingLayer = ProjectionAlignmentFeatureMatcher.layerImageByIndex( ...
-                workingImages, pairMatch.Pair(1));
+                pairWorking, pairMatch.Pair(1));
             referenceLayer = ProjectionAlignmentFeatureMatcher.layerImageByIndex( ...
-                workingImages, pairMatch.Pair(2));
+                pairWorking, pairMatch.Pair(2));
             fig = figure(Name="Projection Alignment Matched Features", ...
                 Visible=options.Visible);
             ax = axes(fig);
@@ -138,36 +140,85 @@ classdef ProjectionAlignmentFeatureMatcher
         end
 
         function features = detectLayerFeatures(workingImages, detector, detectorOptions)
+            if ProjectionAlignmentFeatureMatcher.hasPairWorkingImages(workingImages)
+                features = ProjectionAlignmentFeatureMatcher.detectPairFeatures( ...
+                    workingImages, detector, detectorOptions);
+                return
+            end
             for k = 1:numel(workingImages.LayerImages)
                 layerImage = workingImages.LayerImages(k);
-                imageData = ProjectionAlignmentFeatureMatcher.prepareFeatureImage( ...
-                    layerImage.Image, layerImage.ValidMask);
-                points = ProjectionAlignmentFeatureMatcher.detectPoints( ...
-                    imageData, detector.Method);
-                points = ProjectionAlignmentFeatureMatcher.selectStrongest( ...
-                    points, detectorOptions.MaxFeatures);
-                [descriptors, validPoints] = ...
-                    ProjectionAlignmentFeatureMatcher.extractDescriptors( ...
-                    imageData, points);
-                feature = struct();
-                feature.LayerIndex = layerImage.LayerIndex;
-                feature.LayerId = string(layerImage.LayerId);
-                feature.Detector = detector.Method;
-                feature.Count = ProjectionAlignmentFeatureMatcher.pointCount(validPoints);
-                feature.Points = validPoints;
-                feature.Locations = ProjectionAlignmentFeatureMatcher.pointLocations( ...
-                    validPoints);
-                feature.Metrics = ProjectionAlignmentFeatureMatcher.pointMetrics( ...
-                    validPoints);
-                feature.Descriptors = descriptors;
-                feature.DescriptorClass = string(class(descriptors));
-                feature.DescriptorSize = size(descriptors);
+                feature = ProjectionAlignmentFeatureMatcher.detectLayerImage( ...
+                    layerImage, detector, detectorOptions);
+                feature.PairIndex = 0;
+                feature.PairLayerIds = strings(1, 0);
+                feature.Role = "layer";
                 if k == 1
                     features = feature;
                 else
                     features(k) = feature;
                 end
             end
+        end
+
+        function features = detectPairFeatures(workingImages, detector, detectorOptions)
+            pairWorkingImages = workingImages.PairWorkingImages;
+            featureCount = 2 * numel(pairWorkingImages);
+            features = repmat( ...
+                ProjectionAlignmentFeatureMatcher.emptyFeature(), ...
+                1, featureCount);
+            cursor = 0;
+            for pairIndex = 1:numel(pairWorkingImages)
+                pairWorking = pairWorkingImages(pairIndex);
+                for pairPosition = 1:2
+                    cursor = cursor + 1;
+                    layerIndex = pairWorking.Pair(pairPosition);
+                    layerImage = ProjectionAlignmentFeatureMatcher.layerImageByIndex( ...
+                        pairWorking, layerIndex);
+                    feature = ProjectionAlignmentFeatureMatcher.detectLayerImage( ...
+                        layerImage, detector, detectorOptions);
+                    feature.PairIndex = pairIndex;
+                    feature.PairLayerIds = pairWorking.PairLayerIds;
+                    if pairPosition == 1
+                        feature.Role = "moving";
+                    else
+                        feature.Role = "reference";
+                    end
+                    features(cursor) = feature;
+                end
+            end
+        end
+
+        function feature = detectLayerImage(layerImage, detector, detectorOptions)
+            imageData = ProjectionAlignmentFeatureMatcher.prepareFeatureImage( ...
+                layerImage.Image, layerImage.ValidMask);
+            points = ProjectionAlignmentFeatureMatcher.detectPoints( ...
+                imageData, detector.Method);
+            points = ProjectionAlignmentFeatureMatcher.selectStrongest( ...
+                points, detectorOptions.MaxFeatures);
+            [descriptors, validPoints] = ...
+                ProjectionAlignmentFeatureMatcher.extractDescriptors( ...
+                imageData, points);
+            feature = ProjectionAlignmentFeatureMatcher.emptyFeature();
+            feature.LayerIndex = layerImage.LayerIndex;
+            feature.LayerId = string(layerImage.LayerId);
+            feature.Detector = detector.Method;
+            feature.Count = ProjectionAlignmentFeatureMatcher.pointCount(validPoints);
+            feature.Points = validPoints;
+            feature.Locations = ProjectionAlignmentFeatureMatcher.pointLocations( ...
+                validPoints);
+            feature.Metrics = ProjectionAlignmentFeatureMatcher.pointMetrics( ...
+                validPoints);
+            feature.Descriptors = descriptors;
+            feature.DescriptorClass = string(class(descriptors));
+            feature.DescriptorSize = size(descriptors);
+        end
+
+        function feature = emptyFeature()
+            feature = struct(LayerIndex=0, LayerId="", PairIndex=0, ...
+                PairLayerIds=strings(1, 0), Role="", Detector="", ...
+                Count=0, Points=[], Locations=zeros(0, 2), ...
+                Metrics=zeros(0, 1), Descriptors=zeros(0, 0), ...
+                DescriptorClass="", DescriptorSize=[0 0]);
         end
 
         function points = detectPoints(imageData, method)
@@ -232,12 +283,23 @@ classdef ProjectionAlignmentFeatureMatcher
                 "MatchLedger", {});
             for k = 1:numel(pairMasks)
                 pair = pairMasks(k).Pair;
-                movingFeatures = ProjectionAlignmentFeatureMatcher.featuresByLayer( ...
-                    features, pair(1));
-                referenceFeatures = ProjectionAlignmentFeatureMatcher.featuresByLayer( ...
-                    features, pair(2));
+                pairWorking = ProjectionAlignmentFeatureMatcher.pairWorkingImage( ...
+                    workingImages, k);
+                if ProjectionAlignmentFeatureMatcher.hasPairWorkingImages(workingImages)
+                    movingFeatures = ...
+                        ProjectionAlignmentFeatureMatcher.featuresByPairRole( ...
+                        features, k, "moving");
+                    referenceFeatures = ...
+                        ProjectionAlignmentFeatureMatcher.featuresByPairRole( ...
+                        features, k, "reference");
+                else
+                    movingFeatures = ProjectionAlignmentFeatureMatcher.featuresByLayer( ...
+                        features, pair(1));
+                    referenceFeatures = ProjectionAlignmentFeatureMatcher.featuresByLayer( ...
+                        features, pair(2));
+                end
                 pairMatch = ProjectionAlignmentFeatureMatcher.matchFeaturePair( ...
-                    workingImages, movingFeatures, referenceFeatures, matcher, ...
+                    pairWorking, movingFeatures, referenceFeatures, matcher, ...
                     detector, pairMasks(k));
                 if k == 1
                     matches = pairMatch;
@@ -375,6 +437,29 @@ classdef ProjectionAlignmentFeatureMatcher
                     "Missing feature records for layer %d.", layerIndex);
             end
             feature = features(find(matches, 1, "first"));
+        end
+
+        function feature = featuresByPairRole(features, pairIndex, role)
+            matches = [features.PairIndex] == pairIndex & ...
+                string({features.Role}) == role;
+            if ~any(matches)
+                error("ProjectionAlignmentFeatureMatcher:missingFeatures", ...
+                    "Missing %s feature record for pair %d.", role, pairIndex);
+            end
+            feature = features(find(matches, 1, "first"));
+        end
+
+        function tf = hasPairWorkingImages(workingImages)
+            tf = isfield(workingImages, "PairWorkingImages") && ...
+                ~isempty(workingImages.PairWorkingImages);
+        end
+
+        function pairWorking = pairWorkingImage(workingImages, pairIndex)
+            if ProjectionAlignmentFeatureMatcher.hasPairWorkingImages(workingImages)
+                pairWorking = workingImages.PairWorkingImages(pairIndex);
+            else
+                pairWorking = workingImages;
+            end
         end
 
         function layerImage = layerImageByIndex(workingImages, layerIndex)

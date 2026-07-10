@@ -25,14 +25,19 @@ classdef ProjectionAlignmentWorkingImageRendererTest < matlab.unittest.TestCase
                 ProjectionAlignmentWorkingImageRenderer.Format);
             testCase.verifyEqual(working.LayerIndices, [1 2]);
             testCase.verifyEqual(working.ReferenceLayerIndex, 1);
-            testCase.verifyEqual(working.OutputSize, [6 7]);
+            testCase.verifyLessThanOrEqual(working.OutputSize, [6 7]);
             testCase.verifyEqual(working.NumericalMode, ...
                 "sparseIntensityScatteredInterpolant");
+            testCase.verifyNumElements(working.PairWorkingImages, 1);
             testCase.verifyNumElements(working.LayerImages, 2);
-            testCase.verifySize(working.LayerImages(1).Image, [6 7]);
-            testCase.verifySize(working.LayerImages(2).Image, [6 7]);
-            testCase.verifySize(working.LayerMasks, [6 7 2]);
-            testCase.verifySize(working.PixelToPlane.Coordinates, [2 42]);
+            testCase.verifySize(working.LayerImages(1).Image, working.OutputSize);
+            testCase.verifySize(working.LayerImages(2).Image, working.OutputSize);
+            testCase.verifySize(working.LayerMasks, [working.OutputSize 2]);
+            testCase.verifySize(working.PixelToPlane.Coordinates, ...
+                [2 prod(working.OutputSize)]);
+            testCase.verifyEqual(working.OutputGrid.PixelSpacingMeters(1), ...
+                working.OutputGrid.PixelSpacingMeters(2), ...
+                AbsTol=ProjectionAlignmentWorkingImageRendererTest.Tol);
             testCase.verifyEqual(working.PairOverlapMasks.Pair, [2 1]);
             testCase.verifyGreaterThan(working.PairOverlapMasks.Count, 0);
         end
@@ -112,8 +117,10 @@ classdef ProjectionAlignmentWorkingImageRendererTest < matlab.unittest.TestCase
             working = ProjectionAlignmentWorkingImageRenderer.render( ...
                 scene, request, struct(OutputSize=[5 6]));
 
-            testCase.verifyEqual(working.LayerImages(2).Mesh.WorldPoints, ...
-                directMesh.WorldPoints, ...
+            directWorldPoints = reshape(directMesh.WorldPoints, 3, []);
+            testCase.verifyEqual(working.LayerImages(2).MeshSummary.WorldBounds, ...
+                [min(directWorldPoints, [], 2), ...
+                max(directWorldPoints, [], 2)], ...
                 AbsTol=ProjectionAlignmentWorkingImageRendererTest.Tol);
         end
 
@@ -125,6 +132,26 @@ classdef ProjectionAlignmentWorkingImageRendererTest < matlab.unittest.TestCase
                 @() ProjectionAlignmentWorkingImageRenderer.render( ...
                 scene, request, struct(OutputSize=[4 5])), ...
                 "ProjectionAlignmentWorkingImageRenderer:invalidAnalysisBand");
+        end
+
+        function testCacheKeyTracksMappingButNotDisplayAlpha(testCase)
+            scene = ProjectionAlignmentWorkingImageRendererTest.makeTwoLayerScene();
+            request = struct(LayerIndices=[2 1], ReferenceLayerIndex=1, ...
+                AnalysisBands=[1 1]);
+            renderOptions = struct(OutputSize=[64 64]);
+            baseline = ProjectionAlignmentWorkingImageRenderer.cacheKey( ...
+                scene, request, renderOptions);
+            alphaChanged = scene;
+            alphaChanged.layers(1).Alpha = 0.1;
+            alphaKey = ProjectionAlignmentWorkingImageRenderer.cacheKey( ...
+                alphaChanged, request, renderOptions);
+            opkChanged = scene;
+            opkChanged.layers(2).ViewVectorAngularOffsetsDegrees(1) = 0.01;
+            opkKey = ProjectionAlignmentWorkingImageRenderer.cacheKey( ...
+                opkChanged, request, renderOptions);
+
+            testCase.verifyEqual(alphaKey, baseline);
+            testCase.verifyNotEqual(opkKey, baseline);
         end
     end
 

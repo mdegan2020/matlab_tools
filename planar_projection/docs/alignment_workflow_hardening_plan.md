@@ -593,7 +593,7 @@ Implementation status:
 ```text
 Reliability Pack 0: complete
 Reliability Pack 1: complete
-Reliability Pack 2: next (comparison and user-review gate)
+Reliability Pack 2: engineering complete; renderer decision pending user review
 Reliability Packs 3-8: pending
 ```
 
@@ -768,8 +768,52 @@ Input needed from the user at the Pack 2 decision gate:
 
 No additional user input is needed before Pack 2. Local test TIFFs and
 synthetic fixtures can build the comparison harness, but the renderer default
-will remain unchanged if representative real data is unavailable or the result
-is ambiguous.
+must remain unchanged until the representative real-data review above.
+
+Implementation note:
+
+- `ProjectionAlignmentWorkingGrid` plans each scheduled pair independently on
+  the axis-aligned intersection of its current projection-plane footprints.
+  It derives a physical base resolution, coarsens only in power-of-two steps
+  to honor the requested maximum working size, uses equal row/column spacing,
+  and snaps bounds to a stable physical lattice. A sub-pixel geometry change
+  near a lattice boundary therefore retains the same origin, scale, size, and
+  `GridKey` instead of resampling a union-sized square.
+- Multi-image schedules now carry `PairWorkingImages`; feature detection is
+  performed separately on each pair grid, so a distant third layer cannot
+  dilute a pair's resolution or force large invalid borders. Numeric layer
+  indices remain compatibility fields and stable layer IDs remain canonical.
+- The renderer accepts either `sparseIntensityScatteredInterpolant` or
+  `fullSourceInverseWarp` as an alignment-only `NumericalMode`, with sparse
+  still the default. Both modes consume exactly the same pair grid. This
+  option does not affect `ProjectionBackendProcessor`, whose full-source
+  contract remains independent.
+- A runtime-only cache key includes only selected source radiometry identity,
+  analysis band, source geometry/sampling, OPK/projection offset, pair
+  schedule, grid request, interpolation, fill, and numerical mode. Display
+  alpha is deliberately excluded. The app reuses an exact working-image cache
+  hit across repeated Match actions and reports hit/miss counts.
+- Working images no longer retain display textures or full sampled mesh arrays
+  after source observation maps are compiled. A compact numeric `MeshSummary`
+  preserves explainability without pinning viewer/backend payloads.
+- `ProjectionAlignmentWorkingImageComparison` and
+  `scripts/alignment_working_image_evaluation.m` measure exact-repeat and
+  small-OPK-perturbation stability, raw/stage-filtered counts, spatial
+  coverage, gradient statistics, solve outcome, runtime, and runtime bytes.
+  They write JSON/MAT summaries, normalized per-layer PNGs, and match-overlay
+  PNGs for the required review gate.
+- On the local synthetic TIFF fixture, both modes were exactly repeatable and
+  retained the same grid under a `0.0001` degree perturbation. Sparse produced
+  `100 raw / 81 filtered` matches; full-source produced `62 raw / 40 filtered`.
+  Full-source had slightly broader coverage and higher gradient energy, while
+  sparse produced materially more matches. This fixture is not the intended
+  oblique/relief-rich real-data decision pair, so the result does not justify a
+  default change. The incumbent default remains unchanged when representative
+  real data is unavailable or the result is ambiguous.
+- Pack 2 engineering validation passes with 336 tests after
+  `close all force; clear classes; rehash; results = runTests;`. The remaining
+  Pack 2 item is the explicitly required representative real-data/user review,
+  not an unvalidated code path.
 
 ### Reliability Pack 3: Deterministic feature extraction and matching
 

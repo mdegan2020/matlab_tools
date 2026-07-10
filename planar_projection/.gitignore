@@ -12,6 +12,7 @@ artifacts/viewer_big_data_profile/*
 !artifacts/viewer_big_data_profile/.gitkeep
 artifacts/viewer_performance/*
 !artifacts/viewer_performance/.gitkeep
+artifacts/alignment_working_image_comparison/*
 
 # Local development notes
 tracked_issues.md
