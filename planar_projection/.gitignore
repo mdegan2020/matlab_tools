@@ -16,6 +16,7 @@ artifacts/alignment_working_image_comparison/*
 artifacts/alignment_oblique_terrain_comparison/*
 artifacts/alignment_feature_repeatability/*
 artifacts/alignment_filter_model_evaluation/*
+artifacts/alignment_reliability_validation/*
 
 # Local development notes
 tracked_issues.md

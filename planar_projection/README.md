@@ -40,7 +40,10 @@ runSyntheticAlignmentPrototype.m Launcher for red/blue synthetic alignment scene
 validateProjectionBackendJob.m  Validate backend jobs without rendering
 scripts/backend_interactive_evaluation.m Sectioned backend evaluation script
 scripts/viewer_performance_evaluation.m Repeatable viewer interaction benchmark
+scripts/alignment_reliability_validation.m Consolidated synthetic alignment matrix
 docs/alignment_workflow_hardening_plan.md Real-data GUI alignment hardening plan
+docs/alignment_operator_guide.md Staged workflow and failure-recovery guide
+docs/alignment_reliability_validation_report.md Pack 8 reference results and remaining gate
 docs/performance_optimization_workplan.md Viewer/backend optimization packs
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
 artifacts/viewer_performance/ Ignored viewer benchmark output directory
@@ -584,6 +587,20 @@ median and `11.34 m` p95 terrain separation. A `0.01 degree` OPK perturbation
 changed the survivor count from `48` to `49`. Reports are written under the
 ignored `artifacts/alignment_filter_model_evaluation` directory.
 
+Run the consolidated detector, perturbation, loss, prior, reference-motion,
+curation, common-anchor, and contract-regression matrix with:
+
+```matlab
+addpath("src", "scripts");
+[summary, artifacts] = alignment_reliability_validation();
+```
+
+The default uses the 1024-pixel oblique sensor fixture and 768-pixel bounded
+working images, then writes JSON, MAT, and CSV artifacts under the ignored
+`artifacts/alignment_reliability_validation` directory. The committed reference
+results are in `docs/alignment_reliability_validation_report.md`; operational
+steps and failure recovery are in `docs/alignment_operator_guide.md`.
+
 Manual auto-alignment validation loop:
 
 ```matlab
@@ -600,9 +617,8 @@ state from the context menu. Common failure modes are too few filtered or
 solver-used matches, disabled or hidden layers leaving no enabled pairs, a solve
 that hits OPK bounds, weak residual improvement, an ROI that clips all features,
 or a detector that is unavailable in the current MATLAB installation.
-Real-data alignment quality follow-up work, including staged match/solve
-controls, outlier filtering, OPK bounds, overlay clearing, and future manual
-match curation, is tracked in `docs/alignment_workflow_hardening_plan.md`.
+The completed hardening work and remaining representative Windows/real-data
+validation gate are tracked in `docs/alignment_workflow_hardening_plan.md`.
 
 Projection scenes can choose how the initial projection plane is built:
 

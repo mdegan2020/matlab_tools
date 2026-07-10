@@ -1304,6 +1304,44 @@ single-channel imagery on the intended high-end Windows workstation. Alignment
 working images remain bounded analysis products; no validation or optimization
 may route them into backend output.
 
+#### Pack 8 implementation result
+
+- `scripts/alignment_reliability_validation.m` is the consolidated, repeatable
+  Pack 8 matrix. It uses the red and blue bands of the local test TIFF in the
+  approved 10 km, 65-degree off-nadir, 3-degree stereo, +/-50 m terrain
+  simulation; injects known common+differential OPK; sweeps every installed
+  detector; checks exact repeats and a small geometry perturbation; compares
+  all three losses, equal/unequal priors, and fixed-reference control; records
+  ROI/manual-curation counts; exercises common-anchor success and bound
+  rollback; and runs named GUI, geometry, multi-image, and serialized-backend
+  regressions.
+- Durable artifacts are JSON and MAT summaries plus detector, loss, and
+  contract-regression CSV matrices under the ignored
+  `artifacts/alignment_reliability_validation` directory. The report records
+  raw/filtered counts, terrain truth, correction decomposition, all three
+  residual metrics, observability, bounds, timing, safety state, and explicit
+  failure reasons. A small fixture mode is used only to test artifact contracts;
+  the operational default retains the truth-validated 1024 sensor / 768
+  working-image schedule.
+- The July 10, 2026 reference run selected KAZE by filtered support (64 raw, 55
+  filtered), retained 40 filtered observations after a 0.01-degree perturbation,
+  and passed all named contract regressions. Plane and coplanarity losses were
+  safe/actionable. Ray-to-ray reduced forward-ray RMS from 3.30 m to 2.20 m but
+  hit a bound and was correctly rejected. The common anchor succeeded with
+  preserved differential/kappa and rejected the deliberate bound case.
+- `docs/alignment_operator_guide.md` now documents the staged user workflow,
+  loss selection, overlays/table semantics, common-anchor interaction,
+  failure recovery, serialization, and 100-150 MP operating constraints.
+  `docs/alignment_reliability_validation_report.md` records the reference
+  matrix, interpretation, and limitations.
+- No user real-data pair was available, per the user's clarification. The
+  synthetic Pack 8 matrix is complete; representative 100-150 MP primarily
+  single-channel validation on the intended high-end Windows workstation
+  remains an explicit external/manual acceptance gate rather than an invented
+  result. All 15 named matrix regressions pass, the alignment-focused suite
+  passes 141 tests, and Pack 8 final validation passes all 383 tests after
+  `close all force; clear all; clear classes; rehash; results = runTests;`.
+
 ## Required Implementation Order
 
 Implement and validate one small coherent sub-pack at a time:
@@ -1320,7 +1358,9 @@ Implement and validate one small coherent sub-pack at a time:
    observability, and unified safety.
 8. Reliability Pack 7: complete — Shift+left common-anchor drag with bounded
    refinement, rollback, diagnostics, and undo.
-9. Reliability Pack 8: full real-data validation and operator documentation.
+9. Reliability Pack 8: complete — consolidated synthetic validation matrix,
+   reference report, and operator documentation; representative Windows
+   real-data acceptance remains an external manual gate.
 
 For each sub-pack: inspect the relevant source/tests, implement only that scope,
 add focused tests, run targeted tests, run `runTests`, update documentation,
