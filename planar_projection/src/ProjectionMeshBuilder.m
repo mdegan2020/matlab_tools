@@ -14,6 +14,39 @@ classdef ProjectionMeshBuilder
                 options = struct();
             end
 
+            sampledGeometry = ProjectionMeshBuilder.sampleLayerGeometry(layer);
+            mesh = ProjectionMeshBuilder.buildLayerMeshFromSamples( ...
+                layer, plane, renderOrigin, sampledGeometry, options);
+        end
+
+        function sampledGeometry = sampleLayerGeometry(layer)
+            %sampleLayerGeometry Sample immutable source origins and rays.
+            ProjectionMeshBuilder.validateLayer(layer);
+
+            rowIndices = double(layer.MeshSampling.RowIndices(:).');
+            columnIndices = double(layer.MeshSampling.ColumnIndices(:).');
+            [G, V] = layer.SourceGeometry.SampleFcn(rowIndices, columnIndices);
+            ProjectionMeshBuilder.validateSampledGeometry( ...
+                G, V, numel(rowIndices), numel(columnIndices));
+
+            sampledGeometry = struct(RowIndices=rowIndices, ...
+                ColumnIndices=columnIndices, SampledOrigins=G, ...
+                SampledVectors=V);
+        end
+
+        function mesh = buildLayerMeshFromSamples(layer, plane, ...
+                renderOrigin, sampledGeometry, options)
+            %buildLayerMeshFromSamples Project caller-supplied source samples.
+            if nargin < 2 || isempty(plane)
+                plane = ProjectionMeshBuilder.currentPlaneFromLayer(layer);
+            end
+            if nargin < 3 || isempty(renderOrigin)
+                renderOrigin = [0; 0; 0];
+            end
+            if nargin < 5
+                options = struct();
+            end
+
             ProjectionMeshBuilder.validateLayer(layer);
             PlanarProjection.validatePlane(plane);
             renderOrigin = ProjectionMeshBuilder.validatePoint(renderOrigin, "renderOrigin");
@@ -21,10 +54,12 @@ classdef ProjectionMeshBuilder
 
             rowIndices = double(layer.MeshSampling.RowIndices(:).');
             columnIndices = double(layer.MeshSampling.ColumnIndices(:).');
-            [G, V] = layer.SourceGeometry.SampleFcn(rowIndices, columnIndices);
-
             numRows = numel(rowIndices);
             numColumns = numel(columnIndices);
+            sampledGeometry = ProjectionMeshBuilder.validateCachedSamples( ...
+                sampledGeometry, rowIndices, columnIndices);
+            G = sampledGeometry.SampledOrigins;
+            V = sampledGeometry.SampledVectors;
             ProjectionMeshBuilder.validateSampledGeometry(G, V, numRows, numColumns);
             [viewVectorRotationMatrix, viewVectorAngularOffsetsDegrees] = ...
                 ProjectionMeshBuilder.layerViewVectorRotation(layer, plane);
@@ -161,6 +196,27 @@ classdef ProjectionMeshBuilder
                 error("ProjectionMeshBuilder:invalidSampledGeometry", ...
                     "SampleFcn must return V as a finite 3 x numRows x numColumns array.");
             end
+        end
+
+        function sampledGeometry = validateCachedSamples( ...
+                sampledGeometry, rowIndices, columnIndices)
+            requiredFields = ["RowIndices", "ColumnIndices", ...
+                "SampledOrigins", "SampledVectors"];
+            if ~isstruct(sampledGeometry) || ~isscalar(sampledGeometry) || ...
+                    any(~isfield(sampledGeometry, requiredFields))
+                error("ProjectionMeshBuilder:invalidSampledGeometry", ...
+                    "Cached sampled geometry must contain indices, origins, and vectors.");
+            end
+
+            cachedRows = double(sampledGeometry.RowIndices(:).');
+            cachedColumns = double(sampledGeometry.ColumnIndices(:).');
+            if ~isequal(cachedRows, rowIndices) || ...
+                    ~isequal(cachedColumns, columnIndices)
+                error("ProjectionMeshBuilder:sampledGeometryMismatch", ...
+                    "Cached sampled-geometry indices must match layer mesh sampling.");
+            end
+            sampledGeometry.RowIndices = cachedRows;
+            sampledGeometry.ColumnIndices = cachedColumns;
         end
 
         function [P, ranges] = intersectSampledRays(G, V, plane, options)

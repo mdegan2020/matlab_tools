@@ -13,7 +13,7 @@ expected `15000 x 10000` through `30000 x 20000` source and output sizes.
 
 The audit and local measurements are complete. Performance implementation is in
 progress and was explicitly prioritized on July 10, 2026. Viewer Performance
-Packs 0-4 are complete: the app now exposes bounded runtime diagnostics and
+Packs 0-5 are complete: the app now exposes bounded runtime diagnostics and
 the repeatable evaluation harness exercises alpha, crosshair, twist, pan,
 slow/fast/reversing LOD-boundary zoom, WASD, and OPK scenarios. Crosshair motion
 is demand-activated and no longer restacks overlay lines during steady pointer
@@ -22,7 +22,10 @@ viewport halo, and stateful LOD hysteresis. Tile visibility uses cached numeric
 footprints and one vectorized camera projection per refresh. Stable tile keys,
 differential surface reuse, a byte-bounded prepared-data cache, and a bounded
 hidden surface pool now avoid whole-layer graphics replacement when viewport
-coverage changes. Viewer Performance Pack 5 is next.
+coverage changes. Source ray/origin samples are cached separately from derived
+projection meshes, projection-offset edits use exact rigid surface translation,
+and OPK/alignment refreshes are limited to affected layers. Viewer Performance
+Pack 6 is next.
 
 Use the pack order in this document and commit and push each coherent, validated
 pack separately.
@@ -935,6 +938,39 @@ Viewer Performance Pack 4: Reuse preview tile surfaces
 ```
 
 ### Viewer Performance Pack 5: Targeted Geometry Invalidation
+
+Status: complete on July 10, 2026.
+
+`ProjectionMeshBuilder` now separates immutable source sampling from projection:
+`sampleLayerGeometry` produces the sampled origins/rays and
+`buildLayerMeshFromSamples` applies OPK, plane intersection, render origin, and
+projection offset. The app owns a discardable, byte-bounded `64 MiB`
+sampled-geometry LRU keyed by layer, source image size, and exact row/column
+sampling.
+It remains outside scene/layer/source structs and is configurable through
+`configurePreviewCache(SampleMaxBytes=...)`.
+
+Shared tip/tilt still refreshes every layer, while keyboard/drag OPK changes
+refresh only the selected layer. Alignment preview/apply/revert compares visual
+projection state before and after the solver operation and refreshes only layers
+whose OPK or projection offset actually changed. A three-layer selected-pair
+test confirms that the unaffected third layer is not refreshed.
+
+WASD and Control-drag no longer rebuild a projection mesh. They update
+`ProjectionOffsetMeters`, translate the existing surface coordinates by the
+exact in-plane world delta, leave sampled origins/rays and ranges unchanged,
+invalidate only the selected layer's derived tile footprint, and reconcile tile
+coverage after interaction. Focused tests verify zero `SampleFcn` calls and zero
+mesh builds on the immediate WASD path, selected-layer-only OPK refresh, and
+all-layer shared-plane refresh.
+
+On the local two-TIFF scene, six alternating WASD inputs completed in about
+`43 ms` settled, recorded six rigid translations, zero layer geometry refreshes
+during active input, and zero `SampleFcn` calls; the final tiled reconciliation
+used three cached sample hits. Six alternating OPK inputs completed in about
+`111 ms`, refreshed six selected layers rather than twelve layer refreshes, and
+used 21 cached sample hits with zero `SampleFcn` calls. These are local reports,
+not portable thresholds.
 
 Deliverables:
 

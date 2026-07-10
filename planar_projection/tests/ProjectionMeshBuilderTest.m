@@ -112,6 +112,38 @@ classdef ProjectionMeshBuilderTest < matlab.unittest.TestCase
                 AbsTol=ProjectionMeshBuilderTest.Tol);
         end
 
+        function testBuildFromCachedSamplesMatchesDirectBuild(testCase)
+            scene = ProjectionMeshBuilderTest.makeScene();
+            layer = scene.layers;
+            sampledGeometry = ...
+                ProjectionMeshBuilder.sampleLayerGeometry(layer);
+            directMesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                layer, layer.CurrentProjectionPlane, scene.renderOrigin);
+            layer.SourceGeometry.SampleFcn = @(~, ~) deal([], []);
+
+            cachedMesh = ProjectionMeshBuilder.buildLayerMeshFromSamples( ...
+                layer, layer.CurrentProjectionPlane, scene.renderOrigin, ...
+                sampledGeometry);
+
+            testCase.verifyEqual(cachedMesh, directMesh, ...
+                AbsTol=ProjectionMeshBuilderTest.Tol);
+        end
+
+        function testBuildFromCachedSamplesRejectsSamplingMismatch(testCase)
+            scene = ProjectionMeshBuilderTest.makeScene();
+            layer = scene.layers;
+            sampledGeometry = ...
+                ProjectionMeshBuilder.sampleLayerGeometry(layer);
+            sampledGeometry.RowIndices(1) = ...
+                sampledGeometry.RowIndices(1) + 1;
+
+            testCase.verifyError( ...
+                @() ProjectionMeshBuilder.buildLayerMeshFromSamples( ...
+                layer, layer.CurrentProjectionPlane, scene.renderOrigin, ...
+                sampledGeometry), ...
+                "ProjectionMeshBuilder:sampledGeometryMismatch");
+        end
+
         function testViewVectorAngularOffsetsRotateSamplesWithoutMovingOrigins(testCase)
             scene = ProjectionMeshBuilderTest.makeScene();
             layer = scene.layers;
@@ -214,5 +246,6 @@ classdef ProjectionMeshBuilderTest < matlab.unittest.TestCase
             rowVectors = [ones(1, numRows); rowOffsets; zeros(1, numRows)];
             V = repmat(reshape(rowVectors, 3, numRows, 1), 1, 1, numColumns);
         end
+
     end
 end

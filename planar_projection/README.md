@@ -215,7 +215,8 @@ and configurable for evaluation:
 
 ```matlab
 app.configurePreviewCache(struct( ...
-    MaxBytes=256 * 1024^2, SurfacePoolMaxCount=64));
+    MaxBytes=256 * 1024^2, SampleMaxBytes=64 * 1024^2, ...
+    SurfacePoolMaxCount=64));
 ```
 
 The local 100 MP single-channel comparison did not justify moving away from the
@@ -223,6 +224,20 @@ provisional `1024` display tile side: `512` kept comparable warm interaction
 time but required four times as many candidates/surfaces in the measured zoomed
 view. Confirm `512` versus `1024` on the intended Windows/1080p/4K workload
 before changing the default.
+
+Viewer mesh construction separates immutable source sampling from derived
+projection geometry. The app caches exact row/column source origin/ray samples
+in the runtime-only sampled-geometry LRU, then reuses them across plane, OPK,
+and projection-offset changes. Shared tip/tilt refreshes all layers; selected
+OPK edits and alignment operations refresh only affected layers.
+
+WASD and Control-drag preserve the existing explainable state contract while
+avoiding mesh reconstruction: they update `ProjectionOffsetMeters` and apply
+the corresponding exact in-plane world translation to current surfaces.
+Source geometry, sampled ray origins, and sampled view vectors do not change.
+Tiled coverage is reconciled after interaction using cached samples. The
+performance diagnostics and CSV artifacts report sample-cache hits/misses,
+`SampleFcn` calls, affected-layer refreshes, and rigid translations.
 
 ## Projection Viewer Prototype
 

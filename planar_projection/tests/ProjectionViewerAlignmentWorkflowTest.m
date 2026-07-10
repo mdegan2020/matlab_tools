@@ -221,7 +221,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
             testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
 
-            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(true);
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(true, 3);
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
             drawnow
@@ -322,15 +322,28 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(applyButton.Enable), "on");
             testCase.verifyEqual(string(revertButton.Enable), "on");
 
+            app.resetPerformanceDiagnostics();
             previewButton.ButtonPushedFcn(previewButton, struct());
             drawnow
             statePreview = app.exportState();
+            previewPerformance = app.performanceDiagnostics();
+            changedLayerCount = nnz(any(abs( ...
+                ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets( ...
+                statePreview) - ...
+                ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets( ...
+                stateBefore)) > ProjectionViewerAlignmentWorkflowTest.Tol, 2));
             testCase.verifyGreaterThan(norm( ...
                 ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets(statePreview) - ...
                 ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets(stateBefore), ...
                 "fro"), 1e-5);
             testCase.verifyNotEmpty(findall(fig, "Tag", ...
                 "ProjectionViewerAlignmentMatchOverlay"));
+            testCase.verifyEqual( ...
+                previewPerformance.Counters.LayerGeometryRefreshes, ...
+                changedLayerCount);
+            testCase.verifyLessThan(changedLayerCount, statePreview.LayerCount);
+            testCase.verifyEqual( ...
+                previewPerformance.Counters.SampleFcnCalls, 0);
 
             clearOverlaysButton.ButtonPushedFcn(clearOverlaysButton, struct());
             drawnow

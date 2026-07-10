@@ -364,11 +364,13 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             ax = findall(fig, "Type", "axes");
             fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
 
+            app.resetPerformanceDiagnostics();
             fig.WindowKeyPressFcn(fig, struct(Key="i", Modifier="i"));
+            opkDiagnostics = app.performanceDiagnostics();
             app.resetPerformanceDiagnostics();
             fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=1));
             app.flushPreviewUpdates();
-            opkDiagnostics = app.performanceDiagnostics();
+            cachedOpkDiagnostics = app.performanceDiagnostics();
 
             app.resetPerformanceDiagnostics();
             fig.WindowKeyPressFcn(fig, struct(Key="w", Modifier="w"));
@@ -376,16 +378,109 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             app.resetPerformanceDiagnostics();
             fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=-1));
             app.flushPreviewUpdates();
+            reconciledOffsetDiagnostics = app.performanceDiagnostics();
+            app.resetPerformanceDiagnostics();
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=-1));
+            app.flushPreviewUpdates();
             cachedOffsetDiagnostics = app.performanceDiagnostics();
 
             testCase.verifyEqual(opkDiagnostics.Counters.GeometryCacheMisses, 1);
             testCase.verifyGreaterThan(opkDiagnostics.Counters.MeshBuilds, 0);
-            testCase.verifyGreaterThanOrEqual( ...
-                offsetDiagnostics.Counters.GeometryCacheMisses, 1);
-            testCase.verifyGreaterThan(offsetDiagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual(opkDiagnostics.Counters.SampleFcnCalls, 0);
+            testCase.verifyEqual( ...
+                cachedOpkDiagnostics.Counters.GeometryCacheMisses, 0);
+            testCase.verifyEqual(cachedOpkDiagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual( ...
+                offsetDiagnostics.Counters.RigidProjectionTranslations, 1);
+            testCase.verifyEqual(offsetDiagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual(offsetDiagnostics.Counters.SampleFcnCalls, 0);
+            testCase.verifyEqual( ...
+                offsetDiagnostics.Counters.LayerGeometryRefreshes, 0);
+            testCase.verifyEqual( ...
+                reconciledOffsetDiagnostics.Counters.GeometryCacheMisses, 1);
+            testCase.verifyEqual( ...
+                reconciledOffsetDiagnostics.Counters.SampleFcnCalls, 0);
             testCase.verifyEqual( ...
                 cachedOffsetDiagnostics.Counters.GeometryCacheMisses, 0);
             testCase.verifyEqual(cachedOffsetDiagnostics.Counters.MeshBuilds, 0);
+        end
+
+        function testSelectedOpkRefreshTargetsOneLayerAndReusesSamples(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTwoScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            app.resetPerformanceDiagnostics();
+
+            fig.WindowKeyPressFcn(fig, struct(Key="i", Modifier="i"));
+            diagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual( ...
+                diagnostics.Counters.LayerGeometryRefreshes, 1);
+            testCase.verifyEqual(diagnostics.Counters.MeshBuilds, 1);
+            testCase.verifyEqual(diagnostics.Counters.SampleFcnCalls, 0);
+            testCase.verifyGreaterThanOrEqual( ...
+                diagnostics.Counters.SampleCacheHits, 1);
+        end
+
+        function testWasdUsesExactRigidSelectedLayerTranslation(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTwoScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            sampleRows = [1 4];
+            sampleColumns = [1 5];
+            [originsBefore, vectorsBefore] = ...
+                scene.layers(2).SourceGeometry.SampleFcn( ...
+                sampleRows, sampleColumns);
+            app.resetPerformanceDiagnostics();
+
+            fig.WindowKeyPressFcn(fig, struct(Key="w", Modifier="w"));
+            diagnostics = app.performanceDiagnostics();
+            job = app.exportBackendJob(struct(RenderOptions=struct( ...
+                OutputSize=[4 5])));
+            [originsAfter, vectorsAfter] = ...
+                job.Scene.layers(2).SourceGeometry.SampleFcn( ...
+                sampleRows, sampleColumns);
+
+            testCase.verifyEqual( ...
+                diagnostics.Counters.RigidProjectionTranslations, 1);
+            testCase.verifyEqual( ...
+                diagnostics.Counters.LayerGeometryRefreshes, 0);
+            testCase.verifyEqual(diagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual(diagnostics.Counters.SampleFcnCalls, 0);
+            testCase.verifyEqual(originsAfter, originsBefore);
+            testCase.verifyEqual(vectorsAfter, vectorsBefore);
+            testCase.verifyEqual( ...
+                job.Scene.layers(1).ProjectionOffsetMeters, [0; 0]);
+            testCase.verifyNotEqual( ...
+                job.Scene.layers(2).ProjectionOffsetMeters, [0; 0]);
+        end
+
+        function testSharedTipRefreshesEveryLayerUsingCachedSamples(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTwoScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            tipSlider = ProjectionViewerPerformanceTest.findSlider(fig, 2);
+            tipSlider.Value = 1;
+            app.resetPerformanceDiagnostics();
+
+            tipSlider.ValueChangedFcn(tipSlider, struct());
+            diagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual( ...
+                diagnostics.Counters.LayerGeometryRefreshes, 2);
+            testCase.verifyEqual(diagnostics.Counters.MeshBuilds, 2);
+            testCase.verifyEqual(diagnostics.Counters.SampleFcnCalls, 0);
+            testCase.verifyGreaterThanOrEqual( ...
+                diagnostics.Counters.SampleCacheHits, 2);
         end
 
         function testViewportShiftPreservesOverlapAndReusesPool(testCase)
@@ -441,13 +536,17 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             drawnow
 
             options = app.configurePreviewCache( ...
-                struct(MaxBytes=1024, SurfacePoolMaxCount=2));
+                struct(MaxBytes=1024, SampleMaxBytes=2048, ...
+                SurfacePoolMaxCount=2));
             app.configurePreviewTiling(struct(TileSize=512));
             diagnostics = app.performanceDiagnostics();
 
             testCase.verifyEqual(options.MaxBytes, 1024);
+            testCase.verifyEqual(options.SampleMaxBytes, 2048);
             testCase.verifyEqual(options.SurfacePoolMaxCount, 2);
             testCase.verifyEqual(diagnostics.Viewer.TileDataCache.MaxBytes, 1024);
+            testCase.verifyEqual( ...
+                diagnostics.Viewer.SampledGeometryCache.MaxBytes, 2048);
             testCase.verifyLessThanOrEqual( ...
                 diagnostics.Viewer.TileDataCache.TotalBytes, 1024);
             testCase.verifyEqual(diagnostics.Viewer.SurfacePoolLimit, 2);
@@ -495,6 +594,14 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
                 ColumnStride=250, DisplayTextureMaxPixels=10000);
             scene = ProjectionViewerHarness.createSceneFromImage( ...
                 imageData, "large.tif", options);
+        end
+
+        function scene = makeTwoScene()
+            imageData = uint8(reshape(1:60, 4, 5, 3));
+            options = struct(RowStride=2, ColumnStride=2);
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                {imageData, imageData}, ...
+                ["synthetic_1.tif", "synthetic_2.tif"], options);
         end
 
         function scene = makeTwoTiledScene()
