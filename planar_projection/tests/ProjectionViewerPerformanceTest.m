@@ -388,10 +388,78 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.verifyEqual(cachedOffsetDiagnostics.Counters.MeshBuilds, 0);
         end
 
+        function testViewportShiftPreservesOverlapAndReusesPool(testCase)
+            scene = ProjectionViewerPerformanceTest.makeReusableTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            app.configurePreviewTiling(struct(TileSize=512));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            ax.CameraViewAngle = 0.5;
+            center = ProjectionViewerPerformanceTest.axesCenter(ax);
+            fig.CurrentPoint = center;
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=0));
+            app.flushPreviewUpdates();
+            initialSurfaces = ProjectionViewerPerformanceTest.activeTileSurfaces(ax);
+            app.resetPerformanceDiagnostics();
+
+            ProjectionViewerPerformanceTest.dragCamera(fig, center, [-700 0]);
+            app.flushPreviewUpdates();
+            shiftedSurfaces = ProjectionViewerPerformanceTest.activeTileSurfaces(ax);
+            shiftedDiagnostics = app.performanceDiagnostics();
+            ProjectionViewerPerformanceTest.dragCamera(fig, center, [700 0]);
+            app.flushPreviewUpdates();
+            returnedDiagnostics = app.performanceDiagnostics();
+
+            testCase.verifyTrue( ...
+                ProjectionViewerPerformanceTest.commonTileHandlesMatch( ...
+                initialSurfaces, shiftedSurfaces));
+            testCase.verifyGreaterThan( ...
+                shiftedDiagnostics.Counters.SurfaceHandleReuses, 0);
+            testCase.verifyEqual(shiftedDiagnostics.Counters.SurfaceCreations, 0);
+            testCase.verifyEqual(shiftedDiagnostics.Counters.TexturePreparations, 0);
+            testCase.verifyEqual(shiftedDiagnostics.Counters.TextureUploadBytes, 0);
+            testCase.verifyGreaterThan( ...
+                shiftedDiagnostics.Counters.SurfacePoolRetirements, 0);
+            testCase.verifyGreaterThan(returnedDiagnostics.Counters.SurfacePoolHits, 0);
+            testCase.verifyGreaterThan(returnedDiagnostics.Counters.TileCacheHits, 0);
+            testCase.verifyEqual(returnedDiagnostics.Counters.TexturePreparations, 0);
+            testCase.verifyGreaterThan( ...
+                returnedDiagnostics.Counters.TextureUploadBytes, 0);
+            testCase.verifyLessThanOrEqual( ...
+                returnedDiagnostics.Viewer.TileDataCache.TotalBytes, ...
+                returnedDiagnostics.Viewer.TileDataCache.MaxBytes);
+        end
+
+        function testPreviewCacheAndSurfacePoolBudgetsAreConfigurable(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            options = app.configurePreviewCache( ...
+                struct(MaxBytes=1024, SurfacePoolMaxCount=2));
+            app.configurePreviewTiling(struct(TileSize=512));
+            diagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual(options.MaxBytes, 1024);
+            testCase.verifyEqual(options.SurfacePoolMaxCount, 2);
+            testCase.verifyEqual(diagnostics.Viewer.TileDataCache.MaxBytes, 1024);
+            testCase.verifyLessThanOrEqual( ...
+                diagnostics.Viewer.TileDataCache.TotalBytes, 1024);
+            testCase.verifyEqual(diagnostics.Viewer.SurfacePoolLimit, 2);
+            testCase.verifyLessThanOrEqual( ...
+                diagnostics.Viewer.SurfacePoolCount, 2);
+        end
+
         function testEvaluationRunsAllScenariosAndRestoresState(testCase)
             options = struct(SyntheticImageSize=[64 64], ...
-                ScenarioIterations=2, UseSynthetic=true, ...
-                WriteArtifacts=false);
+                SyntheticLayerCount=1, SyntheticPattern="constant", ...
+                DisplayTileSize=512, ScenarioIterations=2, ...
+                UseSynthetic=true, WriteArtifacts=false);
 
             [summary, app] = viewer_performance_evaluation(options);
             testCase.addTeardown(@() delete(app));
@@ -400,6 +468,9 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
                 ["alpha", "crosshair", "twist", "pan", "zoomSlow", ...
                 "zoomFast", "zoomReverse", "wasd", "opk"]);
             testCase.verifyTrue(summary.FinalStateMatchesInitial);
+            testCase.verifyEqual(summary.DisplayTileSize, 512);
+            testCase.verifyEqual(numel(summary.Fixture.ImageSizes), 1);
+            testCase.verifyEqual(summary.Fixture.Pattern, "constant");
             testCase.verifyEqual( ...
                 summary.Scenarios(1).Diagnostics.Counters.FrameRequests, 2);
             testCase.verifyGreaterThanOrEqual( ...
@@ -436,6 +507,15 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
                 options);
         end
 
+        function scene = makeReusableTiledScene()
+            imageData = zeros(2001, 2001, "uint8");
+            options = struct(GSD=0.01, NominalRange=1000, ...
+                PlatformStepMeters=0.01, RowStride=250, ...
+                ColumnStride=250, DisplayTextureMaxPixels=10000);
+            scene = ProjectionViewerHarness.createSceneFromImage( ...
+                imageData, "reusable_large.tif", options);
+        end
+
         function slider = findSlider(fig, column)
             sliders = findall(fig, "-isa", "matlab.ui.control.Slider");
             columns = arrayfun(@(value) value.Layout.Column, sliders);
@@ -445,6 +525,35 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
         function point = axesCenter(ax)
             position = ax.InnerPosition;
             point = position(1:2) + position(3:4) / 2;
+        end
+
+        function surfaces = activeTileSurfaces(ax)
+            surfaces = findall(ax, "Type", "surface", ...
+                "Tag", "ProjectionViewerPreviewTileSurface");
+        end
+
+        function dragCamera(fig, center, pixelDelta)
+            fig.SelectionType = "normal";
+            fig.CurrentPoint = center;
+            fig.WindowButtonDownFcn(fig, struct());
+            fig.CurrentPoint = center + pixelDelta;
+            fig.WindowButtonMotionFcn(fig, struct());
+            fig.WindowButtonUpFcn(fig, struct());
+        end
+
+        function tf = commonTileHandlesMatch(firstSurfaces, secondSurfaces)
+            firstKeys = string(arrayfun( ...
+                @(value) string(value.UserData), firstSurfaces));
+            secondKeys = string(arrayfun( ...
+                @(value) string(value.UserData), secondSurfaces));
+            commonKeys = intersect(firstKeys, secondKeys);
+            tf = ~isempty(commonKeys);
+            for key = reshape(commonKeys, 1, [])
+                firstHandle = firstSurfaces(firstKeys == key);
+                secondHandle = secondSurfaces(secondKeys == key);
+                tf = tf && isscalar(firstHandle) && isscalar(secondHandle) && ...
+                    firstHandle == secondHandle;
+            end
         end
     end
 end

@@ -13,14 +13,16 @@ expected `15000 x 10000` through `30000 x 20000` source and output sizes.
 
 The audit and local measurements are complete. Performance implementation is in
 progress and was explicitly prioritized on July 10, 2026. Viewer Performance
-Packs 0-3 are complete: the app now exposes bounded runtime diagnostics and
+Packs 0-4 are complete: the app now exposes bounded runtime diagnostics and
 the repeatable evaluation harness exercises alpha, crosshair, twist, pan,
 slow/fast/reversing LOD-boundary zoom, WASD, and OPK scenarios. Crosshair motion
 is demand-activated and no longer restacks overlay lines during steady pointer
 movement. Camera interaction is latest-state scheduled with a settle timer,
 viewport halo, and stateful LOD hysteresis. Tile visibility uses cached numeric
-footprints and one vectorized camera projection per refresh. Viewer Performance
-Pack 4 is next.
+footprints and one vectorized camera projection per refresh. Stable tile keys,
+differential surface reuse, a byte-bounded prepared-data cache, and a bounded
+hidden surface pool now avoid whole-layer graphics replacement when viewport
+coverage changes. Viewer Performance Pack 5 is next.
 
 Use the pack order in this document and commit and push each coherent, validated
 pack separately.
@@ -870,6 +872,39 @@ Viewer Performance Pack 3: Cache tile visibility geometry
 ```
 
 ### Viewer Performance Pack 4: Differential Tile Reuse
+
+Status: complete on July 10, 2026.
+
+Every preview tile now has a stable level/row/column key. Camera reconciliation
+retains handles for overlapping keys, prepares or acquires entering coverage
+before retiring departing handles, and recycles hidden surfaces through a
+bounded app-owned pool. Prepared display textures and texture-free numeric mesh
+data use a byte-bounded LRU keyed by layer, geometry generation, mesh limit, and
+tile identity. The default limits are `256 MiB` and `64` pooled surfaces and can
+be changed at runtime with `configurePreviewCache`. Cache and pool contents are
+runtime-only, are cleared when preview configuration changes, become
+unreachable when geometry generations change, and are destroyed with the app.
+
+The deterministic viewport-shift test preserves every overlapping tile handle;
+a reverse shift records prepared-data cache hits and surface-pool hits without
+creating new graphics handles. Focused tests also cover LRU eviction, oversized
+entry rejection, stable keys, and configurable byte/object bounds.
+
+The extended benchmark harness accepts `DisplayTileSize`,
+`SyntheticLayerCount`, and `SyntheticPattern`. A local macOS comparison on a
+`10000 x 10000` single-channel constant fixture found no interaction advantage
+for `512`: the nine one-iteration scenarios totaled about `0.342 s` at `512`
+versus `0.356 s` at `1024`, while changing to `512` incurred about `0.391 s` of
+preview reconfiguration. In a direct `0.5` degree reconciliation with the same
+roughly `12 MiB` visible texture footprint, `512` used four surfaces, tested 100
+candidates, built four entering meshes, and took about `34 ms`; `1024` used one
+surface, tested 25 candidates, built one entering mesh, and took about `19 ms`.
+These are local structural measurements, not portable timing thresholds.
+
+The default therefore remains provisionally `1024`. The target high-end Windows
+1080p/4K matrix on representative 100-150 MP TIFFs remains the required evidence
+before changing that default; the harness now supports that experiment without
+code changes.
 
 Deliverables:
 

@@ -9,9 +9,13 @@ classdef ProjectionViewerApp < handle
         DragMeshSampling struct
         PreviewPyramids cell
         PreviewGeometryCaches cell
+        PreviewGeometryGenerations double
         PreviewTilingOptions struct
         PreviewTiledLayerMask logical
         PreviewTiles cell
+        PreviewTileKeys cell
+        PreviewTileDataCache
+        PreviewSurfacePool = gobjects(0)
         PreviewCurrentLevelIndices double
         PreviewDesiredLevelIndices double
         PreviewDesiredDownsamples double
@@ -41,6 +45,8 @@ classdef ProjectionViewerApp < handle
         PreviewLodPromoteThreshold double = 0.75
         PreviewLodDemoteThreshold double = 1.75
         PreviewViewportHaloFraction double = 0.2
+        PreviewTileCacheMaxBytes double = 256 * 1024 ^ 2
+        PreviewSurfacePoolMaxCount double = 64
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
         InitialViewportFillFraction double = 0.5
@@ -158,6 +164,8 @@ classdef ProjectionViewerApp < handle
             app.Scene = scene;
             app.ResetScene = app.createResetScene(scene);
             app.PerformanceMonitor = ProjectionViewerPerformanceMonitor();
+            app.PreviewTileDataCache = ProjectionViewerLruCache( ...
+                app.PreviewTileCacheMaxBytes);
             app.SelectedLayerIndex = numel(app.Scene.layers);
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
@@ -187,6 +195,7 @@ classdef ProjectionViewerApp < handle
 
         function delete(app)
             app.deleteCameraSettleTimer();
+            app.clearPreviewTileRuntimeCache();
             app.clearAlignmentOverlays();
             app.clearAlignmentRoi(false);
             if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
@@ -380,6 +389,36 @@ classdef ProjectionViewerApp < handle
             app.initializePreviewPyramids(options);
             app.rebuildSurfaces();
             app.updateControlsFromSelectedLayer();
+        end
+
+        function options = configurePreviewCache(app, overrides)
+            %configurePreviewCache Set runtime tile-cache and pool budgets.
+            if nargin < 2 || isempty(overrides)
+                overrides = struct();
+            end
+            if ~isstruct(overrides) || ~isscalar(overrides)
+                error("ProjectionViewerApp:invalidPreviewCacheOptions", ...
+                    "Preview cache overrides must be a scalar struct.");
+            end
+            options = struct(MaxBytes=app.PreviewTileCacheMaxBytes, ...
+                SurfacePoolMaxCount=app.PreviewSurfacePoolMaxCount);
+            names = fieldnames(overrides);
+            for k = 1:numel(names)
+                if ~isfield(options, names{k})
+                    error("ProjectionViewerApp:invalidPreviewCacheOptions", ...
+                        "Unknown preview cache option %s.", names{k});
+                end
+                options.(names{k}) = overrides.(names{k});
+            end
+            options.MaxBytes = app.validatePositiveIntegerOption( ...
+                options.MaxBytes, "MaxBytes");
+            options.SurfacePoolMaxCount = app.validateNonnegativeIntegerOption( ...
+                options.SurfacePoolMaxCount, "SurfacePoolMaxCount");
+            app.clearPreviewTileRuntimeCache();
+            app.PreviewTileCacheMaxBytes = options.MaxBytes;
+            app.PreviewSurfacePoolMaxCount = options.SurfacePoolMaxCount;
+            app.PreviewTileDataCache = ProjectionViewerLruCache( ...
+                options.MaxBytes);
         end
     end
 
@@ -2879,8 +2918,10 @@ classdef ProjectionViewerApp < handle
             layerCount = numel(app.Scene.layers);
             app.PreviewPyramids = cell(1, layerCount);
             app.PreviewGeometryCaches = cell(1, layerCount);
+            app.PreviewGeometryGenerations = ones(1, layerCount);
             app.PreviewTiledLayerMask = false(1, layerCount);
             app.PreviewTiles = cell(1, layerCount);
+            app.PreviewTileKeys = cell(1, layerCount);
             app.PreviewCurrentLevelIndices = ones(1, layerCount);
             app.PreviewDesiredLevelIndices = ones(1, layerCount);
             app.PreviewDesiredDownsamples = ones(1, layerCount);
@@ -2889,6 +2930,7 @@ classdef ProjectionViewerApp < handle
             app.PreviewPredictedCandidateCounts = zeros(1, layerCount);
             app.PreviewPredictedVisibleTileCounts = zeros(1, layerCount);
             app.PreviewPredictedTextureBytes = zeros(1, layerCount);
+            app.clearPreviewTileRuntimeCache();
             for layerIndex = 1:layerCount
                 pyramid = ProjectionPreviewPyramid.build( ...
                     app.Scene.layers(layerIndex).Image, ...
@@ -3024,15 +3066,17 @@ classdef ProjectionViewerApp < handle
                 tiles = app.previewTilesForLayer(layerIndex);
             end
             surfaceHandles = gobjects(1, numel(tiles));
+            tileKeys = app.previewTileKeys(tiles);
             for tileIndex = 1:numel(tiles)
-                tileLayer = app.tilePreviewLayer(layerIndex, tiles(tileIndex));
-                mesh = app.buildInstrumentedLayerMesh( ...
-                    tileLayer, tileLayer.CurrentProjectionPlane);
-                surfaceHandles(tileIndex) = app.createPreviewSurface( ...
-                    layerIndex, mesh, tileLayer.DisplayTexture, ...
-                    "ProjectionViewerPreviewTileSurface");
+                tileData = app.preparedPreviewTileData( ...
+                    layerIndex, tiles(tileIndex), ...
+                    app.PreviewTilingOptions.MaxTileMeshVertices);
+                surfaceHandles(tileIndex) = app.acquirePreviewTileSurface( ...
+                    layerIndex, tileData);
+                surfaceHandles(tileIndex).UserData = tileKeys(tileIndex);
             end
             app.PreviewTiles{layerIndex} = tiles;
+            app.PreviewTileKeys{layerIndex} = tileKeys;
             app.recordAppliedPreviewLevel(layerIndex, tiles);
         end
 
@@ -3052,7 +3096,6 @@ classdef ProjectionViewerApp < handle
                 tileImage = ProjectionPreviewPyramid.tileTexture(pyramid, tile);
                 tileLayer.DisplayTexture = ...
                     ProjectionViewerHarness.prepareDisplayTexture(tileImage);
-                app.PerformanceMonitor.increment("TileCacheMisses");
                 app.PerformanceMonitor.increment("TexturePreparations");
                 app.PerformanceMonitor.increment("PreparedTextureBytes", ...
                     app.arrayBytes(tileLayer.DisplayTexture));
@@ -3061,6 +3104,51 @@ classdef ProjectionViewerApp < handle
             end
             tileLayer.MeshSampling = ProjectionPreviewPyramid.tileMeshSampling( ...
                 pyramid, tile, maxMeshVertices);
+        end
+
+        function tileData = preparedPreviewTileData(app, layerIndex, tile, ...
+                maxMeshVertices)
+            key = app.previewTileDataKey( ...
+                layerIndex, tile, maxMeshVertices);
+            [found, tileData] = app.PreviewTileDataCache.get(key);
+            if found
+                app.PerformanceMonitor.increment("TileCacheHits");
+                return
+            end
+
+            app.PerformanceMonitor.increment("TileCacheMisses");
+            tileLayer = app.tilePreviewLayer( ...
+                layerIndex, tile, true, maxMeshVertices);
+            mesh = app.buildInstrumentedLayerMesh( ...
+                tileLayer, tileLayer.CurrentProjectionPlane);
+            mesh.Texture = [];
+            tileData = struct(Mesh=mesh, ...
+                DisplayTexture=tileLayer.DisplayTexture);
+            cacheBefore = app.PreviewTileDataCache.diagnostics();
+            app.PreviewTileDataCache.put( ...
+                key, tileData, app.previewTileDataBytes(tileData));
+            cacheAfter = app.PreviewTileDataCache.diagnostics();
+            app.PerformanceMonitor.increment("TileCacheEvictions", ...
+                cacheAfter.EvictionCount - cacheBefore.EvictionCount);
+        end
+
+        function key = previewTileDataKey(app, layerIndex, tile, maxMeshVertices)
+            tileKey = ProjectionPreviewPyramid.tileKey(tile);
+            key = string(sprintf("Layer%d_G%d_M%d_%s", layerIndex, ...
+                app.PreviewGeometryGenerations(layerIndex), ...
+                maxMeshVertices, tileKey));
+        end
+
+        function bytes = previewTileDataBytes(app, tileData)
+            bytes = app.arrayBytes(tileData);
+        end
+
+        function keys = previewTileKeys(~, tiles)
+            keys = strings(1, numel(tiles));
+            for tileIndex = 1:numel(tiles)
+                keys(tileIndex) = ProjectionPreviewPyramid.tileKey( ...
+                    tiles(tileIndex));
+            end
         end
 
         function tiles = previewTilesForLayer(app, layerIndex, cameraContext)
@@ -3191,14 +3279,19 @@ classdef ProjectionViewerApp < handle
         function geometry = previewGeometryCacheForLayer(app, layerIndex)
             key = app.previewGeometryCacheKey(layerIndex);
             entry = app.PreviewGeometryCaches{layerIndex};
-            if isstruct(entry) && isscalar(entry) && ...
-                    isfield(entry, "Key") && isequaln(entry.Key, key)
+            hasEntry = isstruct(entry) && isscalar(entry) && ...
+                isfield(entry, "Key");
+            if hasEntry && isequaln(entry.Key, key)
                 app.PerformanceMonitor.increment("GeometryCacheHits");
                 geometry = entry.Geometry;
                 return
             end
 
             app.PerformanceMonitor.increment("GeometryCacheMisses");
+            if hasEntry
+                app.PreviewGeometryGenerations(layerIndex) = ...
+                    app.PreviewGeometryGenerations(layerIndex) + 1;
+            end
             layer = app.Scene.layers(layerIndex);
             plane = layer.CurrentProjectionPlane;
             meshBuilderFcn = @(sampledLayer, sampledPlane, ~) ...
@@ -3209,6 +3302,14 @@ classdef ProjectionViewerApp < handle
                 meshBuilderFcn);
             app.PreviewGeometryCaches{layerIndex} = ...
                 struct(Key=key, Geometry=geometry);
+        end
+
+        function invalidatePreviewGeometry(app, layerIndices)
+            for layerIndex = reshape(layerIndices, 1, [])
+                app.PreviewGeometryCaches{layerIndex} = [];
+                app.PreviewGeometryGenerations(layerIndex) = ...
+                    app.PreviewGeometryGenerations(layerIndex) + 1;
+            end
         end
 
         function key = previewGeometryCacheKey(app, layerIndex)
@@ -3296,6 +3397,8 @@ classdef ProjectionViewerApp < handle
 
             surfaceHandles = app.validLayerSurfaces(layerIndex);
             if app.canReuseTiledLayerSurfaces(layerIndex, tiles, surfaceHandles)
+                app.PerformanceMonitor.increment( ...
+                    "SurfaceHandleReuses", numel(surfaceHandles));
                 if updateTexture
                     app.updateExistingTiledLayerSurfaces(layerIndex, tiles, true);
                 end
@@ -3303,18 +3406,55 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
-            replacementHandles = app.createTiledLayerSurfaces(layerIndex, tiles);
-            app.deleteSurfaceHandles(surfaceHandles);
+            previousKeys = app.currentPreviewTileKeys(layerIndex);
+            targetKeys = app.previewTileKeys(tiles);
+            replacementHandles = gobjects(1, numel(tiles));
+            usedPrevious = false(1, numel(surfaceHandles));
+            if numel(previousKeys) ~= numel(surfaceHandles)
+                previousKeys = strings(size(surfaceHandles));
+            end
+            for tileIndex = 1:numel(tiles)
+                previousIndex = find(~usedPrevious & ...
+                    previousKeys == targetKeys(tileIndex), 1, "first");
+                if ~isempty(previousIndex)
+                    replacementHandles(tileIndex) = ...
+                        surfaceHandles(previousIndex);
+                    usedPrevious(previousIndex) = true;
+                    app.PerformanceMonitor.increment("SurfaceHandleReuses");
+                    if updateTexture
+                        tileData = app.preparedPreviewTileData( ...
+                            layerIndex, tiles(tileIndex), ...
+                            app.PreviewTilingOptions.MaxTileMeshVertices);
+                        app.updatePreviewTileSurface( ...
+                            replacementHandles(tileIndex), layerIndex, ...
+                            tileData, true);
+                    end
+                    continue
+                end
+
+                tileData = app.preparedPreviewTileData( ...
+                    layerIndex, tiles(tileIndex), ...
+                    app.PreviewTilingOptions.MaxTileMeshVertices);
+                replacementHandles(tileIndex) = ...
+                    app.acquirePreviewTileSurface(layerIndex, tileData);
+                replacementHandles(tileIndex).UserData = targetKeys(tileIndex);
+            end
+
+            app.retirePreviewTileSurfaces(surfaceHandles(~usedPrevious));
             app.Surfaces{layerIndex} = replacementHandles;
+            app.PreviewTiles{layerIndex} = tiles;
+            app.PreviewTileKeys{layerIndex} = targetKeys;
+            app.recordAppliedPreviewLevel(layerIndex, tiles);
             if layerIndex == app.SelectedLayerIndex
                 app.Surface = app.primarySurfaceForLayer(layerIndex);
             end
         end
 
         function tf = canReuseTiledLayerSurfaces(app, layerIndex, tiles, surfaceHandles)
-            previousTiles = app.currentPreviewTilesForLayer(layerIndex);
+            previousKeys = app.currentPreviewTileKeys(layerIndex);
+            targetKeys = app.previewTileKeys(tiles);
             tf = numel(surfaceHandles) == numel(tiles) && ...
-                isequal(previousTiles, tiles);
+                isequal(previousKeys, targetKeys);
         end
 
         function tiles = currentPreviewTilesForLayer(app, layerIndex)
@@ -3326,6 +3466,16 @@ classdef ProjectionViewerApp < handle
             end
         end
 
+        function keys = currentPreviewTileKeys(app, layerIndex)
+            if isempty(app.PreviewTileKeys) || ...
+                    layerIndex > numel(app.PreviewTileKeys) || ...
+                    isempty(app.PreviewTileKeys{layerIndex})
+                keys = strings(1, 0);
+            else
+                keys = app.PreviewTileKeys{layerIndex};
+            end
+        end
+
         function updateExistingTiledLayerSurfaces(app, layerIndex, tiles, ...
                 updateTexture, maxMeshVertices)
             if nargin < 5
@@ -3334,14 +3484,14 @@ classdef ProjectionViewerApp < handle
 
             surfaceHandles = app.validLayerSurfaces(layerIndex);
             for tileIndex = 1:numel(tiles)
-                tileLayer = app.tilePreviewLayer( ...
-                    layerIndex, tiles(tileIndex), updateTexture, maxMeshVertices);
-                mesh = app.buildInstrumentedLayerMesh( ...
-                    tileLayer, tileLayer.CurrentProjectionPlane);
-                app.updatePreviewSurfaceHandle( ...
-                    surfaceHandles(tileIndex), layerIndex, mesh, updateTexture);
+                tileData = app.preparedPreviewTileData( ...
+                    layerIndex, tiles(tileIndex), maxMeshVertices);
+                app.updatePreviewTileSurface( ...
+                    surfaceHandles(tileIndex), layerIndex, ...
+                    tileData, updateTexture);
             end
             app.PreviewTiles{layerIndex} = tiles;
+            app.PreviewTileKeys{layerIndex} = app.previewTileKeys(tiles);
             if layerIndex == app.SelectedLayerIndex
                 app.Surface = app.primarySurfaceForLayer(layerIndex);
             end
@@ -3376,6 +3526,9 @@ classdef ProjectionViewerApp < handle
             if ~isempty(app.PreviewTiles) && layerIndex <= numel(app.PreviewTiles)
                 app.PreviewTiles{layerIndex} = ProjectionPreviewPyramid.emptyTiles();
             end
+            if ~isempty(app.PreviewTileKeys) && layerIndex <= numel(app.PreviewTileKeys)
+                app.PreviewTileKeys{layerIndex} = strings(1, 0);
+            end
         end
 
         function deleteSurfaceHandles(app, surfaceHandles)
@@ -3385,6 +3538,90 @@ classdef ProjectionViewerApp < handle
             app.PerformanceMonitor.increment( ...
                 "SurfaceDeletions", numel(surfaceHandles));
             delete(surfaceHandles);
+        end
+
+        function surfaceHandle = acquirePreviewTileSurface( ...
+                app, layerIndex, tileData)
+            app.PreviewSurfacePool = app.validPreviewSurfacePool();
+            mesh = app.previewTileAppearanceMesh(tileData.Mesh, layerIndex);
+            if isempty(app.PreviewSurfacePool)
+                app.PerformanceMonitor.increment("SurfacePoolMisses");
+                surfaceHandle = app.createPreviewSurface( ...
+                    layerIndex, mesh, tileData.DisplayTexture, ...
+                    "ProjectionViewerPreviewTileSurface");
+                return
+            end
+
+            app.PerformanceMonitor.increment("SurfacePoolHits");
+            surfaceHandle = app.PreviewSurfacePool(end);
+            app.PreviewSurfacePool(end) = [];
+            surfaceHandle.Visible = "off";
+            surfaceHandle.Tag = "ProjectionViewerPreviewTileSurface";
+            surfaceHandle.ContextMenu = app.ImageContextMenu;
+            displayTexture = app.previewTextureForLayer( ...
+                tileData.DisplayTexture, layerIndex);
+            surfaceHandle.CData = displayTexture;
+            app.PerformanceMonitor.increment( ...
+                "TextureUploadBytes", app.arrayBytes(displayTexture));
+            app.updatePreviewSurfaceHandle( ...
+                surfaceHandle, layerIndex, mesh, false);
+        end
+
+        function updatePreviewTileSurface(app, surfaceHandle, layerIndex, ...
+                tileData, updateTexture)
+            mesh = app.previewTileAppearanceMesh(tileData.Mesh, layerIndex);
+            if updateTexture
+                displayTexture = app.previewTextureForLayer( ...
+                    tileData.DisplayTexture, layerIndex);
+                surfaceHandle.CData = displayTexture;
+                app.PerformanceMonitor.increment( ...
+                    "TextureUploadBytes", app.arrayBytes(displayTexture));
+            end
+            app.updatePreviewSurfaceHandle( ...
+                surfaceHandle, layerIndex, mesh, false);
+        end
+
+        function mesh = previewTileAppearanceMesh(app, mesh, layerIndex)
+            layer = app.Scene.layers(layerIndex);
+            mesh.Alpha = layer.Alpha;
+            mesh.Visible = layer.Visible;
+        end
+
+        function retirePreviewTileSurfaces(app, surfaceHandles)
+            surfaceHandles = surfaceHandles(isgraphics(surfaceHandles));
+            if isempty(surfaceHandles)
+                return
+            end
+            app.PreviewSurfacePool = app.validPreviewSurfacePool();
+            availableCount = max(0, app.PreviewSurfacePoolMaxCount - ...
+                numel(app.PreviewSurfacePool));
+            pooledCount = min(numel(surfaceHandles), availableCount);
+            pooledHandles = surfaceHandles(1:pooledCount);
+            if ~isempty(pooledHandles)
+                set(pooledHandles, "Visible", "off", ...
+                    "Tag", "ProjectionViewerPooledTileSurface");
+                set(pooledHandles, "UserData", "");
+                app.PreviewSurfacePool = ...
+                    [app.PreviewSurfacePool pooledHandles];
+                app.PerformanceMonitor.increment( ...
+                    "SurfacePoolRetirements", pooledCount);
+            end
+            app.deleteSurfaceHandles(surfaceHandles(pooledCount + 1:end));
+        end
+
+        function surfaceHandles = validPreviewSurfacePool(app)
+            surfaceHandles = app.PreviewSurfacePool;
+            surfaceHandles = surfaceHandles(isgraphics(surfaceHandles));
+        end
+
+        function clearPreviewTileRuntimeCache(app)
+            if ~isempty(app.PreviewTileDataCache) && ...
+                    isvalid(app.PreviewTileDataCache)
+                app.PreviewTileDataCache.clear();
+            end
+            pool = app.validPreviewSurfacePool();
+            app.deleteSurfaceHandles(pool);
+            app.PreviewSurfacePool = gobjects(0);
         end
 
         function recordAppliedPreviewLevel(app, layerIndex, tiles)
@@ -4285,6 +4522,7 @@ classdef ProjectionViewerApp < handle
                 app.Scene.layers(1).BaseProjectionPlane, ...
                 deg2rad(tipDegrees), deg2rad(tiltDegrees));
             tileMeshVertexLimit = app.previewTileMeshVertexLimit(meshSamplings);
+            app.invalidatePreviewGeometry(1:numel(app.Scene.layers));
 
             for layerIndex = 1:numel(app.Scene.layers)
                 layer = app.Scene.layers(layerIndex);
@@ -4326,6 +4564,7 @@ classdef ProjectionViewerApp < handle
             end
 
             plane = app.currentProjectionPlane();
+            app.invalidatePreviewGeometry(1:numel(app.Scene.layers));
             for layerIndex = 1:numel(app.Scene.layers)
                 layer = app.Scene.layers(layerIndex);
                 layer.CurrentProjectionPlane = plane;
@@ -4613,6 +4852,24 @@ classdef ProjectionViewerApp < handle
             value = double(value);
         end
 
+        function value = validatePositiveIntegerOption(~, value, name)
+            if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || ...
+                    value < 1 || fix(value) ~= value
+                error("ProjectionViewerApp:invalidPreviewCacheOptions", ...
+                    "%s must be a positive integer.", name);
+            end
+            value = double(value);
+        end
+
+        function value = validateNonnegativeIntegerOption(~, value, name)
+            if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || ...
+                    value < 0 || fix(value) ~= value
+                error("ProjectionViewerApp:invalidPreviewCacheOptions", ...
+                    "%s must be a nonnegative integer.", name);
+            end
+            value = double(value);
+        end
+
         function resetView(app)
             app.cancelCameraReconciliation();
             app.Scene = app.ResetScene;
@@ -4730,8 +4987,12 @@ classdef ProjectionViewerApp < handle
                 app.PreviewPyramids(fliplr(swapIndices));
             app.PreviewGeometryCaches(swapIndices) = ...
                 app.PreviewGeometryCaches(fliplr(swapIndices));
+            app.PreviewGeometryGenerations(swapIndices) = ...
+                app.PreviewGeometryGenerations(fliplr(swapIndices));
             app.PreviewTiledLayerMask(swapIndices) = ...
                 app.PreviewTiledLayerMask(fliplr(swapIndices));
+            app.PreviewTileKeys(swapIndices) = ...
+                app.PreviewTileKeys(fliplr(swapIndices));
             app.PreviewCurrentLevelIndices(swapIndices) = ...
                 app.PreviewCurrentLevelIndices(fliplr(swapIndices));
             app.PreviewDesiredLevelIndices(swapIndices) = ...
@@ -4748,6 +5009,7 @@ classdef ProjectionViewerApp < handle
                 app.PreviewPredictedVisibleTileCounts(fliplr(swapIndices));
             app.PreviewPredictedTextureBytes(swapIndices) = ...
                 app.PreviewPredictedTextureBytes(fliplr(swapIndices));
+            app.PreviewTileDataCache.clear();
             app.SelectedLayerIndex = targetIndex;
             app.refreshProjectionSurfaces(app.DefaultMeshSampling);
             app.updateLayerDropDownItems();
@@ -4917,6 +5179,9 @@ classdef ProjectionViewerApp < handle
             runtime.LodPromoteThreshold = app.PreviewLodPromoteThreshold;
             runtime.LodDemoteThreshold = app.PreviewLodDemoteThreshold;
             runtime.ViewportHaloFraction = app.PreviewViewportHaloFraction;
+            runtime.TileDataCache = app.PreviewTileDataCache.diagnostics();
+            runtime.SurfacePoolCount = numel(app.validPreviewSurfacePool());
+            runtime.SurfacePoolLimit = app.PreviewSurfacePoolMaxCount;
         end
 
         function bytes = arrayBytes(~, value)

@@ -21,6 +21,7 @@ src/ProjectionPreviewPyramid.m  Display-only viewer preview pyramid/tile helper
 src/ProjectionPreviewTileGeometry.m Runtime-only cached tile footprint helper
 src/ProjectionReadbackRenderer.m Headless frame-camera readback prototype
 src/ProjectionViewerApp.m       Programmatic interactive preview app
+src/ProjectionViewerLruCache.m  Byte-bounded runtime prepared-tile cache
 src/ProjectionViewerPerformanceMonitor.m Bounded runtime viewer work metrics
 src/ProjectionViewerState.m     JSON-serializable viewer state and scene-apply helpers
 src/ProjectionAlignment*.m      Feature-based alignment models, matching, solving, and runner
@@ -180,7 +181,10 @@ The evaluation uses local prototype TIFFs when available and otherwise creates
 a deterministic single-channel fixture. Pass `UseSynthetic=true` to force the
 synthetic path. Slow, fast, and reversing LOD-boundary scenarios default to the
 `15.0`/`14.5` degree audit boundary and can be configured with
-`LodBoundaryAngles`. Machine-specific MAT/JSON/CSV output is written beneath
+`LodBoundaryAngles`. `DisplayTileSize`, `SyntheticLayerCount`, and
+`SyntheticPattern="constant"` support representative large single-channel
+tile-size experiments without large synthetic-pattern work arrays.
+Machine-specific MAT/JSON/CSV output is written beneath
 the ignored `artifacts/viewer_performance` directory. Timing values are reports,
 not pass/fail thresholds; automated tests assert structural work counts.
 
@@ -202,6 +206,23 @@ Cache keys cover the plane, OPK, projection offset, source identity/image size,
 render origin, and tile layout. `configurePreviewTiling` changes runtime display
 tile options and rebuilds only viewer data; exported backend imagery and viewer
 state remain unchanged.
+
+Visible tile sets update differentially: overlapping stable tile keys retain
+their graphics handles, entering tiles use a bounded prepared texture/mesh LRU,
+and departing handles move to a bounded hidden pool for reuse. The defaults are
+a `256 MiB` prepared-data cache and `64` pooled surfaces. Both are runtime-only
+and configurable for evaluation:
+
+```matlab
+app.configurePreviewCache(struct( ...
+    MaxBytes=256 * 1024^2, SurfacePoolMaxCount=64));
+```
+
+The local 100 MP single-channel comparison did not justify moving away from the
+provisional `1024` display tile side: `512` kept comparable warm interaction
+time but required four times as many candidates/surfaces in the measured zoomed
+view. Confirm `512` versus `1024` on the intended Windows/1080p/4K workload
+before changing the default.
 
 ## Projection Viewer Prototype
 

@@ -8,6 +8,7 @@ function [summary, app] = viewer_performance_evaluation(options)
 %
 %   [summary, app] = viewer_performance_evaluation(options) leaves the app
 %   open for inspection. Supported options are ImagePaths, SyntheticImageSize,
+%   SyntheticLayerCount, SyntheticPattern, DisplayTileSize,
 %   ScenarioIterations, LodBoundaryAngles, UseSynthetic, SceneOptions,
 %   OutputDirectory, WriteArtifacts, and KeepAppOpen.
 
@@ -28,6 +29,13 @@ launchTimer = tic;
 app = ProjectionViewerApp(scene);
 drawnow
 launchSeconds = toc(launchTimer);
+configurationTimer = tic;
+initialRuntime = app.performanceDiagnostics();
+if initialRuntime.Viewer.DisplayTileSize ~= options.DisplayTileSize
+    app.configurePreviewTiling(struct(TileSize=options.DisplayTileSize));
+    drawnow
+end
+previewConfigurationSeconds = toc(configurationTimer);
 if nargout < 2 && ~options.KeepAppOpen
     cleanup = onCleanup(@() delete(app));
 end
@@ -65,9 +73,11 @@ finalState = app.exportState();
 
 summary = struct();
 summary.Format = "ProjectionViewerPerformanceEvaluation";
-summary.Version = 1;
+summary.Version = 2;
 summary.Fixture = fixture;
 summary.LaunchSeconds = launchSeconds;
+summary.PreviewConfigurationSeconds = previewConfigurationSeconds;
+summary.DisplayTileSize = options.DisplayTileSize;
 summary.InitialDiagnostics = initialDiagnostics;
 summary.Scenarios = records;
 summary.FinalStateMatchesInitial = isequaln(finalState, initialState);
@@ -95,6 +105,9 @@ end
 defaults = struct();
 defaults.ImagePaths = strings(1, 0);
 defaults.SyntheticImageSize = [2048 2048];
+defaults.SyntheticLayerCount = 2;
+defaults.SyntheticPattern = "gradient";
+defaults.DisplayTileSize = 1024;
 defaults.ScenarioIterations = 6;
 defaults.LodBoundaryAngles = [15 14.5];
 defaults.UseSynthetic = false;
@@ -114,6 +127,12 @@ end
 defaults.ImagePaths = reshape(string(defaults.ImagePaths), 1, []);
 defaults.SyntheticImageSize = validatePositiveIntegerVector( ...
     defaults.SyntheticImageSize, "SyntheticImageSize", 2);
+defaults.SyntheticLayerCount = validatePositiveIntegerScalar( ...
+    defaults.SyntheticLayerCount, "SyntheticLayerCount");
+defaults.SyntheticPattern = string(validatestring( ...
+    string(defaults.SyntheticPattern), ["gradient", "constant"]));
+defaults.DisplayTileSize = validatePositiveIntegerScalar( ...
+    defaults.DisplayTileSize, "DisplayTileSize");
 defaults.ScenarioIterations = validatePositiveIntegerScalar( ...
     defaults.ScenarioIterations, "ScenarioIterations");
 defaults.LodBoundaryAngles = validatePositiveFiniteVector( ...
@@ -160,16 +179,26 @@ end
 
 rows = options.SyntheticImageSize(1);
 columns = options.SyntheticImageSize(2);
-[x, y] = meshgrid(uint32(1:columns), uint32(1:rows));
-firstImage = uint8(mod(3 * x + 5 * y, 256));
-secondImage = circshift(firstImage, [7 11]);
+if options.SyntheticPattern == "constant"
+    firstImage = zeros(rows, columns, "uint8");
+else
+    [x, y] = meshgrid(uint32(1:columns), uint32(1:rows));
+    firstImage = uint8(mod(3 * x + 5 * y, 256));
+end
+images = cell(1, options.SyntheticLayerCount);
+names = strings(1, options.SyntheticLayerCount);
+for layerIndex = 1:options.SyntheticLayerCount
+    images{layerIndex} = circshift(firstImage, ...
+        7 * (layerIndex - 1) * [1 1]);
+    names(layerIndex) = sprintf("synthetic_%d.tif", layerIndex);
+end
 scene = ProjectionViewerHarness.createSceneFromImages( ...
-    {firstImage, secondImage}, ...
-    ["synthetic_1.tif", "synthetic_2.tif"], options.SceneOptions);
+    images, names, options.SceneOptions);
 fixture = struct();
 fixture.Source = "synthetic";
 fixture.ImagePaths = strings(1, 0);
-fixture.ImageSizes = {imageSize(firstImage), imageSize(secondImage)};
+fixture.ImageSizes = cellfun(@imageSize, images, UniformOutput=false);
+fixture.Pattern = options.SyntheticPattern;
 end
 
 function trace = runScenario(app, name, options)
@@ -355,8 +384,9 @@ end
 
 function printSummary(summary)
 fprintf("Viewer performance evaluation\n");
-fprintf("  Fixture: %s, launch: %.3f s\n", ...
-    summary.Fixture.Source, summary.LaunchSeconds);
+fprintf("  Fixture: %s, tile: %d, launch/configure: %.3f/%.3f s\n", ...
+    summary.Fixture.Source, summary.DisplayTileSize, ...
+    summary.LaunchSeconds, summary.PreviewConfigurationSeconds);
 for k = 1:numel(summary.Scenarios)
     record = summary.Scenarios(k);
     counters = record.Diagnostics.Counters;

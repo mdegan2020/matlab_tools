@@ -47,6 +47,15 @@ classdef ProjectionPreviewPyramid
             tiles = ProjectionPreviewPyramid.makeEmptyTiles();
         end
 
+        function key = tileKey(tile)
+            %tileKey Return a stable display-tile identity.
+            tile = ProjectionPreviewPyramid.validateTile(tile);
+            key = string(sprintf("L%d_R%d-%d_C%d-%d", ...
+                tile.LevelIndex, tile.LevelRowLimits(1), ...
+                tile.LevelRowLimits(2), tile.LevelColumnLimits(1), ...
+                tile.LevelColumnLimits(2)));
+        end
+
         function pyramid = build(imageData, options)
             %build Construct a decimated display pyramid.
             if nargin < 2

@@ -57,6 +57,22 @@ classdef ProjectionPreviewPyramidTest < matlab.unittest.TestCase
             testCase.verifyEqual(meshSampling.ColumnStride, 3);
         end
 
+        function testTileKeyIsStableAndLevelSpecific(testCase)
+            pyramid = ProjectionPreviewPyramid.build( ...
+                uint8(zeros(16, 16)), struct(TileSize=4));
+            levelOneTiles = ProjectionPreviewPyramid.tileBounds(pyramid, 1, 4);
+            levelTwoTiles = ProjectionPreviewPyramid.tileBounds(pyramid, 2, 4);
+
+            firstKey = ProjectionPreviewPyramid.tileKey(levelOneTiles(1));
+            repeatedKey = ProjectionPreviewPyramid.tileKey(levelOneTiles(1));
+            adjacentKey = ProjectionPreviewPyramid.tileKey(levelOneTiles(2));
+            coarseKey = ProjectionPreviewPyramid.tileKey(levelTwoTiles(1));
+
+            testCase.verifyEqual(firstKey, repeatedKey);
+            testCase.verifyNotEqual(firstKey, adjacentKey);
+            testCase.verifyNotEqual(firstKey, coarseKey);
+        end
+
         function testSelectLevelUsesRequestedDownsample(testCase)
             imageData = uint8(zeros(64, 64));
             pyramid = ProjectionPreviewPyramid.build(imageData, ...
