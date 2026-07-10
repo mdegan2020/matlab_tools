@@ -169,6 +169,60 @@ Candidate solution:
 - Coalesce repeated wheel and drag events so only the newest request is used.
 - Refresh hidden layers only when they become visible.
 
+### 2A. LOD Promotion Is Early And Has No Hysteresis
+
+`ProjectionPreviewPyramid.selectLevel` selects the last pyramid downsample that
+is less than or equal to the requested downsample. With power-of-two levels,
+this creates a hard boundary: a requested downsample of `4.00` selects the
+4-times level, while `3.99` selects the 2-times level. An almost imperceptible
+zoom can therefore request about four times as many texture samples. There is
+no state or hysteresis to prevent immediate reversal when wheel input moves
+back and forth around the boundary.
+
+A local synthetic `10000 x 10000` single-channel `uint8` scene reproduced the
+cliff. The following values are warm measurements and should be treated as
+structural evidence, not portable timing targets:
+
+| Direction | Camera angle | LOD | Visible tiles | Texture samples | Refresh time |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Zoom in | 15.0 degrees | 8-times | 2 | 1.28 MP | 57.6 ms |
+| Zoom in | 14.5 degrees | 4-times | 6 | 5.12 MP | 132.4 ms |
+| Zoom out | 14.5 degrees | 4-times | 6 | 5.12 MP | 132.5 ms |
+| Zoom out | 15.0 degrees | 8-times | 2 | 1.28 MP | 71.6 ms |
+
+The transition is immediate in both directions. In this case it multiplied
+texture samples by four, tripled the surface count, and more than doubled the
+measured reconciliation time even though the view changed by only half a
+degree. Single-channel source tiles are currently expanded to RGB for graphics,
+so their uploaded `CData` byte count is about three times the source byte count.
+
+Candidate solution:
+
+1. Make LOD selection stateful per layer rather than deriving it independently
+   for every event.
+2. During continuous wheel input, apply the camera change immediately, retain
+   the current LOD while its halo still covers the view, and record only the
+   latest desired LOD.
+3. Reconcile once after approximately `100-150 ms` of input quiet. Make this
+   interval configurable and tune it with the benchmark harness.
+4. Add asymmetric promotion/demotion thresholds. A reasonable starting policy
+   uses `desiredDownsample / currentLevelDownsample` as level texels per screen
+   pixel: promote to a finer level below `0.75`, and demote to a coarser level
+   above `1.75`. These are proposed starting values, not fixed API constants.
+5. Keep the previous level visible until entering surfaces for the new level
+   have been prepared or reassigned. Do not expose a blank intermediate frame.
+6. Use per-axis source-to-screen scale for the final decision. The current
+   area/geometric-mean estimate can hide an undersampled axis under oblique or
+   anisotropic projection.
+7. Include predicted visible tile count, surface count, and prepared-texture
+   bytes as a cost guard. A finer level should not be promoted merely because a
+   mathematical boundary was crossed when it provides no perceptible benefit.
+
+Direct strided pyramid sampling can alias or shimmer when a coarser level is
+magnified. The delayed schedule must therefore be evaluated together with
+antialiased pyramid generation and image-quality fixtures; hysteresis is not a
+license to leave a visibly pixelated level on screen after interaction settles.
+
 ### 3. `drawnow limitrate` And Event Backlog
 
 Several interaction paths use `drawnow limitrate`. MATLAB documents that this
@@ -301,13 +355,58 @@ the original image storage. A `30000 x 20000` RGB `uint8` source is about
 `1.8 GB`, so its additional decimated levels approach `0.6 GB` per layer before
 graphics textures and caches.
 
+The pyramid levels are also created by direct row/column striding rather than
+an antialiased reduction filter. This is fast to build but increases the risk
+of aliasing and visible shimmer near an LOD boundary. It makes perceptual
+validation especially important before delaying fine-level promotion.
+
+The single-channel path currently calls `repmat` to prepare an RGB display
+texture. A full `1024 x 1024` `uint8` source tile is about `1.05 MB`, but its
+graphics `CData` is about `3.15 MB`. For the intended 100-150 MP grayscale use
+case, that conversion increases preparation work, cache pressure, and texture
+upload volume without adding source information.
+
+The current `1024`-pixel tile side is a reasonable provisional default, but the
+available measurements do not establish it as optimal. A simplified two-layer
+renderer found only small, noisy alpha/roll differences between `256`, `512`,
+`1024`, and `2048` tiles. The more decisive current cost is candidate scanning:
+
+| Full-resolution image | Tile side | Candidate tiles | RGB bytes/full tile |
+| --- | ---: | ---: | ---: |
+| `10000 x 10000` | 512 | 400 | 0.79 MB |
+| `10000 x 10000` | 1024 | 100 | 3.15 MB |
+| `10000 x 10000` | 2048 | 25 | 12.58 MB |
+| `15000 x 10000` | 512 | 600 | 0.79 MB |
+| `15000 x 10000` | 1024 | 150 | 3.15 MB |
+| `15000 x 10000` | 2048 | 40 | 12.58 MB |
+
+Candidate tiles are currently scanned and given temporary geometry even when
+they are not visible. Moving directly to `512` would therefore multiply that
+selection work by about four before cached/vectorized visibility and
+differential surface reuse are available. `256` is likely too object-heavy as a
+general default, while `2048` risks excessive offscreen fetch and large RGB
+uploads. Keep `1024` as the default until Packs 3 and 4 remove those confounding
+costs, then compare `512` and `1024` on representative high-end Windows systems.
+
 Candidate solution:
 
 - Keep preview image access behind a runtime-only region provider.
 - Build only the levels currently useful for the initial view, then populate
   finer/coarser levels lazily.
+- Produce antialiased reduced levels, with a documented filter and edge policy,
+  when visual testing shows direct striding is inadequate.
 - Use `blockedImage` or an equivalent `ReadRegionFcn` for file-backed imagery.
 - Maintain a bounded LRU cache of decoded/prepared preview tiles.
+- Prototype a single-channel display path that can retain two-dimensional
+  intensity `CData` when scene/colormap constraints permit it. Otherwise cache
+  prepared RGB tiles so `repmat` is not repeated for the same tile.
+- Keep source-storage block geometry independent of display tile geometry.
+  File-backed reads should respect the TIFF/block organization without forcing
+  the graphics layer to use the same tile side.
+- After cached visibility and surface reuse land, evaluate an automatic display
+  tile policy targeting roughly 4-12 visible tiles per layer, subject to a
+  global graphics-object and texture-byte budget. Treat `512` versus `1024` as
+  the first target-hardware comparison rather than assuming smaller is faster.
 - Keep the full source image or source descriptor available to the backend.
 - Never export preview pyramid levels as backend inputs.
 
@@ -602,8 +701,11 @@ Deliverables:
 - Local ignored output under `artifacts/viewer_performance/`.
 - Counters/timings for frame requests, rendered frames, dropped/coalesced
   requests, tile candidates, tile cache hits/misses, mesh builds, surface
-  creations/deletions, and visible texture pixels.
+  creations/deletions, LOD transitions, visible texture pixels, and prepared
+  texture bytes.
 - Scenarios for alpha, crosshair, twist, pan, zoom, WASD, and OPK interaction.
+- A repeatable slow/fast/reversing zoom scenario across a known power-of-two
+  LOD boundary.
 - A compact diagnostic struct suitable for tests and manual comparison.
 
 Acceptance criteria:
@@ -650,8 +752,14 @@ Deliverables:
 
 - A single latest-state-wins preview scheduler.
 - Immediate camera-only updates for twist, pan, and zoom.
-- Deferred tile/LOD reconciliation after interaction settles.
+- Per-layer current, desired, and pending LOD state kept in runtime-only app
+  state.
+- Deferred tile/LOD reconciliation after a configurable initial `100-150 ms`
+  quiet period.
+- Configurable asymmetric LOD hysteresis, initially evaluating promotion below
+  `0.75` and demotion above `1.75` level texels per screen pixel.
 - A prefetched viewport halo and clear settle/finalize behavior.
+- Retention of the current level until replacement tiles are ready.
 - No stale event queue after fast slider or mouse input.
 
 Acceptance criteria:
@@ -659,7 +767,12 @@ Acceptance criteria:
 - Twist `ValueChanging` does not build layer or tile-probe meshes.
 - Camera pan does not create/delete surfaces while the current halo covers the
   viewport.
+- Continuous wheel input inside the halo performs no LOD surface replacement
+  and produces at most one replacement after the final settle interval.
+- Reversing zoom around a power-of-two boundary does not immediately oscillate
+  between adjacent levels.
 - The final settled view selects the correct tiles and LOD.
+- LOD transitions do not expose a blank frame while new tiles are prepared.
 - The final viewer state exactly reflects the last requested value.
 - Crosshair and alignment overlays remain correctly registered.
 
@@ -676,7 +789,11 @@ Deliverables:
 - Cached layer extents and tile footprints.
 - Batched camera projection and visibility tests.
 - Hidden-layer exclusion.
-- Direct LOD estimation without repeated default-mesh builds.
+- Direct per-axis LOD estimation without repeated default-mesh builds.
+- Predicted candidate count, visible tile/surface count, and prepared-texture
+  bytes for each candidate LOD.
+- Instrumented, configurable display tile size while retaining `1024` as the
+  provisional default.
 - Cache invalidation for plane, OPK, offset, image size, and tile layout changes.
 
 Acceptance criteria:
@@ -685,6 +802,9 @@ Acceptance criteria:
 - Camera basis/view state is queried once per refresh rather than once per tile.
 - Visibility results match the current implementation on deterministic scenes.
 - Cache invalidation tests prevent stale footprints after geometry changes.
+- LOD diagnostics expose per-axis source-to-screen scale and the estimated work
+  that informed the level choice.
+- Changing tile size does not change projected coverage or backend inputs.
 
 Suggested commit:
 
@@ -699,6 +819,10 @@ Deliverables:
 - Stable tile keys.
 - Surface-handle reuse for overlapping tile sets.
 - Bounded prepared-texture and mesh LRU cache.
+- Differential level transitions that keep the old LOD visible until entering
+  surfaces for the new LOD have been assigned.
+- A target-hardware `512` versus `1024` tile-side benchmark after candidate
+  scanning and surface recreation are no longer dominant confounders.
 - Surface-pool cleanup on app deletion and scene reset.
 
 Acceptance criteria:
@@ -706,6 +830,10 @@ Acceptance criteria:
 - A one-tile viewport shift preserves every overlapping surface handle.
 - Only entering tiles prepare/upload new texture data.
 - Cache memory remains below its configured budget.
+- An LOD transition reuses pooled handles where practical and never deletes the
+  complete old level before replacement coverage exists.
+- The recommended tile side is supported by measurements on representative
+  100-150 MP single-channel imagery, not only by synthetic object counts.
 - Reset and layer replacement cannot reuse stale tile data.
 
 Suggested commit:
@@ -745,6 +873,9 @@ Deliverables:
 - Coalesced alpha updates.
 - Exact-alpha-zero visibility behavior.
 - Interaction LOD and global object/texture budget.
+- An optional automatic display-tile policy, evaluated after Packs 3 and 4,
+  targeting roughly 4-12 visible tiles per layer without exceeding global
+  graphics-object or prepared-texture budgets.
 - Benchmark of per-layer surface consolidation or a texture atlas.
 
 Acceptance criteria:
@@ -766,7 +897,12 @@ Deliverables:
 
 - Lazy alignment-control creation.
 - Lazy or file-backed preview pyramid levels.
+- Antialiased pyramid reduction with documented sampling and edge semantics.
 - Bounded preview tile cache.
+- A single-channel texture prototype that avoids three-channel expansion when
+  MATLAB scene/colormap constraints allow it, with cached prepared RGB tiles as
+  the compatibility fallback.
+- Independent source-storage and display-tile geometry for file-backed images.
 - Startup and memory diagnostics.
 
 Acceptance criteria:
@@ -774,6 +910,12 @@ Acceptance criteria:
 - The alignment panel remains hidden by default and is functionally identical
   after first open.
 - Initial app launch does not create the large match/pair tables.
+- Deterministic visual fixtures show no unacceptable aliasing, shimmer, or
+  blank transition frames under the Pack 2 LOD schedule.
+- Repeated display of the same grayscale tile does not repeat `repmat` or an
+  equivalent full-tile RGB allocation.
+- Mixed single-band/RGB and arbitrary-band scenes retain correct display
+  behavior through an explicit fallback path.
 - Backend export continues to contain full source image data or source
   descriptors, never preview levels.
 
@@ -957,6 +1099,9 @@ Prefer deterministic counts and invariants:
 - camera-only operations do not call `SampleFcn`;
 - crosshair updates do not call `uistack` or touch surfaces;
 - alpha changes do not build meshes or change tile selection;
+- active wheel zoom inside the cached halo does not replace LOD surfaces;
+- one settled zoom sequence produces no more than one LOD transition;
+- zoom reversal inside the hysteresis band preserves the current LOD;
 - a one-tile viewport change creates only entering tile surfaces;
 - selected-layer changes do not rebuild other layers;
 - backend mesh/interpolant preparation count is independent of tile count;
@@ -972,12 +1117,19 @@ Prefer deterministic counts and invariants:
 - Full-source inverse-warp tests on analytically predictable scenes.
 - Multi-band warp consistency.
 - Preview pyramid/provider data never entering backend render input.
+- Antialiased pyramid fixtures with high-frequency, edge, and impulse patterns.
+- Single-channel display equivalence against the RGB-expanded compatibility
+  path within the viewer's documented display tolerance.
 
 ### Interaction Tests
 
 - Alpha fast drag and exact release.
 - Twist fast drag without stale updates.
 - Pan and zoom within/across the tile halo.
+- Slow and fast zoom across adjacent power-of-two LOD boundaries in both
+  directions, including reversal inside the hysteresis band.
+- LOD transition while multiple transparent layers are visible, checking that
+  old coverage remains until replacement coverage is ready.
 - Crosshair across imagery and controls.
 - WASD and Control-drag translation.
 - OPK keyboard and Alt-drag.
@@ -998,6 +1150,13 @@ app = runProjectionViewerPrototype(["test_data/10.tif", "test_data/102.tif"]);
 Exercise initial and zoomed views, record tile/surface counts, and compare the
 same interaction sequence before and after each pack.
 
+For the intended deployment profile, add a target-Windows benchmark matrix
+using representative 100 MP and 150 MP single-channel images. Include at least
+`512` and `1024` display tile sides, 1080p and 4K viewports where available,
+and one, two, and four visible layers. Report cold preparation separately from
+warm interaction. Do not select a default from a single renderer timing; include
+candidate scans, surfaces created/reused, texture bytes, and visual LOD quality.
+
 Run full validation after every completed pack:
 
 ```matlab
@@ -1017,8 +1176,14 @@ OS and hardware summary
 fixture dimensions and band counts
 visible layer count
 camera view angle
+current, desired, and pending LOD per visible layer
+per-axis level texels per screen pixel
+LOD transition and suppressed-transition counts
+settle delay and interaction duration
+display tile side and full-level candidate count
 visible tile/surface count
 visible texture pixels
+prepared/uploaded texture bytes, including grayscale-to-RGB expansion
 median and high-percentile frame time
 mesh and SampleFcn call counts
 surface create/delete counts
@@ -1057,8 +1222,20 @@ topology changes, and manual validation.
 Risk: delayed tile reconciliation or coarser LOD exposes blank edges or visible
 quality changes.
 
-Mitigation: viewport halo, minimum interaction quality, and immediate exact
-settle refresh.
+Mitigation: viewport halo, minimum interaction quality, asymmetric hysteresis,
+old-level retention until replacement coverage is ready, antialiased pyramid
+levels, visual fixtures, and an exact settled refresh.
+
+### Tile-Size Tuning Before Cost Removal
+
+Risk: selecting a smaller tile from current end-to-end timings increases
+candidate scanning and graphics-object churn, while selecting a larger tile
+increases offscreen reads and texture upload bytes.
+
+Mitigation: retain the provisional `1024` default through Packs 3 and 4,
+instrument both sides of the tradeoff, and compare `512` versus `1024` on the
+target Windows workload only after cached visibility and differential reuse are
+available. Keep source-storage blocks and display tiles independently tunable.
 
 ### Inverse-Warp Numerical Change
 
