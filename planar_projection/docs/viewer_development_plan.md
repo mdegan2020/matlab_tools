@@ -375,10 +375,21 @@ without MATLAB graphics. It currently supports:
 - deterministic output images.
 - configurable `OutputSize`.
 - interpolation values `"bilinear"` and `"nearest"`.
-- single-band and RGB outputs.
+- full-source inverse mapping from output points to source row/column positions.
+- single-band, RGB, and arbitrary-band outputs using one shared band warp.
 - visible-layer filtering.
 - alpha compositing.
 - red/blue anaglyph compositing.
+
+Backend/readback radiometry defaults to `fullSourceInverseWarp`; the historical
+`sparseIntensityScatteredInterpolant` mode is retained only as an explicit
+comparison oracle. Display pyramids and tiled preview data are never inputs to
+either mode.
+
+Alignment working images explicitly retain the historical sparse renderer as
+an alignment-only analysis policy. This prevents backend numerical-mode changes
+from silently changing GUI matching and safe-solve outcomes; alignment images
+never enter backend products.
 
 The readback helper is suitable for qualitative and unit-test validation. Large
 backend jobs use `ProjectionBackendTiledRenderer` through

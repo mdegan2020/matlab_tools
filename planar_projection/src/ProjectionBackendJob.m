@@ -277,6 +277,7 @@ classdef ProjectionBackendJob
             options.OutputSize = [];
             options.TileSize = [];
             options.Interpolation = "bilinear";
+            options.NumericalMode = "fullSourceInverseWarp";
             options.UseGPU = false;
             options.InvalidIntersectionPolicy = "error";
         end
@@ -297,6 +298,18 @@ classdef ProjectionBackendJob
                     ~any(options.Interpolation == ["bilinear", "nearest"])
                 error("ProjectionBackendJob:invalidRenderOptions", ...
                     "RenderOptions.Interpolation must be bilinear or nearest.");
+            end
+            numericalMode = lower(string(options.NumericalMode));
+            if ~isscalar(numericalMode) || ...
+                    ~ismember(numericalMode, ["fullsourceinversewarp", ...
+                    "sparseintensityscatteredinterpolant"])
+                error("ProjectionBackendJob:invalidRenderOptions", ...
+                    "RenderOptions.NumericalMode must be fullSourceInverseWarp or sparseIntensityScatteredInterpolant.");
+            end
+            if numericalMode == "fullsourceinversewarp"
+                options.NumericalMode = "fullSourceInverseWarp";
+            else
+                options.NumericalMode = "sparseIntensityScatteredInterpolant";
             end
             options.UseGPU = ProjectionBackendJob.validateLogicalScalar( ...
                 options.UseGPU, "RenderOptions.UseGPU");

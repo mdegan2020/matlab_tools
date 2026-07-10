@@ -69,9 +69,23 @@ result.RenderPlan
 result.Readback.RenderPlan
 ```
 
-The current numerical mode remains sparse-intensity scattered interpolation.
-Preview pyramids and display tiles are not plan inputs; backend source imagery
-remains the full `layer.Image` data.
+The default numerical mode is `fullSourceInverseWarp`: sparse geometry maps
+each output pixel to a continuous source row/column coordinate, then every band
+is sampled from full `layer.Image` with the requested nearest or bilinear
+policy. Preview pyramids, display textures, display tiles, and alignment working
+images are not plan inputs. The previous sparse-intensity renderer is available
+for explicit compatibility comparisons:
+
+```matlab
+jobOptions.RenderOptions.NumericalMode = ...
+    "sparseIntensityScatteredInterpolant";
+```
+
+Use `backend_inverse_warp_evaluation` to render both numerical modes over one
+deterministic output grid and report per-band and validity-mask differences.
+GUI/backend alignment working images independently retain their historical
+sparse analysis rendering so this backend default change does not alter match
+or safe-solve behavior; those images are never backend radiometric inputs.
 
 An alignment-enabled run reports `result.Status` as `"aligned"` or
 `"stateAppliedAligned"`, stores the alignment summary under `result.Alignment`,

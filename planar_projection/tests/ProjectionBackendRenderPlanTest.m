@@ -115,7 +115,7 @@ classdef ProjectionBackendRenderPlanTest < matlab.unittest.TestCase
             testCase.verifyFalse(isfield(summary, "Layers"));
             testCase.verifyFalse(contains(encoded, "InterpolantTemplate"));
             testCase.verifyTrue(contains(encoded, ...
-                "sparseIntensityScatteredInterpolant"));
+                "fullSourceInverseWarp"));
         end
 
         function testInvalidPlanIsRejected(testCase)

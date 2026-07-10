@@ -31,7 +31,9 @@ fine tiles can be read by region, and single-band tiled previews use scalar
 graphics data. The CPU raster-preview prototype is retained as an optional
 diagnostic; the optimized surface renderer remains the production default.
 Backend Performance Pack 0 now compiles reusable per-job mesh/interpolation
-plans and resolves GPU capability once. Backend Performance Pack 1 is next.
+plans and resolves GPU capability once. Backend Performance Pack 1 makes
+full-source inverse-warp radiometry the backend default while retaining the old
+sparse path as an explicit comparison mode. Backend Performance Pack 2 is next.
 
 Use the pack order in this document and commit and push each coherent, validated
 pack separately.
@@ -588,6 +590,13 @@ prototype, so it is a user-visible design checkpoint. Before implementation:
 - document boundary and invalid-region behavior;
 - define bilinear/nearest semantics precisely; and
 - retain the old path temporarily as a comparison oracle if useful.
+
+Resolved by Backend Performance Pack 1 on July 10, 2026. Full-source inverse
+sampling is the selected backend contract. The sparse-intensity mode remains
+available through explicit `RenderOptions.NumericalMode` selection. Backend
+compatibility measurement uses it as an oracle; the alignment-only working
+image renderer also requests it explicitly to preserve established match/solve
+behavior while backend radiometry changes independently.
 
 ### 4. Output Writing Copies And Normalizes Full Images
 
@@ -1201,9 +1210,8 @@ Viewer Performance Pack 8: Evaluate raster preview architecture
 
 ## Proposed Backend Performance Packs
 
-Backend performance packs should begin only after confirming the full-source
-inverse-warp contract. They are follow-up backend work, not new historical
-Backend Milestones 11+.
+The full-source inverse-warp contract is confirmed and implemented. These are
+follow-up backend work packs, not new historical Backend Milestones 11+.
 
 ### Backend Performance Pack 0: Compile Render Plan
 
@@ -1255,6 +1263,45 @@ Backend Performance Pack 0: Compile reusable render plans
 ```
 
 ### Backend Performance Pack 1: Full-Source Inverse Warp
+
+Status: complete on July 10, 2026.
+
+`ProjectionFullSourceInverseWarp` now prepares one piecewise-linear inverse
+geometry topology per layer, maps output projection-plane points to continuous
+source row/column coordinates, and samples every band from full `layer.Image`.
+Geometry mapping and radiometric sampling are separate public pure operations.
+All bands reuse exactly the same coordinate map.
+
+The coordinate map is valid only inside the sampled projected footprint and
+inside source bounds. Coordinates within `1e-9 * max(image dimension)` of a
+source edge are clamped to the edge to absorb floating-point noise; other
+points are invalid. `nearest` uses nearest-neighbor radiometric sampling at the
+continuous coordinate, while `bilinear` uses linear interpolation over the
+four neighboring source samples. A non-finite sample in any band invalidates
+that output pixel, and the configured invalid fill is applied consistently to
+every band in the per-layer readback. Composite invalid pixels retain the
+existing zero-background blend behavior.
+
+`RenderOptions.NumericalMode` now defaults to `fullSourceInverseWarp`.
+`sparseIntensityScatteredInterpolant` remains an explicit compatibility mode
+for backend jobs and is never selected implicitly. The alignment working-image
+renderer explicitly retains its historical sparse mode so Pack 1 does not alter
+GUI matching or safe-solve outcomes; those images remain alignment-only and are
+never backend inputs. Neither mode reads `DisplayTexture`, preview pyramids, or
+display tiles. Plan/readback/metadata summaries record the selected numerical
+mode.
+
+Deterministic tests cover identity, exact one-pixel projection translation,
+fractional nearest and bilinear sampling, OPK coordinate changes, oblique
+projection geometry, invalid borders/fill, single-band, RGB, and four-band
+imagery. A coarse-mesh checkerboard fixture proves that full-source mode
+preserves radiometry absent from the sparse mesh samples. The compatibility
+harness `scripts/backend_inverse_warp_evaluation.m` renders both modes on one
+grid and reports per-band MAE/RMSE/p95/max plus mask disagreement. On its local
+default stride-16 synthetic fixture, full-source/sparse times were about
+`61.6/29.7 ms`, masks agreed, and normalized MAE was about `0.216`; the large
+difference is expected because the fixture intentionally places high-frequency
+detail between geometry samples.
 
 Deliverables:
 
@@ -1567,8 +1614,8 @@ work, the recommended first sequence is:
 8. Viewer Performance Pack 7: lazy UI and preview storage.
 9. Viewer Performance Pack 8: raster preview prototype and decision.
 
-In parallel only at the planning/design level, confirm the backend full-source
-inverse-warp semantics. Then execute Backend Performance Packs 0-5 in order.
+Viewer Packs 0-8 and Backend Packs 0-1 are complete. Continue with Backend
+Performance Packs 2-5 in order.
 
 Do not mix the viewer quick wins and backend renderer rewrite into one commit.
 Each pack should remain independently reviewable, validated, and reversible.

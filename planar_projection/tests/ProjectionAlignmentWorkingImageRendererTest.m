@@ -26,6 +26,8 @@ classdef ProjectionAlignmentWorkingImageRendererTest < matlab.unittest.TestCase
             testCase.verifyEqual(working.LayerIndices, [1 2]);
             testCase.verifyEqual(working.ReferenceLayerIndex, 1);
             testCase.verifyEqual(working.OutputSize, [6 7]);
+            testCase.verifyEqual(working.NumericalMode, ...
+                "sparseIntensityScatteredInterpolant");
             testCase.verifyNumElements(working.LayerImages, 2);
             testCase.verifySize(working.LayerImages(1).Image, [6 7]);
             testCase.verifySize(working.LayerImages(2).Image, [6 7]);

@@ -24,6 +24,8 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
             testCase.verifyEmpty(job.RenderOptions.OutputSize);
             testCase.verifyEmpty(job.RenderOptions.TileSize);
             testCase.verifyEqual(job.RenderOptions.Interpolation, "bilinear");
+            testCase.verifyEqual(job.RenderOptions.NumericalMode, ...
+                "fullSourceInverseWarp");
             testCase.verifyFalse(job.RenderOptions.UseGPU);
             testCase.verifyEqual(job.RenderOptions.InvalidIntersectionPolicy, "error");
             testCase.verifyEqual(job.Output.Formats, ["tiff", "png"]);
@@ -75,6 +77,17 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
 
             testCase.verifyTrue(job.RenderOptions.UseGPU);
             testCase.verifyTrue(job.Execution.UseGPU);
+        end
+
+        function testValidationAcceptsSparseCompatibilityMode(testCase)
+            scene = ProjectionBackendJobTest.makeScene();
+            job = struct(Scene=scene, RenderOptions=struct( ...
+                NumericalMode="sparseIntensityScatteredInterpolant"));
+
+            job = ProjectionBackendJob.validate(job);
+
+            testCase.verifyEqual(job.RenderOptions.NumericalMode, ...
+                "sparseIntensityScatteredInterpolant");
         end
 
         function testLiveJobInvocationReturnsValidatedContract(testCase)

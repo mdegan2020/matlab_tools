@@ -40,13 +40,26 @@ classdef ProjectionBackendRenderPlan
                 worldPoints = reshape(mesh.WorldPoints, 3, []);
                 meshPlaneCoordinates = PlanarProjection.worldToPlane( ...
                     worldPoints, plane);
-                sampledImage = layer.Image(mesh.RowIndices, mesh.ColumnIndices, :);
-                interpolant = scatteredInterpolant( ...
-                    meshPlaneCoordinates(1, :).', ...
-                    meshPlaneCoordinates(2, :).', ...
-                    zeros(size(meshPlaneCoordinates, 2), 1), ...
-                    ProjectionBackendRenderPlan.scatteredMethod( ...
-                    options.Interpolation), "none");
+                if options.NumericalMode == "fullSourceInverseWarp"
+                    inverseWarp = ProjectionFullSourceInverseWarp.prepare( ...
+                        mesh, plane, layer.SourceGeometry.ImageSize);
+                    interpolant = inverseWarp.InterpolantTemplate;
+                    sampledImage = [];
+                    sourceImage = layer.Image;
+                    bandCount = size(sourceImage, 3);
+                else
+                    inverseWarp = [];
+                    sampledImage = layer.Image( ...
+                        mesh.RowIndices, mesh.ColumnIndices, :);
+                    sourceImage = [];
+                    bandCount = size(sampledImage, 3);
+                    interpolant = scatteredInterpolant( ...
+                        meshPlaneCoordinates(1, :).', ...
+                        meshPlaneCoordinates(2, :).', ...
+                        zeros(size(meshPlaneCoordinates, 2), 1), ...
+                        ProjectionBackendRenderPlan.scatteredMethod( ...
+                        options.Interpolation), "none");
+                end
 
                 layerPlan = struct();
                 layerPlan.LayerIndex = layerIndex;
@@ -54,8 +67,10 @@ classdef ProjectionBackendRenderPlan
                 layerPlan.Mesh = mesh;
                 layerPlan.MeshPlaneCoordinates = meshPlaneCoordinates;
                 layerPlan.SampledImage = sampledImage;
-                layerPlan.BandCount = size(sampledImage, 3);
+                layerPlan.SourceImage = sourceImage;
+                layerPlan.BandCount = bandCount;
                 layerPlan.InterpolantTemplate = interpolant;
+                layerPlan.InverseWarp = inverseWarp;
                 layerPlan.Alpha = double(layer.Alpha);
                 layerPlan.Visible = logical(layer.Visible);
                 layerPlan.BlendMode = string(layer.BlendMode);
@@ -89,7 +104,7 @@ classdef ProjectionBackendRenderPlan
                 TopologyBuildCount=numel(layerIndices), ...
                 GpuResolutionCount=1, ...
                 CompileSeconds=toc(compileTimer));
-            plan.NumericalMode = "sparseIntensityScatteredInterpolant";
+            plan.NumericalMode = options.NumericalMode;
             ProjectionBackendRenderPlan.validate(plan);
         end
 
@@ -134,7 +149,8 @@ classdef ProjectionBackendRenderPlan
                     "Plan layers must match LayerIndices.");
             end
             requiredLayerFields = ["LayerIndex", "Plane", "Mesh", ...
-                "SampledImage", "BandCount", "InterpolantTemplate", ...
+                "SampledImage", "SourceImage", "BandCount", ...
+                "InterpolantTemplate", "InverseWarp", ...
                 "Alpha", "Visible", "BlendMode"];
             if any(~isfield(plan.Layers, requiredLayerFields)) || ...
                     ~all(arrayfun(@(value) isa( ...
@@ -147,6 +163,21 @@ classdef ProjectionBackendRenderPlan
                     double(plan.LayerIndices))
                 error("ProjectionBackendRenderPlan:invalidPlan", ...
                     "Plan layer indices are inconsistent.");
+            end
+            numericalMode = ProjectionBackendRenderPlan.validateNumericalMode( ...
+                plan.NumericalMode);
+            for layerIndex = 1:numel(plan.Layers)
+                if numericalMode == "fullSourceInverseWarp"
+                    ProjectionFullSourceInverseWarp.validate( ...
+                        plan.Layers(layerIndex).InverseWarp);
+                    if isempty(plan.Layers(layerIndex).SourceImage)
+                        error("ProjectionBackendRenderPlan:invalidPlan", ...
+                            "Full-source plan layers must retain source imagery.");
+                    end
+                elseif isempty(plan.Layers(layerIndex).SampledImage)
+                    error("ProjectionBackendRenderPlan:invalidPlan", ...
+                        "Sparse-reference plan layers must retain sampled imagery.");
+                end
             end
             requiredPreparationFields = ["MeshBuildCount", ...
                 "CompileMeshBuildCount", "ReusedMeshCount", ...
@@ -223,6 +254,7 @@ classdef ProjectionBackendRenderPlan
             defaults.InvalidFillValue = NaN;
             defaults.IncludeLayerReadbacks = true;
             defaults.UseGPU = false;
+            defaults.NumericalMode = "fullSourceInverseWarp";
             names = fieldnames(defaults);
             for k = 1:numel(names)
                 if isfield(options, names{k})
@@ -250,6 +282,9 @@ classdef ProjectionBackendRenderPlan
                 defaults.IncludeLayerReadbacks, "IncludeLayerReadbacks");
             defaults.UseGPU = ProjectionBackendRenderPlan.validateLogicalScalar( ...
                 defaults.UseGPU, "UseGPU");
+            defaults.NumericalMode = ...
+                ProjectionBackendRenderPlan.validateNumericalMode( ...
+                defaults.NumericalMode);
             options = defaults;
         end
 
@@ -329,6 +364,23 @@ classdef ProjectionBackendRenderPlan
                 method = "linear";
             else
                 method = "nearest";
+            end
+        end
+
+        function mode = validateNumericalMode(mode)
+            mode = lower(string(mode));
+            if ~isscalar(mode)
+                error("ProjectionBackendRenderPlan:invalidOptions", ...
+                    "NumericalMode must be a scalar string.");
+            end
+            switch mode
+                case "fullsourceinversewarp"
+                    mode = "fullSourceInverseWarp";
+                case "sparseintensityscatteredinterpolant"
+                    mode = "sparseIntensityScatteredInterpolant";
+                otherwise
+                    error("ProjectionBackendRenderPlan:invalidOptions", ...
+                        "NumericalMode must be fullSourceInverseWarp or sparseIntensityScatteredInterpolant.");
             end
         end
     end

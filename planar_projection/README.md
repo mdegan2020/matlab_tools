@@ -441,9 +441,20 @@ Output-grid meshes are reused, interpolation topology is prepared once per
 visible layer, and GPU capability is resolved once per job; every output tile
 then consumes the same plan. `result.RenderPlan`, validation output, readback,
 and JSON metadata contain only the serializable plan summary. The runtime plan's
-interpolation objects never enter scene/job serialization. Pack 0 deliberately
-retains the existing sparse-intensity numerical semantics; full-source inverse
-sampling is the next backend performance pack.
+interpolation objects never enter scene/job serialization.
+
+Backend radiometry defaults to `RenderOptions.NumericalMode =
+"fullSourceInverseWarp"`. Sparse geometry defines a piecewise-linear mapping
+from output points to continuous source row/column coordinates; nearest or
+bilinear sampling then reads every registered band from full `layer.Image`.
+`DisplayTexture`, preview pyramids, display tiles, and alignment working images
+are never backend inputs. The former
+`"sparseIntensityScatteredInterpolant"` mode remains available only as an
+explicit backend compatibility reference. The alignment working-image renderer
+also requests its historical sparse mode explicitly so backend Pack 1 does not
+change GUI match/solve behavior; alignment working images remain alignment-only
+and never enter backend rendering. Run `backend_inverse_warp_evaluation` to
+quantify the backend modes on a deterministic fixture.
 
 From an interactive app session:
 
