@@ -18,6 +18,7 @@ src/ProjectionSourceGeometry.m  Sparse source-geometry grid adapter
 src/ProjectionLayerManager.m    Multi-layer visibility and change-workflow helpers
 src/ProjectionMeshBuilder.m     Pure sampled projection mesh builder
 src/ProjectionPreviewPyramid.m  Display-only viewer preview pyramid/tile helper
+src/ProjectionPreviewTileGeometry.m Runtime-only cached tile footprint helper
 src/ProjectionReadbackRenderer.m Headless frame-camera readback prototype
 src/ProjectionViewerApp.m       Programmatic interactive preview app
 src/ProjectionViewerPerformanceMonitor.m Bounded runtime viewer work metrics
@@ -193,6 +194,14 @@ wait for a `120 ms` quiet period or an explicit final flush. The display-only
 LOD policy uses asymmetric promotion/demotion hysteresis and a viewport halo;
 it does not change backend inputs or serialized viewer state. The performance
 evaluation reports active and settled diagnostics separately.
+
+Tile visibility uses cached world footprints built from one shared
+tile-boundary mesh per pyramid level. Camera reconciliation projects all
+candidate footprints in one vectorized operation and skips hidden layers.
+Cache keys cover the plane, OPK, projection offset, source identity/image size,
+render origin, and tile layout. `configurePreviewTiling` changes runtime display
+tile options and rebuilds only viewer data; exported backend imagery and viewer
+state remain unchanged.
 
 ## Projection Viewer Prototype
 

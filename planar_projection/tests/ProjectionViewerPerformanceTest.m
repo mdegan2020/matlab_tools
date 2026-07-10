@@ -245,6 +245,149 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.verifyFalse(diagnostics.Viewer.CameraReconcilePending);
         end
 
+        function testSettledCameraRefreshUsesCachedVectorizedGeometry(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
+            app.resetPerformanceDiagnostics();
+
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=1));
+            app.flushPreviewUpdates();
+            diagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual(diagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual(diagnostics.Counters.GeometryCacheMisses, 0);
+            testCase.verifyGreaterThan( ...
+                diagnostics.Counters.GeometryCacheHits, 0);
+            testCase.verifyEqual(diagnostics.Counters.CameraStateQueries, 1);
+            testCase.verifyGreaterThan( ...
+                diagnostics.Counters.VectorizedTileTests, 0);
+            testCase.verifyGreaterThan( ...
+                diagnostics.Viewer.PredictedCandidateCounts, 0);
+            testCase.verifyGreaterThan( ...
+                diagnostics.Viewer.PredictedTextureBytes, 0);
+            testCase.verifySize( ...
+                diagnostics.Viewer.LevelTexelsPerScreenPixel, [1 2]);
+        end
+
+        function testHiddenTiledLayerIsExcludedFromCameraRefresh(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTwoTiledScene();
+            scene.layers(1).Visible = false;
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
+            app.resetPerformanceDiagnostics();
+
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=1));
+            app.flushPreviewUpdates();
+            diagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual( ...
+                diagnostics.Viewer.PredictedCandidateCounts(1), 0);
+            testCase.verifyGreaterThan( ...
+                diagnostics.Viewer.PredictedCandidateCounts(2), 0);
+            testCase.verifyEqual(diagnostics.Counters.CameraStateQueries, 1);
+            testCase.verifyEqual(diagnostics.Counters.MeshBuilds, 0);
+        end
+
+        function testGeometryCacheInvalidatesAfterProjectionChange(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            tipSlider = ProjectionViewerPerformanceTest.findSlider(fig, 2);
+            fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
+            tipSlider.Value = 2;
+            tipSlider.ValueChangedFcn(tipSlider, struct());
+            app.resetPerformanceDiagnostics();
+
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=1));
+            app.flushPreviewUpdates();
+            invalidatedDiagnostics = app.performanceDiagnostics();
+            app.resetPerformanceDiagnostics();
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=-1));
+            app.flushPreviewUpdates();
+            cachedDiagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual( ...
+                invalidatedDiagnostics.Counters.GeometryCacheMisses, 1);
+            testCase.verifyGreaterThan( ...
+                invalidatedDiagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual(cachedDiagnostics.Counters.GeometryCacheMisses, 0);
+            testCase.verifyEqual(cachedDiagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyGreaterThan( ...
+                cachedDiagnostics.Counters.GeometryCacheHits, 0);
+        end
+
+        function testDisplayTileSizeDoesNotChangeBackendInputs(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            stateBefore = app.exportState();
+            jobBefore = app.exportBackendJob(struct(RenderOptions=struct( ...
+                OutputSize=[4 5])));
+
+            options = app.configurePreviewTiling(struct(TileSize=512));
+            diagnostics = app.performanceDiagnostics();
+            stateAfter = app.exportState();
+            jobAfter = app.exportBackendJob(struct(RenderOptions=struct( ...
+                OutputSize=[4 5])));
+
+            testCase.verifyEqual(options.TileSize, 512);
+            testCase.verifyEqual(diagnostics.Viewer.DisplayTileSize, 512);
+            testCase.verifyEqual(stateAfter, stateBefore);
+            testCase.verifyEqual(jobAfter.Scene.layers.Image, ...
+                jobBefore.Scene.layers.Image);
+            testCase.verifyEqual(jobAfter.Scene.layers.Image, scene.layers.Image);
+        end
+
+        function testGeometryCacheInvalidatesForOpkAndProjectionOffset(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
+
+            fig.WindowKeyPressFcn(fig, struct(Key="i", Modifier="i"));
+            app.resetPerformanceDiagnostics();
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=1));
+            app.flushPreviewUpdates();
+            opkDiagnostics = app.performanceDiagnostics();
+
+            app.resetPerformanceDiagnostics();
+            fig.WindowKeyPressFcn(fig, struct(Key="w", Modifier="w"));
+            offsetDiagnostics = app.performanceDiagnostics();
+            app.resetPerformanceDiagnostics();
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=-1));
+            app.flushPreviewUpdates();
+            cachedOffsetDiagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual(opkDiagnostics.Counters.GeometryCacheMisses, 1);
+            testCase.verifyGreaterThan(opkDiagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyGreaterThanOrEqual( ...
+                offsetDiagnostics.Counters.GeometryCacheMisses, 1);
+            testCase.verifyGreaterThan(offsetDiagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual( ...
+                cachedOffsetDiagnostics.Counters.GeometryCacheMisses, 0);
+            testCase.verifyEqual(cachedOffsetDiagnostics.Counters.MeshBuilds, 0);
+        end
+
         function testEvaluationRunsAllScenariosAndRestoresState(testCase)
             options = struct(SyntheticImageSize=[64 64], ...
                 ScenarioIterations=2, UseSynthetic=true, ...
@@ -281,6 +424,16 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
                 ColumnStride=250, DisplayTextureMaxPixels=10000);
             scene = ProjectionViewerHarness.createSceneFromImage( ...
                 imageData, "large.tif", options);
+        end
+
+        function scene = makeTwoTiledScene()
+            imageData = zeros(2001, 2001, "uint8");
+            options = struct(GSD=0.01, NominalRange=1e6, ...
+                PlatformStepMeters=0.01, RowStride=250, ...
+                ColumnStride=250, DisplayTextureMaxPixels=10000);
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                {imageData, imageData}, ["large_1.tif", "large_2.tif"], ...
+                options);
         end
 
         function slider = findSlider(fig, column)

@@ -13,12 +13,14 @@ expected `15000 x 10000` through `30000 x 20000` source and output sizes.
 
 The audit and local measurements are complete. Performance implementation is in
 progress and was explicitly prioritized on July 10, 2026. Viewer Performance
-Packs 0-2 are complete: the app now exposes bounded runtime diagnostics and
+Packs 0-3 are complete: the app now exposes bounded runtime diagnostics and
 the repeatable evaluation harness exercises alpha, crosshair, twist, pan,
 slow/fast/reversing LOD-boundary zoom, WASD, and OPK scenarios. Crosshair motion
 is demand-activated and no longer restacks overlay lines during steady pointer
 movement. Camera interaction is latest-state scheduled with a settle timer,
-viewport halo, and stateful LOD hysteresis. Viewer Performance Pack 3 is next.
+viewport halo, and stateful LOD hysteresis. Tile visibility uses cached numeric
+footprints and one vectorized camera projection per refresh. Viewer Performance
+Pack 4 is next.
 
 Use the pack order in this document and commit and push each coherent, validated
 pack separately.
@@ -821,6 +823,23 @@ Viewer Performance Pack 2: Coalesce camera preview updates
 ```
 
 ### Viewer Performance Pack 3: Cached Vectorized Tile Visibility
+
+Status: complete on July 10, 2026.
+
+`ProjectionPreviewTileGeometry` now builds one shared tile-boundary mesh per
+pyramid level and stores numeric world footprints in a runtime-only cache. A
+camera reconciliation queries camera state once, estimates conservative
+per-axis LOD demand from the cached layer extent, projects every candidate tile
+in a vectorized operation, and skips hidden layers. Cache keys cover plane,
+OPK, projection offset, source identity/image size, render origin, and tile
+layout. Public `configurePreviewTiling` supports measured runtime tile-size
+experiments without changing serialized viewer state or backend imagery.
+
+On the local two-TIFF scene after ten coalesced twist changes, the settled
+refresh recorded one camera query, zero mesh builds, four geometry-cache hits,
+zero misses, and two vectorized candidate tests at the selected LOD. Diagnostics
+now report per-axis demand and predicted candidate, visible-tile, and texture
+byte costs.
 
 Deliverables:
 

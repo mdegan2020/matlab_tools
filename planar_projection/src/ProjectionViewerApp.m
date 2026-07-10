@@ -8,13 +8,18 @@ classdef ProjectionViewerApp < handle
         DefaultMeshSampling struct
         DragMeshSampling struct
         PreviewPyramids cell
+        PreviewGeometryCaches cell
         PreviewTilingOptions struct
         PreviewTiledLayerMask logical
         PreviewTiles cell
         PreviewCurrentLevelIndices double
         PreviewDesiredLevelIndices double
         PreviewDesiredDownsamples double
+        PreviewDesiredDownsamplesPerAxis double
         PreviewPendingLevelIndices double
+        PreviewPredictedCandidateCounts double
+        PreviewPredictedVisibleTileCounts double
+        PreviewPredictedTextureBytes double
         IsPreviewCameraReady logical = false
         ProjectionTipDegrees double = 0
         ProjectionTiltDegrees double = 0
@@ -351,6 +356,30 @@ classdef ProjectionViewerApp < handle
         function flushPreviewUpdates(app)
             %flushPreviewUpdates Apply the latest pending camera reconciliation.
             app.flushCameraReconciliation();
+        end
+
+        function options = configurePreviewTiling(app, overrides)
+            %configurePreviewTiling Set runtime-only display tiling options.
+            if nargin < 2
+                overrides = struct();
+            end
+            if isempty(overrides)
+                overrides = struct();
+            end
+            if ~isstruct(overrides) || ~isscalar(overrides)
+                error("ProjectionViewerApp:invalidPreviewTilingOptions", ...
+                    "Preview tiling overrides must be a scalar struct.");
+            end
+            merged = app.PreviewTilingOptions;
+            names = fieldnames(overrides);
+            for k = 1:numel(names)
+                merged.(names{k}) = overrides.(names{k});
+            end
+            options = ProjectionPreviewPyramid.defaultOptions(merged);
+            app.cancelCameraReconciliation();
+            app.initializePreviewPyramids(options);
+            app.rebuildSurfaces();
+            app.updateControlsFromSelectedLayer();
         end
     end
 
@@ -2840,16 +2869,26 @@ classdef ProjectionViewerApp < handle
             app.createSurface();
         end
 
-        function initializePreviewPyramids(app)
-            app.PreviewTilingOptions = ProjectionPreviewPyramid.defaultOptions();
+        function initializePreviewPyramids(app, options)
+            if nargin < 2
+                options = ProjectionPreviewPyramid.defaultOptions();
+            else
+                options = ProjectionPreviewPyramid.defaultOptions(options);
+            end
+            app.PreviewTilingOptions = options;
             layerCount = numel(app.Scene.layers);
             app.PreviewPyramids = cell(1, layerCount);
+            app.PreviewGeometryCaches = cell(1, layerCount);
             app.PreviewTiledLayerMask = false(1, layerCount);
             app.PreviewTiles = cell(1, layerCount);
             app.PreviewCurrentLevelIndices = ones(1, layerCount);
             app.PreviewDesiredLevelIndices = ones(1, layerCount);
             app.PreviewDesiredDownsamples = ones(1, layerCount);
+            app.PreviewDesiredDownsamplesPerAxis = ones(layerCount, 2);
             app.PreviewPendingLevelIndices = zeros(1, layerCount);
+            app.PreviewPredictedCandidateCounts = zeros(1, layerCount);
+            app.PreviewPredictedVisibleTileCounts = zeros(1, layerCount);
+            app.PreviewPredictedTextureBytes = zeros(1, layerCount);
             for layerIndex = 1:layerCount
                 pyramid = ProjectionPreviewPyramid.build( ...
                     app.Scene.layers(layerIndex).Image, ...
@@ -2862,6 +2901,7 @@ classdef ProjectionViewerApp < handle
                     app.PreviewCurrentLevelIndices(layerIndex) = 0;
                     app.PreviewDesiredLevelIndices(layerIndex) = 0;
                     app.PreviewDesiredDownsamples(layerIndex) = NaN;
+                    app.PreviewDesiredDownsamplesPerAxis(layerIndex, :) = NaN;
                 end
             end
         end
@@ -3023,7 +3063,7 @@ classdef ProjectionViewerApp < handle
                 pyramid, tile, maxMeshVertices);
         end
 
-        function tiles = previewTilesForLayer(app, layerIndex)
+        function tiles = previewTilesForLayer(app, layerIndex, cameraContext)
             pyramid = app.PreviewPyramids{layerIndex};
             if ~app.IsPreviewCameraReady
                 coarsestLevelIndex = numel(pyramid.Levels);
@@ -3037,18 +3077,20 @@ classdef ProjectionViewerApp < handle
                 app.PerformanceMonitor.increment("TileCandidates", numel(tiles));
                 return
             end
+            if nargin < 3 || isempty(cameraContext)
+                cameraContext = app.previewCameraContext();
+            end
 
-            startLevelIndex = app.previewLevelIndexForLayer(layerIndex);
+            startLevelIndex = app.previewLevelIndexForLayer( ...
+                layerIndex, cameraContext);
             maxVisibleTiles = app.PreviewTilingOptions.MaxVisibleTilesPerLayer;
             tiles = ProjectionPreviewPyramid.emptyTiles();
+            geometry = app.previewGeometryCacheForLayer(layerIndex);
 
             for levelIndex = startLevelIndex:numel(pyramid.Levels)
                 app.PreviewPendingLevelIndices(layerIndex) = levelIndex;
-                levelTiles = ProjectionPreviewPyramid.tileBounds( ...
-                    pyramid, levelIndex, app.PreviewTilingOptions.TileSize);
-                app.PerformanceMonitor.increment( ...
-                    "TileCandidates", numel(levelTiles));
-                tiles = app.visiblePreviewTiles(layerIndex, levelTiles);
+                tiles = app.visiblePreviewTiles( ...
+                    layerIndex, geometry, levelIndex, cameraContext);
                 if numel(tiles) <= maxVisibleTiles
                     return
                 end
@@ -3059,10 +3101,14 @@ classdef ProjectionViewerApp < handle
             end
         end
 
-        function levelIndex = previewLevelIndexForLayer(app, layerIndex)
+        function levelIndex = previewLevelIndexForLayer( ...
+                app, layerIndex, cameraContext)
             pyramid = app.PreviewPyramids{layerIndex};
-            desiredDownsample = app.previewDesiredDownsampleForLayer(layerIndex);
+            [desiredDownsample, desiredDownsamplesPerAxis] = ...
+                app.previewDesiredDownsampleForLayer(layerIndex, cameraContext);
             app.PreviewDesiredDownsamples(layerIndex) = desiredDownsample;
+            app.PreviewDesiredDownsamplesPerAxis(layerIndex, :) = ...
+                desiredDownsamplesPerAxis;
             desiredLevelIndex = ProjectionPreviewPyramid.selectLevel( ...
                 pyramid, desiredDownsample);
             app.PreviewDesiredLevelIndices(layerIndex) = desiredLevelIndex;
@@ -3082,63 +3128,106 @@ classdef ProjectionViewerApp < handle
             end
         end
 
-        function desiredDownsample = previewDesiredDownsampleForLayer(app, layerIndex)
-            layer = app.Scene.layers(layerIndex);
-            layer.MeshSampling = app.DefaultMeshSampling(layerIndex);
-            mesh = app.buildInstrumentedLayerMesh( ...
-                layer, layer.CurrentProjectionPlane);
-            [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
-            points = [X(:).'; Y(:).'; Z(:).'];
-
-            [rightVector, upVector] = app.cameraScreenBasis();
-            [viewWidth, viewHeight] = app.cameraViewWorldSize();
-            axesPosition = app.Axes.InnerPosition;
-            widthPixels = max(axesPosition(3), 1);
-            heightPixels = max(axesPosition(4), 1);
-            projectedWidth = max(rightVector.' * points) - ...
-                min(rightVector.' * points);
-            projectedHeight = max(upVector.' * points) - ...
-                min(upVector.' * points);
-            footprintPixels = max(projectedWidth / max(viewWidth, eps) * ...
-                widthPixels, 1) * max(projectedHeight / max(viewHeight, eps) * ...
-                heightPixels, 1);
-
-            imagePixels = prod(double(app.PreviewPyramids{layerIndex}.ImageSize));
-            desiredDownsample = max(1, sqrt(imagePixels / footprintPixels));
+        function [desiredDownsample, perAxis] = ...
+                previewDesiredDownsampleForLayer( ...
+                app, layerIndex, cameraContext)
+            geometry = app.previewGeometryCacheForLayer(layerIndex);
+            [projectedWidthPixels, projectedHeightPixels] = ...
+                ProjectionPreviewTileGeometry.projectedExtentPixels( ...
+                geometry, cameraContext);
+            imageSize = double(app.PreviewPyramids{layerIndex}.ImageSize);
+            perAxis = [imageSize(2) / projectedWidthPixels, ...
+                imageSize(1) / projectedHeightPixels];
+            desiredDownsample = max(1, min(perAxis));
         end
 
-        function tiles = visiblePreviewTiles(app, layerIndex, tiles)
-            if isempty(tiles)
+        function tiles = visiblePreviewTiles(app, layerIndex, geometry, ...
+                levelIndex, cameraContext)
+            [visibleMask, diagnostics] = ...
+                ProjectionPreviewTileGeometry.visibleMask( ...
+                geometry, levelIndex, cameraContext);
+            app.PerformanceMonitor.increment( ...
+                "TileCandidates", diagnostics.CandidateCount);
+            app.PerformanceMonitor.increment( ...
+                "VectorizedTileTests", diagnostics.CandidateCount);
+            app.PreviewPredictedCandidateCounts(layerIndex) = ...
+                diagnostics.CandidateCount;
+            app.PreviewPredictedVisibleTileCounts(layerIndex) = ...
+                diagnostics.VisibleCount;
+            app.PreviewPredictedTextureBytes(layerIndex) = ...
+                diagnostics.VisibleTexturePixels * 3 * ...
+                app.imageClassBytes(app.PreviewPyramids{layerIndex}.ImageClass);
+            tiles = geometry.Levels(levelIndex).Tiles(visibleMask);
+        end
+
+        function cameraContext = previewCameraContext(app)
+            app.PerformanceMonitor.increment("CameraStateQueries");
+            cameraPosition = campos(app.Axes).';
+            cameraTarget = camtarget(app.Axes).';
+            viewDirection = cameraTarget - cameraPosition;
+            viewDistance = norm(viewDirection);
+            viewDirection = viewDirection / viewDistance;
+            upVector = camup(app.Axes).';
+            upVector = upVector / norm(upVector);
+            rightVector = cross(viewDirection, upVector);
+            rightVector = rightVector / norm(rightVector);
+            axesPosition = app.Axes.InnerPosition;
+            viewHeight = 2 * viewDistance * tan( ...
+                deg2rad(app.Axes.CameraViewAngle) / 2);
+            viewWidth = viewHeight * max(axesPosition(3), 1) / ...
+                max(axesPosition(4), 1);
+
+            cameraContext = struct();
+            cameraContext.RightVector = rightVector;
+            cameraContext.UpVector = upVector;
+            cameraContext.Center = cameraTarget;
+            cameraContext.ViewWidth = viewWidth;
+            cameraContext.ViewHeight = viewHeight;
+            cameraContext.ViewportWidthPixels = max(axesPosition(3), 1);
+            cameraContext.ViewportHeightPixels = max(axesPosition(4), 1);
+            cameraContext.HaloFraction = app.PreviewViewportHaloFraction;
+        end
+
+        function geometry = previewGeometryCacheForLayer(app, layerIndex)
+            key = app.previewGeometryCacheKey(layerIndex);
+            entry = app.PreviewGeometryCaches{layerIndex};
+            if isstruct(entry) && isscalar(entry) && ...
+                    isfield(entry, "Key") && isequaln(entry.Key, key)
+                app.PerformanceMonitor.increment("GeometryCacheHits");
+                geometry = entry.Geometry;
                 return
             end
 
-            visibleMask = false(1, numel(tiles));
-            for tileIndex = 1:numel(tiles)
-                visibleMask(tileIndex) = app.previewTileOverlapsCameraView( ...
-                    layerIndex, tiles(tileIndex));
-            end
-            tiles = tiles(visibleMask);
+            app.PerformanceMonitor.increment("GeometryCacheMisses");
+            layer = app.Scene.layers(layerIndex);
+            plane = layer.CurrentProjectionPlane;
+            meshBuilderFcn = @(sampledLayer, sampledPlane, ~) ...
+                app.buildInstrumentedLayerMesh(sampledLayer, sampledPlane);
+            geometry = ProjectionPreviewTileGeometry.build( ...
+                layer, app.PreviewPyramids{layerIndex}, plane, ...
+                app.Scene.renderOrigin, app.PreviewTilingOptions.TileSize, ...
+                meshBuilderFcn);
+            app.PreviewGeometryCaches{layerIndex} = ...
+                struct(Key=key, Geometry=geometry);
         end
 
-        function tf = previewTileOverlapsCameraView(app, layerIndex, tile)
-            pyramid = app.PreviewPyramids{layerIndex};
+        function key = previewGeometryCacheKey(app, layerIndex)
             layer = app.Scene.layers(layerIndex);
-            layer.MeshSampling = ProjectionPreviewPyramid.tileMeshSampling(pyramid, tile, 2);
-            mesh = app.buildInstrumentedLayerMesh( ...
-                layer, layer.CurrentProjectionPlane);
-            [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
-            points = [X(:).'; Y(:).'; Z(:).'];
-
-            [rightVector, upVector] = app.cameraScreenBasis();
-            [viewWidth, viewHeight] = app.cameraViewWorldSize();
-            center = camtarget(app.Axes).';
-            screenX = rightVector.' * (points - center);
-            screenY = upVector.' * (points - center);
-            haloScale = 1 + app.PreviewViewportHaloFraction;
-            halfWidth = 0.5 * viewWidth * haloScale;
-            halfHeight = 0.5 * viewHeight * haloScale;
-            tf = max(screenX) >= -halfWidth && min(screenX) <= halfWidth && ...
-                max(screenY) >= -halfHeight && min(screenY) <= halfHeight;
+            plane = layer.CurrentProjectionPlane;
+            sourceGeometry = layer.SourceGeometry;
+            key = struct();
+            key.LayerName = string(layer.Name);
+            key.ImagePath = string(layer.ImagePath);
+            key.ImageSize = double(app.PreviewPyramids{layerIndex}.ImageSize);
+            key.ImageClass = app.PreviewPyramids{layerIndex}.ImageClass;
+            key.SourceImageSize = double(sourceGeometry.ImageSize);
+            key.SourceSampleFcn = sourceGeometry.SampleFcn;
+            key.Plane = [plane.P0(:); plane.basis(:); plane.VN(:)];
+            key.ViewVectorAngularOffsetsDegrees = ...
+                app.layerViewVectorAngularOffsetsDegrees(layer);
+            key.ProjectionOffsetMeters = app.layerProjectionOffset(layer);
+            key.RenderOrigin = app.Scene.renderOrigin(:);
+            key.TileSize = app.PreviewTilingOptions.TileSize;
         end
 
         function refreshTiledProjectionSurfaces(app)
@@ -3150,17 +3239,27 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
-            tiledLayerIndices = find(app.PreviewTiledLayerMask);
+            tiledLayerIndices = find(app.PreviewTiledLayerMask & ...
+                [app.Scene.layers.Visible]);
+            if isempty(tiledLayerIndices)
+                app.PerformanceMonitor.recordTiming( ...
+                    "TileRefreshSeconds", toc(refreshTimer));
+                return
+            end
+            cameraContext = app.previewCameraContext();
             for layerIndex = reshape(tiledLayerIndices, 1, [])
-                app.refreshTiledLayerSurfaces(layerIndex);
+                app.refreshTiledLayerSurfaces(layerIndex, cameraContext);
             end
             app.raiseCrosshairOverlay();
             app.PerformanceMonitor.recordTiming( ...
                 "TileRefreshSeconds", toc(refreshTimer));
         end
 
-        function refreshTiledLayerSurfaces(app, layerIndex)
-            tiles = app.previewTilesForLayer(layerIndex);
+        function refreshTiledLayerSurfaces(app, layerIndex, cameraContext)
+            if nargin < 3 || isempty(cameraContext)
+                cameraContext = app.previewCameraContext();
+            end
+            tiles = app.previewTilesForLayer(layerIndex, cameraContext);
             app.setTiledLayerSurfaces(layerIndex, tiles, false);
         end
 
@@ -3185,7 +3284,8 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
-            tiles = app.previewTilesForLayer(layerIndex);
+            cameraContext = app.previewCameraContext();
+            tiles = app.previewTilesForLayer(layerIndex, cameraContext);
             app.setTiledLayerSurfaces(layerIndex, tiles, true);
         end
 
@@ -4598,6 +4698,9 @@ classdef ProjectionViewerApp < handle
                 app.Scene.layers(layerIndex) = layer;
                 app.setLayerSurfaceVisible(layerIndex, layer.Visible);
             end
+            if app.usesTiledPreview(nextLayerIndex)
+                app.refreshTiledLayerSurfaces(nextLayerIndex);
+            end
             app.updateAllSurfaceBlendAppearance();
             app.SelectedLayerIndex = nextLayerIndex;
             app.updateControlsFromSelectedLayer();
@@ -4625,6 +4728,8 @@ classdef ProjectionViewerApp < handle
                 app.DragMeshSampling(fliplr(swapIndices));
             app.PreviewPyramids(swapIndices) = ...
                 app.PreviewPyramids(fliplr(swapIndices));
+            app.PreviewGeometryCaches(swapIndices) = ...
+                app.PreviewGeometryCaches(fliplr(swapIndices));
             app.PreviewTiledLayerMask(swapIndices) = ...
                 app.PreviewTiledLayerMask(fliplr(swapIndices));
             app.PreviewCurrentLevelIndices(swapIndices) = ...
@@ -4633,8 +4738,16 @@ classdef ProjectionViewerApp < handle
                 app.PreviewDesiredLevelIndices(fliplr(swapIndices));
             app.PreviewDesiredDownsamples(swapIndices) = ...
                 app.PreviewDesiredDownsamples(fliplr(swapIndices));
+            app.PreviewDesiredDownsamplesPerAxis(swapIndices, :) = ...
+                app.PreviewDesiredDownsamplesPerAxis(fliplr(swapIndices), :);
             app.PreviewPendingLevelIndices(swapIndices) = ...
                 app.PreviewPendingLevelIndices(fliplr(swapIndices));
+            app.PreviewPredictedCandidateCounts(swapIndices) = ...
+                app.PreviewPredictedCandidateCounts(fliplr(swapIndices));
+            app.PreviewPredictedVisibleTileCounts(swapIndices) = ...
+                app.PreviewPredictedVisibleTileCounts(fliplr(swapIndices));
+            app.PreviewPredictedTextureBytes(swapIndices) = ...
+                app.PreviewPredictedTextureBytes(fliplr(swapIndices));
             app.SelectedLayerIndex = targetIndex;
             app.refreshProjectionSurfaces(app.DefaultMeshSampling);
             app.updateLayerDropDownItems();
@@ -4680,6 +4793,9 @@ classdef ProjectionViewerApp < handle
             end
             layer.Visible = isVisible;
             app.Scene.layers(layerIndex) = layer;
+            if isVisible && app.usesTiledPreview(layerIndex)
+                app.refreshTiledLayerSurfaces(layerIndex);
+            end
             if app.layerVisibilityRequiresBlendRefresh(layerIndex)
                 app.updateAllSurfaceBlendAppearance();
             else
@@ -4775,10 +4891,20 @@ classdef ProjectionViewerApp < handle
             runtime.CurrentLevelIndices = currentLevelIndices;
             runtime.DesiredLevelIndices = app.PreviewDesiredLevelIndices;
             runtime.DesiredDownsamples = app.PreviewDesiredDownsamples;
+            runtime.DesiredDownsamplesPerAxis = ...
+                app.PreviewDesiredDownsamplesPerAxis;
             runtime.PendingLevelIndices = app.PreviewPendingLevelIndices;
             runtime.CurrentDownsamples = currentDownsamples;
+            runtime.LevelTexelsPerScreenPixel = ...
+                app.PreviewDesiredDownsamplesPerAxis ./ ...
+                max(currentDownsamples(:), eps);
             runtime.CurrentTileCounts = currentTileCounts;
             runtime.FullLevelCandidateCounts = fullLevelCandidateCounts;
+            runtime.PredictedCandidateCounts = ...
+                app.PreviewPredictedCandidateCounts;
+            runtime.PredictedVisibleTileCounts = ...
+                app.PreviewPredictedVisibleTileCounts;
+            runtime.PredictedTextureBytes = app.PreviewPredictedTextureBytes;
             runtime.VisibleSurfaceCount = visibleSurfaceCount;
             runtime.VisibleTileSurfaceCount = visibleTileSurfaceCount;
             runtime.VisibleTexturePixels = visibleTexturePixels;
@@ -4809,6 +4935,22 @@ classdef ProjectionViewerApp < handle
                     return
             end
             bytes = double(numel(value)) * bytesPerElement;
+        end
+
+        function bytes = imageClassBytes(~, imageClass)
+            switch string(imageClass)
+                case {"logical", "uint8", "int8"}
+                    bytes = 1;
+                case {"uint16", "int16"}
+                    bytes = 2;
+                case {"uint32", "int32", "single"}
+                    bytes = 4;
+                case {"uint64", "int64", "double"}
+                    bytes = 8;
+                otherwise
+                    error("ProjectionViewerApp:unsupportedImageClass", ...
+                        "Unsupported preview image class %s.", imageClass);
+            end
         end
 
         function frameTimer = beginPerformanceFrame(app)
