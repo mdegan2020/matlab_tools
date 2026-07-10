@@ -61,5 +61,5 @@ for modeIndex = 1:numel(summary.Modes)
         mode.RuntimeSeconds.Render, mode.RuntimeSeconds.Matching);
 end
 fprintf("Review artifacts: %s\n", artifacts.OutputDirectory);
-fprintf("Renderer default decision remains pending real-data user review.\n");
+fprintf("Selected alignment renderer default: fullSourceInverseWarp.\n");
 end

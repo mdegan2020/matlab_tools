@@ -83,9 +83,9 @@ jobOptions.RenderOptions.NumericalMode = ...
 
 Use `backend_inverse_warp_evaluation` to render both numerical modes over one
 deterministic output grid and report per-band and validity-mask differences.
-GUI/backend alignment working images independently retain their historical
-sparse analysis rendering so this backend default change does not alter match
-or safe-solve behavior; those images are never backend radiometric inputs.
+Alignment working images now independently default to full-source inverse warp
+after the Reliability Pack 2 truth-aware comparison. They remain bounded
+analysis products and are never backend radiometric inputs.
 
 An alignment-enabled run reports `result.Status` as `"aligned"` or
 `"stateAppliedAligned"`, stores the alignment summary under `result.Alignment`,

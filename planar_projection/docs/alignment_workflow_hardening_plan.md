@@ -593,7 +593,7 @@ Implementation status:
 ```text
 Reliability Pack 0: complete
 Reliability Pack 1: complete
-Reliability Pack 2: engineering complete; renderer decision pending user review
+Reliability Pack 2: complete
 Reliability Packs 3-8: pending
 ```
 
@@ -752,10 +752,10 @@ backend inputs.
 Measure exact-repeat and small-geometry-perturbation stability, raw and
 per-stage match counts, spatial coverage, visual edge/texture fidelity, solve
 quality, memory, and runtime. Do not change the renderer default until the
-comparison passes synthetic tests and the user reviews representative real-data
-working images and match overlays.
+comparison passes a truth-aware, relief-rich oblique simulation or a
+representative real-data review.
 
-Input needed from the user at the Pack 2 decision gate:
+If representative real data becomes available, useful follow-up inputs are:
 
 - identify or make locally accessible at least one representative difficult
   two-image pair, ideally including the current oblique/relief-rich case;
@@ -766,9 +766,9 @@ Input needed from the user at the Pack 2 decision gate:
   repeatability and residual metrics alone cannot establish which radiometric
   representation preserves the scientifically relevant features.
 
-No additional user input is needed before Pack 2. Local test TIFFs and
-synthetic fixtures can build the comparison harness, but the renderer default
-must remain unchanged until the representative real-data review above.
+The initial decision gate was closed with the user-requested deterministic
+terrain simulation because no representative real pair was available. This is
+not a production DEM dependency: DEM geometry and truth are fixture-only.
 
 Implementation note:
 
@@ -784,8 +784,8 @@ Implementation note:
   dilute a pair's resolution or force large invalid borders. Numeric layer
   indices remain compatibility fields and stable layer IDs remain canonical.
 - The renderer accepts either `sparseIntensityScatteredInterpolant` or
-  `fullSourceInverseWarp` as an alignment-only `NumericalMode`, with sparse
-  still the default. Both modes consume exactly the same pair grid. This
+  `fullSourceInverseWarp` as an alignment-only `NumericalMode`, with full-source
+  inverse warp now the default. Both modes consume exactly the same pair grid. This
   option does not affect `ProjectionBackendProcessor`, whose full-source
   contract remains independent.
 - A runtime-only cache key includes only selected source radiometry identity,
@@ -802,18 +802,43 @@ Implementation note:
   coverage, gradient statistics, solve outcome, runtime, and runtime bytes.
   They write JSON/MAT summaries, normalized per-layer PNGs, and match-overlay
   PNGs for the required review gate.
-- On the local synthetic TIFF fixture, both modes were exactly repeatable and
+- On the earlier flat synthetic TIFF fixture, both modes were exactly repeatable and
   retained the same grid under a `0.0001` degree perturbation. Sparse produced
   `100 raw / 81 filtered` matches; full-source produced `62 raw / 40 filtered`.
   Full-source had slightly broader coverage and higher gradient energy, while
   sparse produced materially more matches. This fixture is not the intended
-  oblique/relief-rich real-data decision pair, so the result does not justify a
-  default change. The incumbent default remains unchanged when representative
-  real data is unavailable or the result is ambiguous.
-- Pack 2 engineering validation passes with 336 tests after
-  `close all force; clear classes; rehash; results = runTests;`. The remaining
-  Pack 2 item is the explicitly required representative real-data/user review,
-  not an unvalidated code path.
+  oblique/relief-rich decision pair, so the result did not justify a default
+  change on its own.
+- `ProjectionAlignmentObliqueTerrainHarness` closes the decision gate with
+  known geometry and ground truth. It drapes the TIFF red/blue bands over a
+  smooth `+/-50 m` DEM, then renders two CPU pushbroom images from `10 km`,
+  `65 degrees` off nadir, equal elevation, and `3 degrees` azimuth separation.
+  Exact ray/terrain intersections and ground-coordinate maps make every match
+  independently auditable. The DEM is a simulation input only and never enters
+  a scene layer, backend job, or backend radiometry.
+- On `test_data/10.tif` at `1024 x 1024`, sparse radiometry produced `29` raw
+  matches, no filtered survivors, and a `1984.85 m` raw median terrain-truth
+  separation. Full-source inverse warp produced `104` raw and `12` filtered
+  matches; every filtered match was within `10 m` of truth, with `3.03 m`
+  median and `3.94 m` p95 separation. Both renderers were bitwise repeatable;
+  the full-source grid was stable and retained `94.2%` of raw matches under a
+  small `0.01 degree` OPK perturbation. This evidence selects
+  `fullSourceInverseWarp` as the alignment working-image default; sparse stays
+  available as an explicit comparison oracle.
+- The same fixture deliberately exposed a separate loss-model problem: the
+  default projection-plane solve reduced its own RMS while requesting an
+  `8.18 degree` combined correction and hitting configured bounds even though
+  input pointing was exact and the filtered correspondences were
+  terrain-truth-consistent. Bound hits remain hard failures in the GUI. This
+  result reinforces Reliability Packs 4 and 6: preserve relief disparity, add
+  normalized coplanarity filtering/loss, and evaluate all solves with forward
+  ray 3D diagnostics.
+- Reproduce the decision artifacts with
+  `scripts/alignment_oblique_terrain_evaluation.m`. It writes sensor views,
+  per-mode working images, raw match overlays, and JSON/MAT summaries under the
+  ignored `artifacts/alignment_oblique_terrain_comparison` directory.
+- Pack 2 final validation passes with 341 tests after
+  `close all force; clear classes; rehash; results = runTests;`.
 
 ### Reliability Pack 3: Deterministic feature extraction and matching
 

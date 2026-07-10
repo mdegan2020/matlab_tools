@@ -604,9 +604,10 @@ prototype, so it is a user-visible design checkpoint. Before implementation:
 Resolved by Backend Performance Pack 1 on July 10, 2026. Full-source inverse
 sampling is the selected backend contract. The sparse-intensity mode remains
 available through explicit `RenderOptions.NumericalMode` selection. Backend
-compatibility measurement uses it as an oracle; the alignment-only working
-image renderer also requests it explicitly to preserve established match/solve
-behavior while backend radiometry changes independently.
+compatibility measurement uses it as an oracle. Reliability Pack 2 later
+selected full-source inverse warp independently for alignment working images
+using a truth-aware oblique-terrain fixture; those bounded analysis images still
+never enter backend products.
 
 ### 4. Output Writing Copies And Normalizes Full Images
 

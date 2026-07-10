@@ -457,9 +457,29 @@ addpath("scripts");
 ```
 
 The comparison writes JSON/MAT metrics, normalized layer PNGs, and match-overlay
-PNGs. The alignment default remains `sparseIntensityScatteredInterpolant` until
-a representative oblique/relief-rich real pair is reviewed; backend radiometry
-continues to default independently to `fullSourceInverseWarp`.
+PNGs. Alignment working images now default to `fullSourceInverseWarp`; the
+historical sparse mode remains an explicit comparison oracle. This is an
+alignment-only choice and does not couple working images to backend products.
+
+The deterministic oblique-terrain decision fixture uses the red and blue bands
+of the local RGB test TIFF as separate rectified textures, drapes them over a
+smooth `+/-50 m` DEM, and renders two CPU pushbroom views at `10 km` range,
+`65 degrees` off nadir, and `3 degrees` azimuth separation:
+
+```matlab
+addpath("scripts");
+[scene, truth, comparison, artifacts] = ...
+    alignment_oblique_terrain_evaluation();
+```
+
+The default `1024 x 1024` run writes sensor views, working images, match
+overlays, and truth-aware JSON/MAT diagnostics under the ignored
+`artifacts/alignment_oblique_terrain_comparison` directory. On the selected
+test TIFF, full-source inverse warp produced `104` raw and `12` filtered
+matches; all filtered observations were within `10 m` of known terrain truth
+(`3.03 m` median, `3.94 m` p95). Sparse radiometry produced `29` raw matches,
+no filter survivors, and a `1.98 km` raw median truth separation. The DEM and
+all simulation truth remain fixture-only and never enter backend radiometry.
 
 Manual auto-alignment validation loop:
 

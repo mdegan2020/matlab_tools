@@ -395,13 +395,12 @@ Backend/readback radiometry defaults to `fullSourceInverseWarp`; the historical
 comparison oracle. Display pyramids and tiled preview data are never inputs to
 either mode.
 
-Alignment working images explicitly retain the historical sparse renderer as
-an alignment-only analysis policy. This prevents backend numerical-mode changes
-from silently changing GUI matching and safe-solve outcomes; alignment images
-never enter backend products. Real-Data Reliability Pack 2 will explicitly
-compare this policy with a full-source inverse-warp alignment renderer before
-any alignment default changes; that experiment does not relax the backend
-separation.
+Alignment working images default to `fullSourceInverseWarp` after the
+Reliability Pack 2 oblique-terrain comparison. The historical sparse renderer
+remains an explicit alignment-only comparison oracle. This default samples the
+selected analysis band from full source radiometry onto a bounded working grid;
+the resulting working images still never enter backend products, and the
+backend numerical-mode contract remains independent.
 
 The readback helper is suitable for qualitative and unit-test validation. Large
 backend jobs use `ProjectionBackendTiledRenderer` through
@@ -791,12 +790,13 @@ Implementation status:
   Current overlay reprojection uses exact sampled rays when available, reports
   endpoint validity independently, and remains invariant to layer reorder.
   Projection-plane ROI redraw/clear re-filters the stored pre-ROI match result
-  without rerunning feature matching. Reliability Pack 2 engineering is also
-  complete: working images use stable isotropic pair-overlap grids, multi-image
-  matching uses one grid per scheduled pair, repeated Match actions can reuse a
-  runtime-only working-image cache, and a sparse-versus-full-source comparison
-  harness writes review artifacts. Sparse remains the alignment default until
-  the required representative real-data/user review gate is completed.
+  without rerunning feature matching. Reliability Pack 2 is also complete:
+  working images use stable isotropic pair-overlap grids, multi-image matching
+  uses one grid per scheduled pair, repeated Match actions can reuse a
+  runtime-only working-image cache, and the truth-aware oblique-terrain fixture
+  selected full-source inverse warp as the alignment default. The sparse mode
+  remains an explicit comparison oracle. The final fresh-class Pack 2 suite
+  passes 341 tests.
 
 ### Auto Alignment Design Decisions
 

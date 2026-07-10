@@ -13,6 +13,7 @@ artifacts/viewer_big_data_profile/*
 artifacts/viewer_performance/*
 !artifacts/viewer_performance/.gitkeep
 artifacts/alignment_working_image_comparison/*
+artifacts/alignment_oblique_terrain_comparison/*
 
 # Local development notes
 tracked_issues.md

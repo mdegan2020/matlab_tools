@@ -57,7 +57,8 @@ classdef ProjectionAlignmentWorkingGridTest < matlab.unittest.TestCase
         function testFullSourceModeUsesSameGridAsSparseMode(testCase)
             scene = ProjectionAlignmentWorkingGridTest.makeScene();
             request = struct(LayerIndices=[2 1], AnalysisBands=[1 1]);
-            baseOptions = struct(OutputSize=[64 80]);
+            baseOptions = struct(OutputSize=[64 80], ...
+                NumericalMode="sparseIntensityScatteredInterpolant");
 
             sparse = ProjectionAlignmentWorkingImageRenderer.render( ...
                 scene, request, baseOptions);

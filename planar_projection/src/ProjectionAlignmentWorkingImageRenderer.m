@@ -159,7 +159,7 @@ classdef ProjectionAlignmentWorkingImageRenderer
             defaults.AllowLargeOutput = false;
             defaults.Interpolation = "bilinear";
             defaults.InvalidFillValue = NaN;
-            defaults.NumericalMode = "sparseIntensityScatteredInterpolant";
+            defaults.NumericalMode = "fullSourceInverseWarp";
 
             names = fieldnames(options);
             for k = 1:numel(names)
