@@ -795,8 +795,12 @@ Implementation status:
   uses one grid per scheduled pair, repeated Match actions can reuse a
   runtime-only working-image cache, and the truth-aware oblique-terrain fixture
   selected full-source inverse warp as the alignment default. The sparse mode
-  remains an explicit comparison oracle. The final fresh-class Pack 2 suite
-  passes 341 tests.
+  remains an explicit comparison oracle. Reliability Pack 3 adds deterministic
+  valid-mask-aware preprocessing, detector support gating, explicit option and
+  exhaustive-matcher dispatch, stable feature/match ordering, and public
+  feature/filter-stage diagnostics. The nondeterministic approximate matcher
+  is no longer a public option. The final fresh-class Pack 3 suite passes 348
+  tests.
 
 ### Auto Alignment Design Decisions
 

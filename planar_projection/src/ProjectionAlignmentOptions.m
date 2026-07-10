@@ -95,6 +95,7 @@ classdef ProjectionAlignmentOptions
             defaults.MetricThreshold = [];
             defaults.AnalysisBand = 1;
             defaults.AnalysisScale = 1;
+            defaults.MaskSupportRadiusPixels = [];
             detector = ProjectionAlignmentOptions.mergeStruct(defaults, detector, ...
                 "Detector");
             detector.Method = ProjectionAlignmentOptions.validateChoice( ...
@@ -113,21 +114,25 @@ classdef ProjectionAlignmentOptions
                 error("ProjectionAlignmentOptions:invalidDetector", ...
                     "Detector.AnalysisScale must be in the range (0, 1].");
             end
+            detector.MaskSupportRadiusPixels = ...
+                ProjectionAlignmentOptions.validateOptionalNonnegativeScalar( ...
+                detector.MaskSupportRadiusPixels, ...
+                "Detector.MaskSupportRadiusPixels");
         end
 
         function matcher = validateMatcher(matcher)
             defaults = struct();
-            defaults.Method = "nearestNeighborRatio";
+            defaults.Method = "exhaustive";
             defaults.MatchThreshold = [];
             defaults.MaxRatio = 0.8;
             defaults.Unique = true;
             matcher = ProjectionAlignmentOptions.mergeStruct(defaults, matcher, ...
                 "Matcher");
             matcher.Method = ProjectionAlignmentOptions.validateChoice( ...
-                matcher.Method, ["nearestNeighborRatio", "exhaustive", ...
-                "approximate"], "Matcher.Method");
+                matcher.Method, ["nearestNeighborRatio", "exhaustive"], ...
+                "Matcher.Method");
             matcher.MatchThreshold = ...
-                ProjectionAlignmentOptions.validateOptionalNonnegativeScalar( ...
+                ProjectionAlignmentOptions.validateOptionalPercentage( ...
                 matcher.MatchThreshold, "Matcher.MatchThreshold");
             matcher.MaxRatio = ProjectionAlignmentOptions.validateFraction( ...
                 matcher.MaxRatio, "Matcher.MaxRatio");
@@ -458,6 +463,18 @@ classdef ProjectionAlignmentOptions
                 return
             end
             value = ProjectionAlignmentOptions.validateFraction(value, name);
+        end
+
+        function value = validateOptionalPercentage(value, name)
+            if isempty(value)
+                value = [];
+                return
+            end
+            value = ProjectionAlignmentOptions.validatePositiveScalar(value, name);
+            if value > 100
+                error("ProjectionAlignmentOptions:invalidScalar", ...
+                    "%s must be in the range (0, 100].", name);
+            end
         end
 
         function value = validateOptionalNonnegativeFraction(value, name)

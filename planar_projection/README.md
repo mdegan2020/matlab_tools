@@ -481,6 +481,35 @@ matches; all filtered observations were within `10 m` of known terrain truth
 no filter survivors, and a `1.98 km` raw median truth separation. The DEM and
 all simulation truth remain fixture-only and never enter backend radiometry.
 
+Feature extraction is deterministic and valid-mask aware. Detector inputs use
+finite valid-mask min/max normalization; optional analysis scaling is
+mask-weighted and antialiased; features whose configured detector support
+crosses an invalid region or image border are rejected before descriptors are
+formed. Metric threshold, analysis scale, maximum feature count, matcher ratio,
+match threshold, and uniqueness options are all applied explicitly. The
+matcher default is exhaustive; the nondeterministic approximate choice is not
+part of the public options schema.
+
+The app exposes the actual detector, matcher, preprocessing counts, timing, and
+every filter stage without requiring access to private GUI state:
+
+```matlab
+diagnostics = app.alignmentDiagnostics();
+diagnostics.Stage.FeatureDiagnostics
+diagnostics.Stage.FilterDiagnostics
+```
+
+To audit exact repeats and a small OPK perturbation for every installed
+detector on the oblique-terrain fixture:
+
+```matlab
+addpath("scripts");
+[summary, artifacts] = alignment_feature_repeatability_evaluation();
+```
+
+The JSON/MAT report is written under the ignored
+`artifacts/alignment_feature_repeatability` directory.
+
 Manual auto-alignment validation loop:
 
 ```matlab

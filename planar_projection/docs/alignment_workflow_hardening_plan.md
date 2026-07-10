@@ -594,7 +594,8 @@ Implementation status:
 Reliability Pack 0: complete
 Reliability Pack 1: complete
 Reliability Pack 2: complete
-Reliability Packs 3-8: pending
+Reliability Pack 3: complete
+Reliability Packs 4-8: pending
 ```
 
 ### Reliability Pack 0: Observable records, units, and layer identity
@@ -884,6 +885,48 @@ Acceptance criteria:
 - Every public detector/matcher option is honored and tested or removed.
 - Actual detector, fallback, thresholds, feature ordering, matcher, and timing
   are recorded for explainability.
+
+Implementation note:
+
+- Every analysis image is converted deterministically to scalar `single`,
+  normalized by finite valid-mask min/max, and optionally reduced with
+  mask-weighted antialiased box sampling. `Detector.AnalysisScale` now changes
+  the actual detector input, and accepted point coordinates are mapped back to
+  the original working-pixel grid.
+- Detector support is distance-gated from both invalid-mask boundaries and the
+  analysis-image border before descriptor extraction. Default support radii
+  are detector-specific and can be overridden with
+  `Detector.MaskSupportRadiusPixels`. Feature diagnostics report detected,
+  metric-rejected, mask-rejected, selected, descriptor-rejected, and final
+  counts separately; mask support is not mislabeled as a match-filter stage.
+- `Detector.MetricThreshold` is applied to every detector's reported point
+  metric. Points use an explicit strength/location/scale/orientation order
+  before truncation and descriptor extraction; matches use an explicit
+  moving-index/metric/reference-index order.
+- The default matcher is explicitly `exhaustive`. The legacy
+  `nearestNeighborRatio` label resolves to the same exhaustive search while
+  retaining its requested label in diagnostics. Consecutive approximate-match
+  trials changed 13 assignments in a 213-match fixture, so `approximate` was
+  removed from the public schema rather than exposed as a nondeterministic
+  option. `MatchThreshold` is validated in MATLAB's `(0, 100]` percentage
+  range; ratio and unique settings remain explicit.
+- Auto detector selection records requested/actual method and never silently
+  falls back. Explicit unavailable detectors fail. ORB records its image-size
+  limited pyramid depth and returns an explained empty result if its analysis
+  image is too small.
+- `alignmentDiagnostics().Stage` now exposes `FeatureDiagnostics` and
+  per-pair `FilterDiagnostics`, and the status line reports `raw -> filtered`
+  counts. This makes a collapse such as `655 -> 32` attributable to exact
+  stages without accessing private app state.
+- `scripts/alignment_feature_repeatability_evaluation.m` runs all installed
+  detectors twice plus a `0.01 degree` OPK perturbation on the oblique-terrain
+  fixture. All five installed detectors produced exactly identical feature and
+  raw-match records on repeats. KAZE, the auto default, retained `55/58`
+  matches (`94.8%`) after perturbation on the selected TIFF; SIFT, SURF, ORB,
+  and BRISK produced `2 -> 0`, `3 -> 0`, `9 -> 2`, and `0 -> 0` respectively,
+  which is recorded rather than hidden by fallback.
+- Pack 3 final validation passes with 348 tests after
+  `close all force; clear classes; rehash; results = runTests;`.
 
 ### Reliability Pack 4: Truthful geometric and coplanarity filtering
 

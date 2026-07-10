@@ -14,6 +14,7 @@ artifacts/viewer_performance/*
 !artifacts/viewer_performance/.gitkeep
 artifacts/alignment_working_image_comparison/*
 artifacts/alignment_oblique_terrain_comparison/*
+artifacts/alignment_feature_repeatability/*
 
 # Local development notes
 tracked_issues.md
