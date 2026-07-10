@@ -842,6 +842,22 @@ Implementation note:
 
 ### Reliability Pack 3: Deterministic feature extraction and matching
 
+Latest real-data smoke-test evidence for Packs 3 and 4:
+
+- after a twist-only view adjustment, the quality preset reported `655 raw ->
+  32 accepted`; rejected-overlay review suggested only roughly five or six
+  genuine outliers;
+- the same workflow with the fast preset reported `321 raw -> 5 accepted`,
+  while visual review suggested roughly three genuine outliers; and
+- toggling the rejected overlay off raised
+  `PlanarProjection:invalidSize` because a mixed batch containing invalid
+  endpoint coordinates reached `reconstruct3d`.
+
+The overlay redraw now reconstructs only endpoints already marked valid and
+keeps invalid/off-source observations as non-drawable ledger records. Pack 4
+must reproduce and explain the per-stage count collapse; the current survivor
+counts are not an acceptable proxy for filter correctness.
+
 #### 3.1 Make feature support mask-aware
 
 Erode or distance-gate the valid mask by detector support, reject features whose
