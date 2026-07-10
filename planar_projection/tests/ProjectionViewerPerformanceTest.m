@@ -256,7 +256,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
                 activeDiagnostics.Counters.CameraScheduleRequests, 3);
             testCase.verifyEqual(activeDiagnostics.Counters.CoalescedRequests, 2);
             testCase.verifyTrue(activeDiagnostics.Viewer.CameraReconcilePending);
-            expectedAngle = max(initialAngle / 1.12 ^ 3, 0.05);
+            expectedAngle = initialAngle / 1.12 ^ 3;
             testCase.verifyEqual(ax.CameraViewAngle, expectedAngle, ...
                 AbsTol=1e-10);
 

@@ -60,7 +60,7 @@ classdef ProjectionViewerApp < handle
         PreviewTargetMaxTilesPerLayer double = 12
         PreviewAutomaticTilePolicy logical = false
         AlphaPreviewMinIntervalSeconds double = 0.05
-        MinCameraViewAngle double = 0.05
+        MinCameraViewAngle double = 1e-6
         MaxCameraViewAngle double = 60
         InitialViewportFillFraction double = 0.5
         ModifierWheelStepDegrees double = 1
@@ -4725,7 +4725,13 @@ classdef ProjectionViewerApp < handle
 
         function frameCurrentProjectionView(app, fillFraction)
             fillFraction = app.validateViewportFillFraction(fillFraction);
-            [projectedWidth, projectedHeight] = app.currentSurfaceProjectedSize();
+            points = app.currentVisibleSurfacePoints();
+            if isempty(points)
+                return
+            end
+            app.centerCameraOnSurfacePoints(points);
+            [projectedWidth, projectedHeight] = ...
+                app.projectedSurfaceSize(points);
             if any(~isfinite([projectedWidth projectedHeight])) || ...
                     max(projectedWidth, projectedHeight) <= eps
                 return
@@ -4743,6 +4749,12 @@ classdef ProjectionViewerApp < handle
         end
 
         function [projectedWidth, projectedHeight] = currentSurfaceProjectedSize(app)
+            points = app.currentVisibleSurfacePoints();
+            [projectedWidth, projectedHeight] = ...
+                app.projectedSurfaceSize(points);
+        end
+
+        function points = currentVisibleSurfacePoints(app)
             layerIndices = find([app.Scene.layers.Visible]);
             if isempty(layerIndices)
                 layerIndices = app.SelectedLayerIndex;
@@ -4758,7 +4770,37 @@ classdef ProjectionViewerApp < handle
                         surfaceHandle.ZData(:).']]; %#ok<AGROW>
                 end
             end
+        end
 
+        function centerCameraOnSurfacePoints(app, points)
+            if isempty(points)
+                return
+            end
+
+            [rightVector, upVector] = app.cameraScreenBasis();
+            cameraTarget = camtarget(app.Axes).';
+            relativePoints = points - cameraTarget;
+            screenX = rightVector.' * relativePoints;
+            screenY = upVector.' * relativePoints;
+            screenCenterOffset = 0.5 * (min(screenX) + max(screenX)) * ...
+                rightVector + 0.5 * (min(screenY) + max(screenY)) * upVector;
+            if any(~isfinite(screenCenterOffset)) || ...
+                    norm(screenCenterOffset) <= eps
+                return
+            end
+
+            cameraPosition = campos(app.Axes).' + screenCenterOffset;
+            cameraTarget = cameraTarget + screenCenterOffset;
+            cameraUpVector = camup(app.Axes).';
+            cameraViewAngle = app.Axes.CameraViewAngle;
+            app.Axes.CameraPosition = cameraPosition.';
+            app.Axes.CameraTarget = cameraTarget.';
+            app.Axes.CameraUpVector = cameraUpVector.';
+            app.Axes.CameraViewAngle = cameraViewAngle;
+        end
+
+        function [projectedWidth, projectedHeight] = ...
+                projectedSurfaceSize(app, points)
             if isempty(points)
                 projectedWidth = NaN;
                 projectedHeight = NaN;

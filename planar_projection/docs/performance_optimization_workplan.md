@@ -30,6 +30,11 @@ texture budgets. Alignment UI and preview level storage are now lazy, file-backe
 fine tiles can be read by region, and single-band tiled previews use scalar
 graphics data. The CPU raster-preview prototype is retained as an optional
 diagnostic; the optimized surface renderer remains the production default.
+The post-Pack-8 real-data framing correction centers the current visible
+surface footprint by translating camera position and target together, then fits
+the view angle without the former `0.05`-degree floor. It preserves camera
+direction and distance and fixes blank/offscreen and tiny-footprint launch
+states without changing scene geometry, display LOD policy, or backend data.
 Backend Performance Pack 0 now compiles reusable per-job mesh/interpolation
 plans and resolves GPU capability once. Backend Performance Pack 1 makes
 full-source inverse-warp radiometry the backend default while retaining the old

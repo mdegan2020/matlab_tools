@@ -170,6 +170,57 @@ diagnostics = app.performanceDiagnostics();
 app.resetPerformanceDiagnostics();
 ```
 
+To inspect the live graphics surfaces, including retained hidden pool entries,
+use the exact singular tags below. `findall` is intentional because pooled
+surfaces are hidden:
+
+```matlab
+fig = findall(groot, Type="figure", Name="Projection Viewer Prototype");
+assert(~isempty(fig), "Projection Viewer figure not found.");
+ax = findall(fig(1), Type="axes");
+assert(~isempty(ax), "Projection Viewer axes not found.");
+
+surfaces = findall(ax(1), Type="surface");
+wantedTags = ["ProjectionViewerPreviewTileSurface", ...
+    "ProjectionViewerLayerSurface", ...
+    "ProjectionViewerPooledTileSurface"];
+surfaceTags = arrayfun(@(h) string(h.Tag), surfaces);
+surfaces = surfaces(ismember(surfaceTags, wantedTags));
+
+surfaceCount = numel(surfaces);
+Tag = strings(surfaceCount, 1);
+Visible = strings(surfaceCount, 1);
+CDataClass = strings(surfaceCount, 1);
+CDataRows = zeros(surfaceCount, 1);
+CDataColumns = zeros(surfaceCount, 1);
+CDataBands = zeros(surfaceCount, 1);
+CDataMiB = zeros(surfaceCount, 1);
+MeshRows = zeros(surfaceCount, 1);
+MeshColumns = zeros(surfaceCount, 1);
+for k = 1:surfaceCount
+    cdata = surfaces(k).CData;
+    cdataInfo = whos("cdata");
+    Tag(k) = string(surfaces(k).Tag);
+    Visible(k) = string(surfaces(k).Visible);
+    CDataClass(k) = string(class(cdata));
+    CDataRows(k) = size(cdata, 1);
+    CDataColumns(k) = size(cdata, 2);
+    CDataBands(k) = size(cdata, 3);
+    CDataMiB(k) = cdataInfo.bytes / 2^20;
+    MeshRows(k) = size(surfaces(k).XData, 1);
+    MeshColumns(k) = size(surfaces(k).XData, 2);
+end
+graphicsTree = table(Tag, Visible, CDataClass, CDataRows, CDataColumns, ...
+    CDataBands, CDataMiB, MeshRows, MeshColumns);
+disp(graphicsTree)
+for tag = wantedTags
+    isTag = graphicsTree.Tag == tag;
+    fprintf("%s: %d total, %d visible, %.2f MiB CData\n", tag, ...
+        nnz(isTag), nnz(isTag & graphicsTree.Visible == "on"), ...
+        sum(graphicsTree.CDataMiB(isTag)));
+end
+```
+
 Run the repeatable alpha, crosshair, twist, pan, LOD-boundary zoom, WASD, and
 OPK scenarios with:
 
@@ -423,8 +474,11 @@ app = runProjectionViewer(layerNames, imageDataList, ...
 
 The viewer frame camera is placed at the arithmetic mean of the per-layer
 `NominalSceneCenter` vectors and looks toward the supplied projection plane.
-The initial view frames the projected surface conservatively in the viewport,
-and stabilized axes limits keep large tip/tilt adjustments from changing the
+The initial view translates the camera position and target together to center
+the visible projected footprint, preserves the configured view direction and
+camera distance, and fits that footprint to half the viewport. This also
+supports narrow view angles below `0.05` degrees for small footprints at long
+range. Stabilized axes limits keep large tip/tilt adjustments from changing the
 apparent scale on the first edit.
 
 ## Backend Processor Workflow

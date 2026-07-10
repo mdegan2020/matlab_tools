@@ -297,6 +297,13 @@ The camera/view geometry remains fixed while projection plane and layer
 corrections are manipulated. Twist rolls the viewer camera up vector about the
 camera view direction; it does not rotate the projection plane.
 
+Initial framing centers the visible projected footprint by translating the
+camera position and target together in the camera screen plane. The translation
+preserves the configured view direction and camera-to-target distance. The
+camera view angle is then fitted to the footprint and viewport rather than
+being clamped to the historical `0.05`-degree floor, which could make a small,
+long-range real-data footprint nearly invisible.
+
 ## Interactive Viewer Controls
 
 The app is programmatic MATLAB UI code using `uifigure` and `uigridlayout`, not
@@ -464,7 +471,8 @@ Post-milestone features already added:
   match/solve state, raw/filtered match counts, clear-overlays controls,
   preview/apply/revert, and backend integration.
 - expanded `-85` to `85` degree tip/tilt controls, stabilized preview axes,
-  improved initial viewport framing, and arrow-key tip/tilt nudges.
+  footprint-centered initial viewport framing (including sub-`0.05`-degree
+  views), and arrow-key tip/tilt nudges.
 - display-only preview pyramids and visible preview tiling for large layers,
   while preserving full-resolution image data for readback and backend jobs.
 
