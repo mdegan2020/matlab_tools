@@ -70,6 +70,88 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.verifyEqual(diagnostics.Timings.AlphaSeconds.Count, 1);
         end
 
+        function testCrosshairMotionOnlyUpdatesStableLineGeometry(testCase)
+            scene = ProjectionViewerPerformanceTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            menuItem = findall(fig, ...
+                "Tag", "ProjectionViewerCrosshairMenuItem");
+            fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
+            menuItem.MenuSelectedFcn(menuItem, struct());
+            horizontal = findall(fig, ...
+                "Tag", "ProjectionViewerCrosshairHorizontal");
+            vertical = findall(fig, ...
+                "Tag", "ProjectionViewerCrosshairVertical");
+            app.resetPerformanceDiagnostics();
+
+            fig.CurrentPoint = fig.CurrentPoint + [4 3];
+            fig.WindowButtonMotionFcn(fig, struct());
+            horizontalAfter = findall(fig, ...
+                "Tag", "ProjectionViewerCrosshairHorizontal");
+            verticalAfter = findall(fig, ...
+                "Tag", "ProjectionViewerCrosshairVertical");
+            diagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual(horizontalAfter, horizontal);
+            testCase.verifyEqual(verticalAfter, vertical);
+            testCase.verifyEqual(diagnostics.Counters.PointerMotionCallbacks, 1);
+            testCase.verifyEqual(diagnostics.Counters.CrosshairGeometryUpdates, 1);
+            testCase.verifyEqual(diagnostics.Counters.OverlayRestacks, 0);
+            testCase.verifyEqual(diagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual(diagnostics.Counters.TileRefreshes, 0);
+            testCase.verifyEqual(diagnostics.Counters.SurfaceCreations, 0);
+            testCase.verifyEqual(diagnostics.Counters.SurfaceDeletions, 0);
+        end
+
+        function testCrosshairOutsideAxesDoesNotRepeatGraphicsUpdates(testCase)
+            scene = ProjectionViewerPerformanceTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            menuItem = findall(fig, ...
+                "Tag", "ProjectionViewerCrosshairMenuItem");
+            testCase.verifyEmpty(fig.WindowButtonMotionFcn);
+            menuItem.MenuSelectedFcn(menuItem, struct());
+            testCase.verifyNotEmpty(fig.WindowButtonMotionFcn);
+            fig.CurrentPoint = [0 0];
+            fig.WindowButtonMotionFcn(fig, struct());
+            app.resetPerformanceDiagnostics();
+
+            fig.WindowButtonMotionFcn(fig, struct());
+            fig.WindowButtonMotionFcn(fig, struct());
+            diagnostics = app.performanceDiagnostics();
+            menuItem.MenuSelectedFcn(menuItem, struct());
+
+            testCase.verifyEqual(diagnostics.Counters.CrosshairGeometryUpdates, 0);
+            testCase.verifyEqual(diagnostics.Counters.CrosshairVisibilityUpdates, 0);
+            testCase.verifyEmpty(fig.WindowButtonMotionFcn);
+        end
+
+        function testPanTemporarilyActivatesPointerMotionCallback(testCase)
+            scene = ProjectionViewerPerformanceTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            fig.SelectionType = "normal";
+            fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
+
+            fig.WindowButtonDownFcn(fig, struct());
+            activeCallback = fig.WindowButtonMotionFcn;
+            fig.WindowButtonUpFcn(fig, struct());
+
+            testCase.verifyNotEmpty(activeCallback);
+            testCase.verifyEmpty(fig.WindowButtonMotionFcn);
+        end
+
         function testEvaluationRunsAllScenariosAndRestoresState(testCase)
             options = struct(SyntheticImageSize=[64 64], ...
                 ScenarioIterations=2, UseSynthetic=true, ...
@@ -103,6 +185,11 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             sliders = findall(fig, "-isa", "matlab.ui.control.Slider");
             columns = arrayfun(@(value) value.Layout.Column, sliders);
             slider = sliders(columns == column);
+        end
+
+        function point = axesCenter(ax)
+            position = ax.InnerPosition;
+            point = position(1:2) + position(3:4) / 2;
         end
     end
 end

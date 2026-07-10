@@ -13,10 +13,11 @@ expected `15000 x 10000` through `30000 x 20000` source and output sizes.
 
 The audit and local measurements are complete. Performance implementation is in
 progress and was explicitly prioritized on July 10, 2026. Viewer Performance
-Pack 0 is complete: the app now exposes bounded runtime diagnostics and the
-repeatable evaluation harness exercises alpha, crosshair, twist, pan,
-slow/fast/reversing LOD-boundary zoom, WASD, and OPK scenarios. Viewer
-Performance Pack 1 is next.
+Packs 0 and 1 are complete: the app now exposes bounded runtime diagnostics and
+the repeatable evaluation harness exercises alpha, crosshair, twist, pan,
+slow/fast/reversing LOD-boundary zoom, WASD, and OPK scenarios. Crosshair motion
+is demand-activated and no longer restacks overlay lines during steady pointer
+movement. Viewer Performance Pack 2 is next.
 
 Use the pack order in this document and commit and push each coherent, validated
 pack separately.
@@ -733,6 +734,15 @@ Viewer Performance Pack 0: Add interaction benchmark harness
 ```
 
 ### Viewer Performance Pack 1: Crosshair Event Path
+
+Status: complete on July 10, 2026.
+
+The figure motion callback is installed only while crosshair tracking or a drag
+is active. Hidden/visible transitions are stateful, overlay handles remain
+stable, and the two guide lines are restacked together only after graphics
+topology changes. On the local two-TIFF scene, 20 steady crosshair motions
+recorded zero restacks and a median crosshair update of about `0.73 ms`, versus
+the audit's roughly `98 ms` restacking path.
 
 Deliverables:
 

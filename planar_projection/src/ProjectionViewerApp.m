@@ -76,6 +76,7 @@ classdef ProjectionViewerApp < handle
         MoveLayerUpButton matlab.ui.control.Button
         MoveLayerDownButton matlab.ui.control.Button
         IsCrosshairEnabled logical = false
+        IsCrosshairVisible logical = false
         AlignmentGrid matlab.ui.container.GridLayout
         AlignmentReferenceDropDown matlab.ui.control.DropDown
         AlignmentMovingDropDown matlab.ui.control.DropDown
@@ -341,7 +342,7 @@ classdef ProjectionViewerApp < handle
                 WindowKeyPressFcn=@(~, event) app.keyPressed(event), ...
                 WindowKeyReleaseFcn=@(~, event) app.keyReleased(event), ...
                 WindowButtonDownFcn=@(~, event) app.beginPan(event), ...
-                WindowButtonMotionFcn=@(~, ~) app.pointerMoved(), ...
+                WindowButtonMotionFcn=[], ...
                 WindowButtonUpFcn=@(~, ~) app.endPan());
 
             app.GridLayout = uigridlayout(app.UIFigure, [3 1]);
@@ -3156,13 +3157,11 @@ classdef ProjectionViewerApp < handle
         end
 
         function raiseCrosshairOverlay(app)
-            if ~isempty(app.CrosshairHorizontal) && isvalid(app.CrosshairHorizontal)
+            handles = [app.CrosshairHorizontal app.CrosshairVertical];
+            handles = handles(isgraphics(handles));
+            if ~isempty(handles)
                 app.PerformanceMonitor.increment("OverlayRestacks");
-                uistack(app.CrosshairHorizontal, "top");
-            end
-            if ~isempty(app.CrosshairVertical) && isvalid(app.CrosshairVertical)
-                app.PerformanceMonitor.increment("OverlayRestacks");
-                uistack(app.CrosshairVertical, "top");
+                uistack(handles, "top");
             end
         end
 
@@ -3516,6 +3515,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function pointerMoved(app)
+            app.PerformanceMonitor.increment("PointerMotionCallbacks");
             app.updatePan();
             app.updateCrosshair();
         end
@@ -3643,6 +3643,7 @@ classdef ProjectionViewerApp < handle
 
             app.NeedsDragFinalize = false;
             app.LastPointerLocation = app.UIFigure.CurrentPoint;
+            app.refreshPointerMotionCallback();
         end
 
         function updatePan(app)
@@ -3671,6 +3672,7 @@ classdef ProjectionViewerApp < handle
             dragMode = app.DragMode;
             app.DragMode = "none";
             app.LastPointerLocation = [NaN NaN];
+            app.refreshPointerMotionCallback();
             if app.NeedsDragFinalize && ...
                     any(dragMode == ["translateLayer", "adjustViewVectors"])
                 layer = app.Scene.layers(app.SelectedLayerIndex);
@@ -4631,7 +4633,20 @@ classdef ProjectionViewerApp < handle
         function setCrosshairEnabled(app, isEnabled)
             app.IsCrosshairEnabled = logical(isEnabled);
             app.CrosshairMenuItem.Checked = app.onOff(app.IsCrosshairEnabled);
+            app.refreshPointerMotionCallback();
             app.updateCrosshair();
+        end
+
+        function refreshPointerMotionCallback(app)
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return
+            end
+            if app.IsCrosshairEnabled || app.DragMode ~= "none"
+                app.UIFigure.WindowButtonMotionFcn = ...
+                    @(~, ~) app.pointerMoved();
+            else
+                app.UIFigure.WindowButtonMotionFcn = [];
+            end
         end
 
         function updateCrosshair(app)
@@ -4680,16 +4695,25 @@ classdef ProjectionViewerApp < handle
             app.CrosshairVertical.XData = verticalPoints(1, :);
             app.CrosshairVertical.YData = verticalPoints(2, :);
             app.CrosshairVertical.ZData = verticalPoints(3, :);
-            app.CrosshairHorizontal.Visible = "on";
-            app.CrosshairVertical.Visible = "on";
-            app.raiseCrosshairOverlay();
+            app.PerformanceMonitor.increment("CrosshairGeometryUpdates");
+            if ~app.IsCrosshairVisible
+                app.CrosshairHorizontal.Visible = "on";
+                app.CrosshairVertical.Visible = "on";
+                app.IsCrosshairVisible = true;
+                app.PerformanceMonitor.increment("CrosshairVisibilityUpdates");
+            end
             app.PerformanceMonitor.recordTiming( ...
                 "CrosshairSeconds", toc(crosshairTimer));
         end
 
         function hideCrosshair(app)
+            if ~app.IsCrosshairVisible
+                return
+            end
             app.CrosshairHorizontal.Visible = "off";
             app.CrosshairVertical.Visible = "off";
+            app.IsCrosshairVisible = false;
+            app.PerformanceMonitor.increment("CrosshairVisibilityUpdates");
         end
 
         function showHelpDialog(app)

@@ -183,6 +183,10 @@ synthetic path. Slow, fast, and reversing LOD-boundary scenarios default to the
 the ignored `artifacts/viewer_performance` directory. Timing values are reports,
 not pass/fail thresholds; automated tests assert structural work counts.
 
+Crosshair pointer tracking is demand-activated. When enabled, steady movement
+updates stable line handles without restacking projection graphics; when
+disabled and no drag is active, the figure motion callback is removed.
+
 ## Projection Viewer Prototype
 
 The interactive prototype is programmatic MATLAB app code, not an `.mlapp` file. From MATLAB:

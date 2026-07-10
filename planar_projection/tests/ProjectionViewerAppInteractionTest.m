@@ -181,10 +181,10 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             pointer = ProjectionViewerAppInteractionTest.axesCenterPoint(ax);
             [rightVector, upVector] = ProjectionViewerAppInteractionTest.cameraScreenBasis(ax);
 
-            fig.CurrentPoint = pointer;
             crosshairMenu.MenuSelectedFcn(crosshairMenu, struct());
-            fig.WindowButtonMotionFcn(fig, struct());
             drawnow
+            fig.CurrentPoint = pointer;
+            fig.WindowButtonMotionFcn(fig, struct());
 
             horizontal = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
                 fig, "ProjectionViewerCrosshairHorizontal");
