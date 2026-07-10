@@ -360,6 +360,32 @@ classdef ProjectionViewerHarnessTest < matlab.unittest.TestCase
             testCase.verifySize(textureData, [2 2 3]);
             testCase.verifyEqual(textureData, expectedTexture, AbsTol=single(1e-7));
         end
+
+        function testPrepareScalarDisplayTextureAvoidsRgbExpansion(testCase)
+            imageData = uint8([0 128; 255 64]);
+            expected = single(imageData) / single(intmax("uint8"));
+
+            textureData = ...
+                ProjectionViewerHarness.prepareScalarDisplayTexture(imageData);
+
+            testCase.verifyClass(textureData, "single");
+            testCase.verifySize(textureData, [2 2]);
+            testCase.verifyEqual(textureData, expected, AbsTol=single(1e-7));
+        end
+
+        function testPrepareDisplayTextureCollapsesArbitraryBandsToRgb(testCase)
+            imageData = uint16(reshape(1:80, 4, 5, 4));
+
+            textureData = ...
+                ProjectionViewerHarness.prepareDisplayTexture(imageData);
+
+            testCase.verifyClass(textureData, "single");
+            testCase.verifySize(textureData, [4 5 3]);
+            testCase.verifyEqual(textureData(:, :, 1), ...
+                textureData(:, :, 2));
+            testCase.verifyEqual(textureData(:, :, 2), ...
+                textureData(:, :, 3));
+        end
     end
 
     methods (Static, Access = private)

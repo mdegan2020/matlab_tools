@@ -30,6 +30,11 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.verifyEqual(diagnostics.Viewer.VisibleSurfaceCount, 1);
             testCase.verifyGreaterThan( ...
                 diagnostics.Viewer.VisibleTextureBytes, 0);
+            testCase.verifyFalse( ...
+                diagnostics.Viewer.AlignmentControlsCreated);
+            testCase.verifyEqual(diagnostics.Viewer.AlignmentTableCount, 0);
+            testCase.verifyEqual( ...
+                diagnostics.Counters.AlignmentUiCreations, 0);
         end
 
         function testResetDoesNotChangeViewerState(testCase)
@@ -633,7 +638,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
             drawnow
-            app.configurePreviewTiling(struct(TileSize=512));
+            app.configurePreviewTiling(struct(TileSize=256));
             app.configurePreviewBudget(struct( ...
                 MaxVisibleSurfaces=192, ...
                 MaxVisibleTextureBytes=512 * 1024^2, ...
@@ -670,6 +675,87 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
                 diagnostics.Viewer.BudgetLimitedLayerMask));
             testCase.verifyGreaterThan( ...
                 diagnostics.Counters.BudgetLimitedLodSelections, 0);
+        end
+
+        function testLazyPyramidAndScalarTileReuseAvoidRgbExpansion(testCase)
+            scene = ProjectionViewerPerformanceTest.makeReusableTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            app.configurePreviewTiling(struct(TileSize=512));
+            diagnostics = app.performanceDiagnostics();
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            surfaces = ProjectionViewerPerformanceTest.activeTileSurfaces( ...
+                findall(fig, "Type", "axes"));
+
+            testCase.verifyTrue(all(arrayfun( ...
+                @(surfaceHandle) ismatrix(surfaceHandle.CData), surfaces)));
+            testCase.verifyGreaterThan( ...
+                diagnostics.Counters.ScalarTexturePreparations, 0);
+            testCase.verifyEqual( ...
+                diagnostics.Counters.RgbFallbackTexturePreparations, 0);
+            testCase.verifyLessThan( ...
+                diagnostics.Viewer.PyramidMaterializedLevelCounts, ...
+                diagnostics.Viewer.PyramidLevelCounts);
+
+            alphaBlendMenu = findall(fig, ...
+                "Tag", "ProjectionViewerAlphaBlendMenuItem");
+            app.resetPerformanceDiagnostics();
+            alphaBlendMenu.MenuSelectedFcn(alphaBlendMenu, struct());
+            repeatedDiagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual( ...
+                repeatedDiagnostics.Counters.ScalarTexturePreparations, 0);
+            testCase.verifyEqual( ...
+                repeatedDiagnostics.Counters.TexturePreparations, 0);
+            testCase.verifyGreaterThan( ...
+                repeatedDiagnostics.Counters.TileCacheHits, 0);
+        end
+
+        function testMixedSingleAndRgbTiledLayersUseExplicitTexturePaths(testCase)
+            scene = ProjectionViewerPerformanceTest.makeMixedTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            surfaces = ProjectionViewerPerformanceTest.activeTileSurfaces( ...
+                findall(fig, "Type", "axes"));
+            dimensions = arrayfun( ...
+                @(surfaceHandle) ndims(surfaceHandle.CData), surfaces);
+            diagnostics = app.performanceDiagnostics();
+
+            testCase.verifyTrue(any(dimensions == 2));
+            testCase.verifyTrue(any(dimensions == 3));
+            testCase.verifyGreaterThan( ...
+                diagnostics.Counters.ScalarTexturePreparations, 0);
+            testCase.verifyGreaterThan( ...
+                diagnostics.Counters.RgbFallbackTexturePreparations, 0);
+        end
+
+        function testFileBackedPreviewKeepsBackendFullImage(testCase)
+            imageData = zeros(2001, 2001, "uint8");
+            imagePath = string(tempname) + ".tif";
+            imwrite(imageData, imagePath);
+            testCase.addTeardown(@() delete(imagePath));
+            scene = ProjectionViewerHarness.createDefaultScene( ...
+                imagePath, struct(RowStride=250, ColumnStride=250, ...
+                DisplayTextureMaxPixels=10000));
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            diagnostics = app.performanceDiagnostics();
+            job = app.exportBackendJob(struct(RenderOptions=struct( ...
+                OutputSize=[4 5])));
+
+            testCase.verifyEqual( ...
+                diagnostics.Viewer.PyramidSourceModes, "file");
+            testCase.verifyLessThan( ...
+                diagnostics.Viewer.PyramidMaterializedLevelCounts, ...
+                diagnostics.Viewer.PyramidLevelCounts);
+            testCase.verifyEqual(job.Scene.layers.Image, imageData);
         end
 
         function testEvaluationRunsAllScenariosAndRestoresState(testCase)
@@ -755,6 +841,16 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             scene = ProjectionViewerHarness.createSceneFromImages( ...
                 {imageData, imageData}, ...
                 ["reusable_1.tif", "reusable_2.tif"], options);
+        end
+
+        function scene = makeMixedTiledScene()
+            singleBand = zeros(2001, 2001, "uint8");
+            rgb = zeros(2001, 2001, 3, "uint8");
+            options = struct(GSD=0.01, NominalRange=1000, ...
+                PlatformStepMeters=0.01, RowStride=250, ...
+                ColumnStride=250, DisplayTextureMaxPixels=10000);
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                {singleBand, rgb}, ["single.tif", "rgb.tif"], options);
         end
 
         function scene = makeReusableTiledScene()

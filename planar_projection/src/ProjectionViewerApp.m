@@ -522,6 +522,7 @@ classdef ProjectionViewerApp < handle
             app.Axes.Layout.Column = 1;
             app.Axes.Toolbar.Visible = "off";
             app.Axes.Interactions = [];
+            colormap(app.Axes, gray(256));
             app.hideImageAxesDecorations();
             app.createImageContextMenu();
             app.createCrosshairOverlay();
@@ -625,7 +626,6 @@ classdef ProjectionViewerApp < handle
             app.ViewVectorLabel.Layout.Row = [1 2];
             app.ViewVectorLabel.Layout.Column = 6;
 
-            app.createAlignmentControls();
         end
 
         function createAlignmentControls(app)
@@ -833,7 +833,10 @@ classdef ProjectionViewerApp < handle
 
             app.updateAlignmentLayerItems();
             app.setAlignmentActionEnabled(false);
-            app.setAlignmentPanelVisible(false);
+            app.AlignmentGrid.Visible = "off";
+            rowHeights = app.GridLayout.RowHeight;
+            rowHeights{2} = 0;
+            app.GridLayout.RowHeight = rowHeights;
         end
 
         function updateAlignmentLayerItems(app)
@@ -1944,6 +1947,14 @@ classdef ProjectionViewerApp < handle
         end
 
         function setAlignmentPanelVisible(app, isVisible)
+            if isVisible && (isempty(app.AlignmentGrid) || ...
+                    ~isvalid(app.AlignmentGrid))
+                creationTimer = tic;
+                app.createAlignmentControls();
+                app.PerformanceMonitor.increment("AlignmentUiCreations");
+                app.PerformanceMonitor.recordTiming( ...
+                    "AlignmentUiCreateSeconds", toc(creationTimer));
+            end
             if isempty(app.AlignmentGrid) || ~isvalid(app.AlignmentGrid)
                 return
             end
@@ -3047,9 +3058,12 @@ classdef ProjectionViewerApp < handle
             app.clearPreviewTileRuntimeCache();
             app.clearPreviewSampledGeometryCache();
             for layerIndex = 1:layerCount
+                layerOptions = app.PreviewTilingOptions;
+                layerOptions.SourcePath = ...
+                    app.Scene.layers(layerIndex).ImagePath;
                 pyramid = ProjectionPreviewPyramid.build( ...
                     app.Scene.layers(layerIndex).Image, ...
-                    app.PreviewTilingOptions);
+                    layerOptions);
                 app.PreviewPyramids{layerIndex} = pyramid;
                 app.PreviewTiledLayerMask(layerIndex) = ...
                     ProjectionPreviewPyramid.shouldUseTiling( ...
@@ -3166,6 +3180,7 @@ classdef ProjectionViewerApp < handle
             surfaceHandle = surface(app.Axes, X, Y, Z, ...
                 displayTexture, ...
                 FaceColor="texturemap", EdgeColor="none", LineStyle="none", ...
+                CDataMapping="scaled", ...
                 FaceAlpha=app.previewFaceAlphaForLayer(mesh.Alpha, layerIndex), ...
                 Visible=app.onOff(app.previewSurfaceIsVisible( ...
                 mesh.Visible, mesh.Alpha)), ...
@@ -3209,9 +3224,19 @@ classdef ProjectionViewerApp < handle
             tileLayer = app.Scene.layers(layerIndex);
             if includeTexture
                 textureTimer = tic;
-                tileImage = ProjectionPreviewPyramid.tileTexture(pyramid, tile);
-                tileLayer.DisplayTexture = ...
-                    ProjectionViewerHarness.prepareDisplayTexture(tileImage);
+                [tileImage, pyramid, wasMaterialized] = ...
+                    ProjectionPreviewPyramid.tileTexture(pyramid, tile);
+                app.PreviewPyramids{layerIndex} = pyramid;
+                if wasMaterialized
+                    levelBytes = app.arrayBytes( ...
+                        pyramid.Levels(tile.LevelIndex).Image);
+                    app.PerformanceMonitor.increment( ...
+                        "PyramidLevelMaterializations");
+                    app.PerformanceMonitor.increment( ...
+                        "PyramidMaterializedBytes", levelBytes);
+                end
+                tileLayer.DisplayTexture = app.preparePreviewDisplayTexture( ...
+                    tileImage, layerIndex);
                 app.PerformanceMonitor.increment("TexturePreparations");
                 app.PerformanceMonitor.increment("PreparedTextureBytes", ...
                     app.arrayBytes(tileLayer.DisplayTexture));
@@ -3398,11 +3423,35 @@ classdef ProjectionViewerApp < handle
 
         function bytes = previewDisplayBytesPerPixel(app, layerIndex)
             pyramid = app.PreviewPyramids{layerIndex};
-            if pyramid.BandCount == 3
+            if app.usesScalarPreviewTexture(layerIndex)
+                bytes = app.imageClassBytes("single");
+            elseif pyramid.BandCount == 3
                 bytes = 3 * app.imageClassBytes(pyramid.ImageClass);
             else
                 bytes = 3 * app.imageClassBytes("single");
             end
+        end
+
+        function texture = preparePreviewDisplayTexture( ...
+                app, imageData, layerIndex)
+            if app.usesScalarPreviewTexture(layerIndex)
+                texture = ...
+                    ProjectionViewerHarness.prepareScalarDisplayTexture( ...
+                    imageData);
+                app.PerformanceMonitor.increment( ...
+                    "ScalarTexturePreparations");
+            else
+                texture = ProjectionViewerHarness.prepareDisplayTexture( ...
+                    imageData);
+                app.PerformanceMonitor.increment( ...
+                    "RgbFallbackTexturePreparations");
+            end
+        end
+
+        function tf = usesScalarPreviewTexture(app, layerIndex)
+            pyramid = app.PreviewPyramids{layerIndex};
+            tf = app.PreviewTilingOptions.UseScalarSingleBandTextures && ...
+                pyramid.BandCount == 1;
         end
 
         function levelIndex = previewLevelIndexForLayer( ...
@@ -5019,14 +5068,17 @@ classdef ProjectionViewerApp < handle
             end
 
             for tileIndex = 1:numel(tiles)
-                tileLayer = app.tilePreviewLayer(layerIndex, tiles(tileIndex));
+                tileData = app.preparedPreviewTileData( ...
+                    layerIndex, tiles(tileIndex), ...
+                    app.PreviewTilingOptions.MaxTileMeshVertices);
+                layer = app.Scene.layers(layerIndex);
                 surfaceHandles(tileIndex).CData = app.previewTextureForLayer( ...
-                    tileLayer.DisplayTexture, layerIndex);
+                    tileData.DisplayTexture, layerIndex);
                 surfaceHandles(tileIndex).FaceAlpha = app.previewFaceAlphaForLayer( ...
-                    tileLayer.Alpha, layerIndex);
+                    layer.Alpha, layerIndex);
                 surfaceHandles(tileIndex).Visible = app.onOff( ...
                     app.previewSurfaceIsVisible( ...
-                    tileLayer.Visible, tileLayer.Alpha));
+                    layer.Visible, layer.Alpha));
             end
         end
 
@@ -5504,8 +5556,23 @@ classdef ProjectionViewerApp < handle
             visibleTileSurfaceCount = 0;
             visibleTexturePixels = 0;
             visibleTextureBytes = 0;
+            pyramidMaterializedLevelCounts = zeros(1, layerCount);
+            pyramidMaterializedBytes = zeros(1, layerCount);
+            pyramidAdditionalBytes = zeros(1, layerCount);
+            pyramidSourceModes = strings(1, layerCount);
+            pyramidLevelCounts = zeros(1, layerCount);
 
             for layerIndex = 1:layerCount
+                storage = ProjectionPreviewPyramid.storageDiagnostics( ...
+                    app.PreviewPyramids{layerIndex});
+                pyramidMaterializedLevelCounts(layerIndex) = ...
+                    storage.MaterializedLevelCount;
+                pyramidMaterializedBytes(layerIndex) = ...
+                    storage.MaterializedBytes;
+                pyramidAdditionalBytes(layerIndex) = ...
+                    storage.AdditionalMaterializedBytes;
+                pyramidSourceModes(layerIndex) = storage.SourceMode;
+                pyramidLevelCounts(layerIndex) = storage.LevelCount;
                 imageData = app.Scene.layers(layerIndex).Image;
                 imageSizes(layerIndex, :) = [size(imageData, 1), ...
                     size(imageData, 2), size(imageData, 3)];
@@ -5553,6 +5620,17 @@ classdef ProjectionViewerApp < handle
             runtime.VisibleLayerCount = nnz([app.Scene.layers.Visible]);
             runtime.CameraViewAngleDegrees = app.Axes.CameraViewAngle;
             runtime.DisplayTileSize = app.PreviewTilingOptions.TileSize;
+            runtime.PyramidSourceModes = pyramidSourceModes;
+            runtime.PyramidLevelCounts = pyramidLevelCounts;
+            runtime.PyramidMaterializedLevelCounts = ...
+                pyramidMaterializedLevelCounts;
+            runtime.PyramidMaterializedBytes = pyramidMaterializedBytes;
+            runtime.PyramidMaterializedBytesTotal = ...
+                sum(pyramidMaterializedBytes);
+            runtime.PyramidAdditionalMaterializedBytes = ...
+                pyramidAdditionalBytes;
+            runtime.PyramidAdditionalMaterializedBytesTotal = ...
+                sum(pyramidAdditionalBytes);
             runtime.CurrentLevelIndices = currentLevelIndices;
             runtime.DesiredLevelIndices = app.PreviewDesiredLevelIndices;
             runtime.DesiredDownsamples = app.PreviewDesiredDownsamples;
@@ -5597,6 +5675,13 @@ classdef ProjectionViewerApp < handle
                 app.AlphaPreviewMinIntervalSeconds;
             runtime.RenderedLayerAlphas = app.RenderedLayerAlphas;
             runtime.PendingAlphaMask = app.PendingAlphaMask;
+            runtime.AlignmentControlsCreated = ...
+                ~isempty(app.AlignmentGrid) && isvalid(app.AlignmentGrid);
+            runtime.AlignmentTableCount = nnz([ ...
+                ~isempty(app.AlignmentPairTable) && ...
+                isvalid(app.AlignmentPairTable), ...
+                ~isempty(app.AlignmentMatchTable) && ...
+                isvalid(app.AlignmentMatchTable)]);
             runtime.TileDataCache = app.PreviewTileDataCache.diagnostics();
             runtime.SampledGeometryCache = ...
                 app.PreviewSampledGeometryCache.diagnostics();

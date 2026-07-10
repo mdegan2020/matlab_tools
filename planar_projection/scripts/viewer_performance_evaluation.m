@@ -179,9 +179,8 @@ if ~isempty(imagePaths)
             "Every ImagePaths entry must identify an existing image.");
     end
     images = cellfun(@imread, cellstr(imagePaths), UniformOutput=false);
-    names = arrayfun(@fileName, imagePaths);
     scene = ProjectionViewerHarness.createSceneFromImages( ...
-        images, names, options.SceneOptions);
+        images, imagePaths, options.SceneOptions);
     fixture = struct();
     fixture.Source = "files";
     fixture.ImagePaths = imagePaths;
@@ -345,11 +344,6 @@ axesPosition = ax.InnerPosition;
 point = axesPosition(1:2) + axesPosition(3:4) / 2;
 end
 
-function name = fileName(path)
-[~, base, extension] = fileparts(path);
-name = string(base) + string(extension);
-end
-
 function sizeVector = imageSize(imageData)
 sizeVector = [size(imageData, 1), size(imageData, 2), size(imageData, 3)];
 end
@@ -423,6 +417,10 @@ fprintf("Viewer performance evaluation\n");
 fprintf("  Fixture: %s, tile: %d, launch/configure: %.3f/%.3f s\n", ...
     summary.Fixture.Source, summary.DisplayTileSize, ...
     summary.LaunchSeconds, summary.PreviewConfigurationSeconds);
+viewer = summary.InitialDiagnostics.Viewer;
+fprintf("  Preview: %.3f MiB additional levels, alignment UI created: %d\n", ...
+    viewer.PyramidAdditionalMaterializedBytesTotal / 2^20, ...
+    viewer.AlignmentControlsCreated);
 for k = 1:numel(summary.Scenarios)
     record = summary.Scenarios(k);
     counters = record.Diagnostics.Counters;

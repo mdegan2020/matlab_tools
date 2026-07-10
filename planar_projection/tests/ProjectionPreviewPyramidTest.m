@@ -21,8 +21,17 @@ classdef ProjectionPreviewPyramidTest < matlab.unittest.TestCase
             testCase.verifyEqual(pyramid.BandCount, 1);
             testCase.verifyEqual(pyramid.ImageClass, "uint8");
             testCase.verifySize(pyramid.Levels(1).Image, [10 12]);
-            testCase.verifySize(pyramid.Levels(end).Image, [4 4]);
+            testCase.verifyEmpty(pyramid.Levels(end).Image);
+            storageBefore = ProjectionPreviewPyramid.storageDiagnostics(pyramid);
+            [pyramid, wasMaterialized] = ...
+                ProjectionPreviewPyramid.materializeLevel( ...
+                pyramid, numel(pyramid.Levels));
+            storageAfter = ProjectionPreviewPyramid.storageDiagnostics(pyramid);
+            testCase.verifyTrue(wasMaterialized);
+            testCase.verifySize(pyramid.Levels(end).Image, [3 3]);
             testCase.verifyEqual(pyramid.Levels(end).Downsample, 4);
+            testCase.verifyEqual(storageBefore.MaterializedLevelCount, 1);
+            testCase.verifyEqual(storageAfter.MaterializedLevelCount, 2);
         end
 
         function testTileBoundsAndTextureUseLevelCoordinates(testCase)
@@ -31,15 +40,60 @@ classdef ProjectionPreviewPyramidTest < matlab.unittest.TestCase
                 struct(TileSize=4));
 
             tiles = ProjectionPreviewPyramid.tileBounds(pyramid, 2, 3);
-            texture = ProjectionPreviewPyramid.tileTexture(pyramid, tiles(1));
+            [texture, pyramid, wasMaterialized] = ...
+                ProjectionPreviewPyramid.tileTexture(pyramid, tiles(1));
+            [repeatedTexture, ~, repeatedMaterialization] = ...
+                ProjectionPreviewPyramid.tileTexture(pyramid, tiles(1));
+            expectedLevel = imresize(imageData, ...
+                pyramid.Levels(2).ImageSize, "box", Antialiasing=true);
+            expectedTexture = expectedLevel(1:3, 1:3);
 
             testCase.verifyEqual(tiles(1).LevelRowLimits, [1 3]);
             testCase.verifyEqual(tiles(1).LevelColumnLimits, [1 3]);
-            testCase.verifyEqual(tiles(1).SourceRowLimits, [1 6]);
-            testCase.verifyEqual(tiles(1).SourceColumnLimits, [1 6]);
+            testCase.verifyEqual(tiles(1).SourceRowLimits, [1 7]);
+            testCase.verifyEqual(tiles(1).SourceColumnLimits, [1 7]);
             testCase.verifyEqual(tiles(2).SourceColumnLimits(1), ...
                 tiles(1).SourceColumnLimits(2));
-            testCase.verifyEqual(texture, imageData([1 3 5], [1 3 5]));
+            testCase.verifyTrue(wasMaterialized);
+            testCase.verifyFalse(repeatedMaterialization);
+            testCase.verifyEqual(texture, expectedTexture);
+            testCase.verifyEqual(repeatedTexture, texture);
+            testCase.verifyNotEqual(texture, imageData([1 3 5], [1 3 5]));
+        end
+
+        function testFileSourceReadsFineTileWithoutMaterializingLevel(testCase)
+            imageData = uint8(reshape(1:80, 8, 10));
+            imagePath = string(tempname) + ".tif";
+            imwrite(imageData, imagePath);
+            testCase.addTeardown(@() delete(imagePath));
+            pyramid = ProjectionPreviewPyramid.build(imageData, struct( ...
+                TileSize=4, SourcePath=imagePath, UseFileSource=true));
+            fineTiles = ProjectionPreviewPyramid.tileBounds(pyramid, 1, 4);
+
+            [texture, pyramid, wasMaterialized] = ...
+                ProjectionPreviewPyramid.tileTexture(pyramid, fineTiles(1));
+            storage = ProjectionPreviewPyramid.storageDiagnostics(pyramid);
+
+            testCase.verifyEqual(pyramid.Source.Mode, "file");
+            testCase.verifyFalse(wasMaterialized);
+            testCase.verifyEqual(texture, imageData(1:4, 1:4));
+            testCase.verifyEqual(storage.MaterializedLevelCount, 0);
+            testCase.verifyEqual(storage.MaterializedBytes, 0);
+        end
+
+        function testBoxReductionSuppressesCheckerboardAliasing(testCase)
+            checker = repmat(uint8([0 255; 255 0]), 32, 32);
+            pyramid = ProjectionPreviewPyramid.build(checker, ...
+                struct(TileSize=8));
+
+            [pyramid, wasMaterialized] = ...
+                ProjectionPreviewPyramid.materializeLevel(pyramid, 2);
+            reduced = double(pyramid.Levels(2).Image);
+
+            testCase.verifyTrue(wasMaterialized);
+            testCase.verifyLessThanOrEqual( ...
+                max(reduced, [], "all") - min(reduced, [], "all"), 1);
+            testCase.verifyEqual(mean(reduced, "all"), 128, AbsTol=1);
         end
 
         function testTileMeshSamplingUsesFullResolutionLimits(testCase)
@@ -51,8 +105,8 @@ classdef ProjectionPreviewPyramidTest < matlab.unittest.TestCase
             meshSampling = ProjectionPreviewPyramid.tileMeshSampling( ...
                 pyramid, tiles(1), 4);
 
-            testCase.verifyEqual(meshSampling.RowIndices, [1 4 6]);
-            testCase.verifyEqual(meshSampling.ColumnIndices, [1 4 6]);
+            testCase.verifyEqual(meshSampling.RowIndices, [1 4 7]);
+            testCase.verifyEqual(meshSampling.ColumnIndices, [1 4 7]);
             testCase.verifyEqual(meshSampling.RowStride, 3);
             testCase.verifyEqual(meshSampling.ColumnStride, 3);
         end

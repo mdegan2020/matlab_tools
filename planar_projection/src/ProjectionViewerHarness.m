@@ -332,8 +332,19 @@ classdef ProjectionViewerHarness
                 return
             end
 
-            gray = ProjectionViewerHarness.scaleSingleBandForDisplay(imageData);
+            gray = ProjectionViewerHarness.prepareScalarDisplayTexture( ...
+                imageData);
             textureData = repmat(gray, 1, 1, 3);
+        end
+
+        function textureData = prepareScalarDisplayTexture(imageData)
+            %prepareScalarDisplayTexture Return normalized scalar grayscale CData.
+            ProjectionViewerHarness.validateImageData(imageData);
+            textureData = ...
+                ProjectionViewerHarness.scaleSingleBandForDisplay(imageData);
+            if ndims(textureData) == 3
+                textureData = mean(textureData, 3);
+            end
         end
 
         function imagePath = defaultImagePath()
@@ -933,17 +944,12 @@ classdef ProjectionViewerHarness
                     "Image data must be a finite numeric or logical 2-D or 3-D array.");
             end
 
-            bandCount = size(imageData, 3);
-            if bandCount ~= 1 && bandCount ~= 3
-                error("ProjectionViewerHarness:unsupportedBandCount", ...
-                    "Image data must be single-band or RGB.");
-            end
         end
 
         function validateRealImageData(imageData)
             if ~isa(imageData, "uint8")
                 error("ProjectionViewerHarness:invalidRealImage", ...
-                    "Real-data images must be uint8 single-band or RGB arrays.");
+                    "Real-data images must be uint8 arrays.");
             end
             ProjectionViewerHarness.validateImageData(imageData);
         end

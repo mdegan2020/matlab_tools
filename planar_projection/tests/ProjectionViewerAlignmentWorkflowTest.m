@@ -29,9 +29,9 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
             drawnow
-            diagnostics = app.alignmentDiagnostics();
 
             fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            diagnostics = app.alignmentDiagnostics();
             referenceDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentReferenceDropDown");
             movingDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -159,6 +159,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
 
+            ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
             diagnostics = app.alignmentDiagnostics();
 
             testCase.verifyEqual(diagnostics.LayerCount, 2);
@@ -780,6 +781,13 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Projection Viewer Prototype");
             fig = fig(1);
+            if isempty(findall(fig, "Tag", ...
+                    "ProjectionViewerAlignmentGrid"))
+                menuItem = findall(fig, "Tag", ...
+                    "ProjectionViewerAlignmentPanelMenuItem");
+                menuItem.MenuSelectedFcn(menuItem, struct());
+                drawnow
+            end
         end
 
         function component = findTagged(parent, tag)

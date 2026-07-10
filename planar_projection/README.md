@@ -265,6 +265,24 @@ single-atlas transparency cost. Local 512- and 1024-side results showed no
 compelling atlas advantage, so the production viewer retains differential tile
 surfaces and defers raster/atlas architecture to the later prototype decision.
 
+The hidden alignment panel is built lazily. Initial launch creates neither the
+heavy alignment grid nor its pair/match tables; opening the context-menu panel
+creates them once and later show/hide operations reuse them.
+
+Preview pyramid metadata is eager, but level images are lazy and antialiased.
+Coarse levels are independently box-filtered from the full source with
+`imresize`, avoiding cumulative blur and direct-stride aliasing. Compatible
+file-backed layers read level-1 tiles by `PixelRegion`; display tile geometry is
+independent of file storage blocks. Diagnostics report source mode, total and
+materialized level counts, and additional materialized bytes.
+
+Single-band tiled layers use normalized scalar `single` `CData` with the axes
+grayscale colormap, avoiding the previous three-channel `repmat` allocation.
+RGB remains truecolor, and arbitrary-band imagery uses an explicit mean-band
+grayscale/RGB fallback. The prepared-tile LRU caches whichever representation
+was selected. Backend export remains unchanged and contains the full source
+imagery rather than preview data or file-read tiles.
+
 ## Projection Viewer Prototype
 
 The interactive prototype is programmatic MATLAB app code, not an `.mlapp` file. From MATLAB:

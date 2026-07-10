@@ -13,7 +13,7 @@ expected `15000 x 10000` through `30000 x 20000` source and output sizes.
 
 The audit and local measurements are complete. Performance implementation is in
 progress and was explicitly prioritized on July 10, 2026. Viewer Performance
-Packs 0-6 are complete: the app now exposes bounded runtime diagnostics and
+Packs 0-7 are complete: the app now exposes bounded runtime diagnostics and
 the repeatable evaluation harness exercises alpha, crosshair, twist, pan,
 slow/fast/reversing LOD-boundary zoom, WASD, and OPK scenarios. Crosshair motion
 is demand-activated and no longer restacks overlay lines during steady pointer
@@ -26,7 +26,9 @@ coverage changes. Source ray/origin samples are cached separately from derived
 projection meshes, projection-offset edits use exact rigid surface translation,
 and OPK/alignment refreshes are limited to affected layers. Viewer Performance
 Pack 6 adds coalesced/exact alpha rendering and global display-only surface and
-texture budgets. Viewer Performance Pack 7 is next.
+texture budgets. Alignment UI and preview level storage are now lazy, file-backed
+fine tiles can be read by region, and single-band tiled previews use scalar
+graphics data. Viewer Performance Pack 8 is next.
 
 Use the pack order in this document and commit and push each coherent, validated
 pack separately.
@@ -1060,6 +1062,49 @@ Viewer Performance Pack 6: Budget transparent preview rendering
 ```
 
 ### Viewer Performance Pack 7: Lazy UI And Preview Storage
+
+Status: complete on July 10, 2026.
+
+The hidden alignment panel is now a true lazy feature. Startup creates only its
+context-menu command and the zero-height layout row; the 16-column control grid
+and the two web-backed tables are constructed on first open, retained across
+subsequent hide/show operations, and measured separately. Initial diagnostics
+therefore report `AlignmentControlsCreated=false` and zero alignment tables.
+
+Preview pyramid construction now creates level metadata eagerly but image data
+lazily. In-memory sources retain level 1 by copy-on-write and materialize only a
+requested coarse level. Compatible file sources retain a runtime-only path
+descriptor, read fine tiles with TIFF `PixelRegion`, and materialize a coarse
+level only when selected. Display tile geometry remains based on image extent,
+LOD, and display tile size rather than TIFF storage blocks. Scene/backend state
+continues to carry the full source `Image`; preview descriptors and levels do
+not enter exported jobs.
+
+Every coarse level is reduced independently from the full source with
+antialiased `imresize(..., "box")`, so blur does not accumulate through a
+chain of levels. Output dimensions use `ceil(sourceSize/downsample)` with at
+least two endpoint samples for nontrivial axes; `imresize` owns filter support
+and edge-extension semantics. A checkerboard fixture that previously aliases
+under direct striding now reduces to uniform mid-gray within one integer code.
+Existing LOD hysteresis and no-blank-transition tests remain in force.
+
+Single-band tiled previews now prepare normalized two-dimensional `single`
+`CData` and share an axes grayscale colormap. The bounded prepared-tile LRU
+caches that scalar texture, so redisplay and blend appearance updates do not
+repeat `repmat`. RGB stays truecolor. Mixed single-band/RGB scenes use both
+paths simultaneously, while arbitrary-band imagery follows an explicit
+mean-band grayscale-to-RGB compatibility fallback. Red/blue anaglyph converts
+cached scalar data to truecolor only when that blend mode requires channels.
+
+On the local two-TIFF fixture, launch fell from the Pack 6 measurement of about
+`2.09 s` to about `1.32 s` with no alignment controls/tables created. The
+file-backed pyramids had three levels each, one materialized level each, and
+about `3.56 MiB` of additional level storage at launch. Creating the alignment
+UI was deferred until requested and recorded one creation. On a synthetic
+100 MP single-band fixture, launch was about `1.11 s`; two of five levels were
+materialized, additional level storage was about `0.37 MiB`, and the visible
+scalar texture was about `1.49 MiB`. These are local measurements, not portable
+thresholds.
 
 Deliverables:
 

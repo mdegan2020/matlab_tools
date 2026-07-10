@@ -111,23 +111,35 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 "Name", "Projection Viewer Prototype");
             layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
             controlGrid = layerDropDown.Parent;
-            alignmentGrid = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
-                fig, "ProjectionViewerAlignmentGrid");
             alignmentPanelMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAlignmentPanelMenuItem");
 
-            testCase.verifyEqual(alignmentGrid.Layout.Row, 2);
             testCase.verifyEqual(controlGrid.Layout.Row, 3);
-            testCase.verifyEqual(string(alignmentGrid.Visible), "off");
-            testCase.verifyEqual(alignmentGrid.Parent.RowHeight{2}, 0);
+            testCase.verifyEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentGrid"));
+            testCase.verifyEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentPairTable"));
+            testCase.verifyEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentMatchTable"));
             testCase.verifyEqual(string(alignmentPanelMenu.Checked), "off");
 
             alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
             drawnow
 
+            alignmentGrid = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                fig, "ProjectionViewerAlignmentGrid");
+
+            testCase.verifyEqual(alignmentGrid.Layout.Row, 2);
             testCase.verifyEqual(string(alignmentGrid.Visible), "on");
             testCase.verifyEqual(string(alignmentGrid.Parent.RowHeight{2}), "fit");
             testCase.verifyEqual(string(alignmentPanelMenu.Checked), "on");
+            diagnosticsAfterCreate = app.performanceDiagnostics();
+            testCase.verifyTrue( ...
+                diagnosticsAfterCreate.Viewer.AlignmentControlsCreated);
+            testCase.verifyEqual( ...
+                diagnosticsAfterCreate.Viewer.AlignmentTableCount, 2);
+            testCase.verifyEqual( ...
+                diagnosticsAfterCreate.Counters.AlignmentUiCreations, 1);
 
             alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
             drawnow
@@ -135,6 +147,14 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(alignmentGrid.Visible), "off");
             testCase.verifyEqual(alignmentGrid.Parent.RowHeight{2}, 0);
             testCase.verifyEqual(string(alignmentPanelMenu.Checked), "off");
+
+            alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
+            drawnow
+            diagnosticsAfterReopen = app.performanceDiagnostics();
+            testCase.verifyEqual( ...
+                diagnosticsAfterReopen.Counters.AlignmentUiCreations, 1);
+            testCase.verifyEqual(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentGrid"), alignmentGrid);
         end
 
         function testHelpContextMenuOpensNonModalDialog(testCase)

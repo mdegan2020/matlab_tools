@@ -23,6 +23,11 @@ classdef ProjectionPreviewPyramid
             options.MinTiledImagePixels = 4e6;
             options.MaxTileMeshVertices = 33;
             options.MaxVisibleTilesPerLayer = 96;
+            options.LazyLevels = true;
+            options.ReductionMethod = "box";
+            options.SourcePath = "";
+            options.UseFileSource = true;
+            options.UseScalarSingleBandTextures = true;
 
             names = fieldnames(overrides);
             for k = 1:numel(names)
@@ -40,6 +45,21 @@ classdef ProjectionPreviewPyramid
             options.MaxVisibleTilesPerLayer = ...
                 ProjectionPreviewPyramid.validatePositiveInteger( ...
                 options.MaxVisibleTilesPerLayer, "MaxVisibleTilesPerLayer");
+            options.LazyLevels = ProjectionPreviewPyramid.validateLogical( ...
+                options.LazyLevels, "LazyLevels");
+            options.ReductionMethod = string(validatestring( ...
+                string(options.ReductionMethod), "box"));
+            options.SourcePath = string(options.SourcePath);
+            if ~isscalar(options.SourcePath) || ismissing(options.SourcePath)
+                error("ProjectionPreviewPyramid:invalidOptions", ...
+                    "SourcePath must be a string scalar.");
+            end
+            options.UseFileSource = ProjectionPreviewPyramid.validateLogical( ...
+                options.UseFileSource, "UseFileSource");
+            options.UseScalarSingleBandTextures = ...
+                ProjectionPreviewPyramid.validateLogical( ...
+                options.UseScalarSingleBandTextures, ...
+                "UseScalarSingleBandTextures");
         end
 
         function tiles = emptyTiles()
@@ -68,8 +88,12 @@ classdef ProjectionPreviewPyramid
             imageSize = [size(imageData, 1), size(imageData, 2)];
             factor = 1;
             levelIndex = 0;
-            levels = struct("Image", {}, "RowIndices", {}, ...
-                "ColumnIndices", {}, "Downsample", {}, "ImageSize", {});
+            useFileSource = options.UseFileSource && ...
+                ProjectionPreviewPyramid.canUseFileSource( ...
+                imageData, options.SourcePath);
+            levels = struct("Image", {}, "Materialized", {}, ...
+                "RowIndices", {}, "ColumnIndices", {}, ...
+                "Downsample", {}, "ImageSize", {});
             while true
                 levelIndex = levelIndex + 1;
                 rowIndices = ProjectionPreviewPyramid.levelIndices( ...
@@ -77,11 +101,19 @@ classdef ProjectionPreviewPyramid
                 columnIndices = ProjectionPreviewPyramid.levelIndices( ...
                     imageSize(2), factor);
 
-                if factor == 1
+                shouldMaterialize = ~options.LazyLevels || ...
+                    (factor == 1 && ~useFileSource);
+                if shouldMaterialize && factor == 1
                     levels(levelIndex).Image = imageData;
+                elseif shouldMaterialize
+                    levels(levelIndex).Image = ...
+                        ProjectionPreviewPyramid.reduceImage( ...
+                        imageData, [numel(rowIndices), numel(columnIndices)], ...
+                        options.ReductionMethod);
                 else
-                    levels(levelIndex).Image = imageData(rowIndices, columnIndices, :);
+                    levels(levelIndex).Image = [];
                 end
+                levels(levelIndex).Materialized = shouldMaterialize;
                 levels(levelIndex).RowIndices = rowIndices;
                 levels(levelIndex).ColumnIndices = columnIndices;
                 levels(levelIndex).Downsample = factor;
@@ -100,6 +132,15 @@ classdef ProjectionPreviewPyramid
             pyramid.ImageClass = string(class(imageData));
             pyramid.Levels = levels;
             pyramid.Options = options;
+            if useFileSource
+                sourceMode = "file";
+                memoryImage = [];
+            else
+                sourceMode = "memory";
+                memoryImage = imageData;
+            end
+            pyramid.Source = struct(Mode=sourceMode, ...
+                Path=options.SourcePath, MemoryImage=memoryImage);
         end
 
         function tf = shouldUseTiling(pyramid, options)
@@ -204,14 +245,75 @@ classdef ProjectionPreviewPyramid
             end
         end
 
-        function texture = tileTexture(pyramid, tile)
+        function [texture, pyramid, wasMaterialized] = tileTexture(pyramid, tile)
             %tileTexture Return the image data for a single pyramid tile.
             ProjectionPreviewPyramid.validatePyramid(pyramid);
             tile = ProjectionPreviewPyramid.validateTile(tile);
+            wasMaterialized = false;
+            if tile.LevelIndex == 1 && pyramid.Source.Mode == "file" && ...
+                    ~pyramid.Levels(1).Materialized
+                texture = ProjectionPreviewPyramid.readFileRegion( ...
+                    pyramid.Source.Path, tile.LevelRowLimits, ...
+                    tile.LevelColumnLimits);
+                return
+            end
+            [pyramid, wasMaterialized] = ...
+                ProjectionPreviewPyramid.materializeLevel( ...
+                pyramid, tile.LevelIndex);
             level = pyramid.Levels(tile.LevelIndex);
             texture = level.Image( ...
                 tile.LevelRowLimits(1):tile.LevelRowLimits(2), ...
                 tile.LevelColumnLimits(1):tile.LevelColumnLimits(2), :);
+        end
+
+        function [pyramid, wasMaterialized] = materializeLevel( ...
+                pyramid, levelIndex)
+            %materializeLevel Lazily create one antialiased pyramid level.
+            ProjectionPreviewPyramid.validatePyramid(pyramid);
+            levelIndex = ProjectionPreviewPyramid.validateLevelIndex( ...
+                levelIndex, numel(pyramid.Levels));
+            wasMaterialized = false;
+            if pyramid.Levels(levelIndex).Materialized
+                return
+            end
+
+            sourceImage = ProjectionPreviewPyramid.readFullSource(pyramid);
+            if levelIndex == 1
+                levelImage = sourceImage;
+            else
+                levelImage = ProjectionPreviewPyramid.reduceImage( ...
+                    sourceImage, pyramid.Levels(levelIndex).ImageSize, ...
+                    pyramid.Options.ReductionMethod);
+            end
+            pyramid.Levels(levelIndex).Image = levelImage;
+            pyramid.Levels(levelIndex).Materialized = true;
+            wasMaterialized = true;
+        end
+
+        function diagnostics = storageDiagnostics(pyramid)
+            %storageDiagnostics Report runtime preview-level materialization.
+            ProjectionPreviewPyramid.validatePyramid(pyramid);
+            materializedMask = [pyramid.Levels.Materialized];
+            materializedBytes = 0;
+            additionalMaterializedBytes = 0;
+            for levelIndex = find(materializedMask)
+                levelImage = pyramid.Levels(levelIndex).Image;
+                levelBytes = ...
+                    numel(levelImage) * ...
+                    ProjectionPreviewPyramid.classBytes(class(levelImage));
+                materializedBytes = materializedBytes + levelBytes;
+                if levelIndex > 1 || pyramid.Source.Mode == "file"
+                    additionalMaterializedBytes = ...
+                        additionalMaterializedBytes + levelBytes;
+                end
+            end
+            diagnostics = struct( ...
+                SourceMode=pyramid.Source.Mode, ...
+                LevelCount=numel(pyramid.Levels), ...
+                MaterializedLevelCount=nnz(materializedMask), ...
+                MaterializedBytes=double(materializedBytes), ...
+                AdditionalMaterializedBytes= ...
+                double(additionalMaterializedBytes));
         end
 
         function meshSampling = tileMeshSampling(~, tile, maxVertices)
@@ -282,7 +384,12 @@ classdef ProjectionPreviewPyramid
         end
 
         function indices = levelIndices(upperBound, factor)
-            indices = unique([1:factor:upperBound, upperBound], "stable");
+            sampleCount = max(2, ceil(double(upperBound) / factor));
+            if upperBound == 1
+                sampleCount = 1;
+            end
+            indices = unique(round(linspace( ...
+                1, double(upperBound), sampleCount)), "stable");
             indices = double(indices);
         end
 
@@ -357,6 +464,72 @@ classdef ProjectionPreviewPyramid
                     "%s must be a positive integer scalar.", name);
             end
             value = double(value);
+        end
+
+        function value = validateLogical(value, name)
+            if ~isscalar(value) || ...
+                    ~(islogical(value) || ...
+                    (isnumeric(value) && isfinite(value) && ...
+                    any(value == [0 1])))
+                error("ProjectionPreviewPyramid:invalidOptions", ...
+                    "%s must be a logical scalar.", name);
+            end
+            value = logical(value);
+        end
+
+        function tf = canUseFileSource(imageData, sourcePath)
+            tf = false;
+            if strlength(sourcePath) == 0 || ~isfile(sourcePath)
+                return
+            end
+            try
+                sample = ProjectionPreviewPyramid.readFileRegion( ...
+                    sourcePath, [1 min(2, size(imageData, 1))], ...
+                    [1 min(2, size(imageData, 2))]);
+                info = imfinfo(char(sourcePath));
+                tf = info(1).Height == size(imageData, 1) && ...
+                    info(1).Width == size(imageData, 2) && ...
+                    size(sample, 3) == size(imageData, 3) && ...
+                    strcmp(class(sample), class(imageData));
+            catch
+                tf = false;
+            end
+        end
+
+        function imageData = readFullSource(pyramid)
+            if pyramid.Source.Mode == "file"
+                imageData = imread(char(pyramid.Source.Path));
+            else
+                imageData = pyramid.Source.MemoryImage;
+            end
+        end
+
+        function imageData = readFileRegion(path, rowLimits, columnLimits)
+            imageData = imread(char(path), "PixelRegion", ...
+                {double(rowLimits), double(columnLimits)});
+        end
+
+        function reduced = reduceImage(imageData, outputSize, method)
+            % Reduce directly from full source so LODs do not accumulate blur.
+            % imresize owns filter support and edge extension semantics.
+            reduced = imresize(imageData, double(outputSize), char(method), ...
+                Antialiasing=true);
+        end
+
+        function bytes = classBytes(className)
+            switch string(className)
+                case {"logical", "uint8", "int8"}
+                    bytes = 1;
+                case {"uint16", "int16"}
+                    bytes = 2;
+                case {"uint32", "int32", "single"}
+                    bytes = 4;
+                case {"uint64", "int64", "double"}
+                    bytes = 8;
+                otherwise
+                    error("ProjectionPreviewPyramid:unsupportedImageClass", ...
+                        "Unsupported image class %s.", className);
+            end
         end
     end
 end
