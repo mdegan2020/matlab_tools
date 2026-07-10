@@ -436,6 +436,15 @@ outputs, write PNG/TIFF products with metadata, process tiles serially or with
 `parpool("threads")`, run optional alignment before rendering, and accept
 optional GPU requests with CPU fallback.
 
+Backend rendering first compiles a runtime-only `ProjectionBackendRenderPlan`.
+Output-grid meshes are reused, interpolation topology is prepared once per
+visible layer, and GPU capability is resolved once per job; every output tile
+then consumes the same plan. `result.RenderPlan`, validation output, readback,
+and JSON metadata contain only the serializable plan summary. The runtime plan's
+interpolation objects never enter scene/job serialization. Pack 0 deliberately
+retains the existing sparse-intensity numerical semantics; full-source inverse
+sampling is the next backend performance pack.
+
 From an interactive app session:
 
 ```matlab

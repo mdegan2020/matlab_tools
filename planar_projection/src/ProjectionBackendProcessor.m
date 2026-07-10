@@ -13,15 +13,17 @@ classdef ProjectionBackendProcessor
                 stateApplied = true;
             end
             [job, alignment] = ProjectionBackendProcessor.runAlignment(job);
-            outputGrid = ProjectionBackendOutputGrid.plan(job.Scene, ...
+            [outputGrid, preparedLayers] = ProjectionBackendOutputGrid.plan(job.Scene, ...
                 ProjectionBackendProcessor.viewerStateForGrid(job), job.RenderOptions);
             renderOptions = ProjectionBackendProcessor.renderOptionsWithGrid( ...
                 job.RenderOptions, outputGrid);
             renderOptions = ProjectionBackendProcessor.renderOptionsWithExecution( ...
                 renderOptions, job.Execution);
+            renderPlan = ProjectionBackendRenderPlan.compile( ...
+                job.Scene, renderOptions, preparedLayers);
             renderTimer = tic;
             readback = ProjectionBackendProcessor.renderScene( ...
-                job.Scene, renderOptions, job.Execution);
+                job.Scene, renderOptions, job.Execution, renderPlan);
             renderSeconds = toc(renderTimer);
 
             result = struct();
@@ -36,6 +38,7 @@ classdef ProjectionBackendProcessor
             result.Execution = job.Execution;
             result.Alignment = alignment;
             result.OutputGrid = outputGrid;
+            result.RenderPlan = ProjectionBackendRenderPlan.summary(renderPlan);
             result.Readback = readback;
             result.GpuInfo = readback.GpuInfo;
             result.OutputFiles = [];
@@ -68,13 +71,14 @@ classdef ProjectionBackendProcessor
                     job.Scene, job.ViewerState);
                 stateApplied = true;
             end
-            outputGrid = ProjectionBackendOutputGrid.plan(job.Scene, ...
+            [outputGrid, preparedLayers] = ProjectionBackendOutputGrid.plan(job.Scene, ...
                 ProjectionBackendProcessor.viewerStateForGrid(job), job.RenderOptions);
             renderOptions = ProjectionBackendProcessor.renderOptionsWithGrid( ...
                 job.RenderOptions, outputGrid);
             renderOptions = ProjectionBackendProcessor.renderOptionsWithExecution( ...
                 renderOptions, job.Execution);
-            gpuInfo = ProjectionBackendGpuSupport.resolve(renderOptions.UseGPU);
+            renderPlan = ProjectionBackendRenderPlan.compile( ...
+                job.Scene, renderOptions, preparedLayers);
 
             validation = struct();
             validation.Format = "ProjectionBackendValidation";
@@ -87,7 +91,8 @@ classdef ProjectionBackendProcessor
             validation.Execution = job.Execution;
             validation.Alignment = job.Alignment;
             validation.OutputGrid = outputGrid;
-            validation.GpuInfo = gpuInfo;
+            validation.RenderPlan = ProjectionBackendRenderPlan.summary(renderPlan);
+            validation.GpuInfo = renderPlan.GpuInfo;
             validation.Timing = struct(ValidationSeconds=toc(validationTimer));
             validation.Message = "Backend job resolved and planned successfully.";
         end
@@ -105,15 +110,16 @@ classdef ProjectionBackendProcessor
             renderOptions.UseGPU = renderOptions.UseGPU || execution.UseGPU;
         end
 
-        function readback = renderScene(scene, renderOptions, execution)
+        function readback = renderScene( ...
+                scene, renderOptions, execution, renderPlan)
             executionMode = lower(string(execution.Mode));
             if executionMode == "threads" || ...
                     (isfield(renderOptions, "TileSize") && ...
                     ~isempty(renderOptions.TileSize))
                 readback = ProjectionBackendTiledRenderer.renderScene( ...
-                    scene, renderOptions, execution);
+                    scene, renderOptions, execution, renderPlan);
             else
-                readback = ProjectionReadbackRenderer.renderScene(scene, renderOptions);
+                readback = ProjectionReadbackRenderer.renderPlan(renderPlan);
             end
         end
 

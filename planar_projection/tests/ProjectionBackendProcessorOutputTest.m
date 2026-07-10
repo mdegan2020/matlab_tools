@@ -61,6 +61,13 @@ classdef ProjectionBackendProcessorOutputTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(metadata.Format), ...
                 ProjectionBackendOutputWriter.MetadataFormat);
             testCase.verifyEqual(metadata.OutputGrid.OutputSize(:).', [3 4]);
+            testCase.verifyEqual(string(metadata.RenderPlan.Format), ...
+                ProjectionBackendRenderPlan.Format);
+            testCase.verifyEqual(metadata.RenderPlan.OutputSize(:).', [3 4]);
+            testCase.verifyEqual(string(metadata.RenderPlan.Interpolation), ...
+                "bilinear");
+            testCase.verifyEqual(metadata.RenderPlan.MeshBuildCount, 2);
+            testCase.verifyEqual(metadata.RenderPlan.TopologyBuildCount, 2);
             testCase.verifyEqual(string(metadata.OutputFiles.Metadata), ...
                 string(result.OutputFiles.Metadata));
             testCase.verifyEqual(metadata.LayerIndices(:).', [1 2]);

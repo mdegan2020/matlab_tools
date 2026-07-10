@@ -57,6 +57,22 @@ Run the backend:
 result = ProjectionBackendProcessor.run("backend_job.json");
 ```
 
+Validation and render results include a JSON-safe `RenderPlan` summary. It
+records the output size, interpolation policy, visible layers, numerical mode,
+mesh/topology preparation counts, and effective GPU decision. The actual
+runtime plan is compiled once per invocation, reused by all tiles, and is never
+written into the job or scene payload.
+
+```matlab
+validation.RenderPlan
+result.RenderPlan
+result.Readback.RenderPlan
+```
+
+The current numerical mode remains sparse-intensity scattered interpolation.
+Preview pyramids and display tiles are not plan inputs; backend source imagery
+remains the full `layer.Image` data.
+
 An alignment-enabled run reports `result.Status` as `"aligned"` or
 `"stateAppliedAligned"`, stores the alignment summary under `result.Alignment`,
 and writes the aligned viewer state plus alignment diagnostics when output file

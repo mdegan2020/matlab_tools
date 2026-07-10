@@ -7,7 +7,7 @@ classdef ProjectionBackendOutputGrid
     end
 
     methods (Static)
-        function grid = plan(scene, viewerState, options)
+        function [grid, preparedLayers] = plan(scene, viewerState, options)
             %plan Plan a full-extent output grid over visible scene layers.
             if nargin < 2
                 viewerState = [];
@@ -35,12 +35,19 @@ classdef ProjectionBackendOutputGrid
             allX = zeros(0, 1);
             allY = zeros(0, 1);
             layerExtents = struct([]);
+            preparedLayers = struct([]);
             resolutionCandidates = zeros(0, 1);
             for outputIndex = 1:numel(layerIndices)
                 layerIndex = layerIndices(outputIndex);
                 layer = scene.layers(layerIndex);
                 mesh = ProjectionMeshBuilder.buildLayerMesh( ...
                     layer, layer.CurrentProjectionPlane, scene.renderOrigin);
+                preparedLayer = struct(LayerIndex=layerIndex, Mesh=mesh);
+                if isempty(preparedLayers)
+                    preparedLayers = preparedLayer;
+                else
+                    preparedLayers(outputIndex) = preparedLayer;
+                end
                 coordinates = ProjectionBackendOutputGrid.projectPointsToAxes( ...
                     mesh.WorldPoints, referencePlane.P0, xAxis, yAxis);
                 extent = ProjectionBackendOutputGrid.extentFromCoordinates(coordinates);

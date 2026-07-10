@@ -24,6 +24,11 @@ classdef ProjectionBackendProcessorValidationTest < matlab.unittest.TestCase
             testCase.verifyEqual(validation.Status, "valid");
             testCase.verifyFalse(validation.StateApplied);
             testCase.verifyEqual(validation.OutputGrid.OutputSize, [5 7]);
+            testCase.verifyEqual(validation.RenderPlan.OutputSize, [5 7]);
+            testCase.verifyEqual(validation.RenderPlan.Interpolation, "bilinear");
+            testCase.verifyEqual(validation.RenderPlan.MeshBuildCount, 2);
+            testCase.verifyEqual(validation.RenderPlan.TopologyBuildCount, 2);
+            testCase.verifyEqual(validation.RenderPlan.GpuResolutionCount, 1);
             testCase.verifyFalse(isfield(validation, "Readback"));
             testCase.verifyFalse(validation.GpuInfo.Requested);
         end

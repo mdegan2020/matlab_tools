@@ -2,7 +2,7 @@ classdef ProjectionBackendTiledRenderer
     %ProjectionBackendTiledRenderer Serial tiled CPU backend renderer.
 
     methods (Static)
-        function readback = renderScene(scene, options, execution)
+        function readback = renderScene(scene, options, execution, renderPlan)
             %renderScene Render a scene in bounded row/column tiles.
             if nargin < 2
                 options = struct();
@@ -10,15 +10,27 @@ classdef ProjectionBackendTiledRenderer
             if nargin < 3
                 execution = struct();
             end
+            if nargin < 4
+                renderPlan = [];
+            end
 
-            options = ProjectionBackendTiledRenderer.mergeOptions(scene, options, execution);
+            [options, preparedLayers] = ProjectionBackendTiledRenderer.mergeOptions( ...
+                scene, options, execution);
+            if isempty(renderPlan)
+                renderPlan = ProjectionBackendRenderPlan.compile( ...
+                    scene, options, preparedLayers);
+            else
+                renderPlan = ProjectionBackendRenderPlan.validate(renderPlan);
+                ProjectionBackendTiledRenderer.validatePlanOptions( ...
+                    renderPlan, options);
+            end
             outputGrid = options.OutputGrid;
             outputSize = outputGrid.OutputSize;
             tiles = ProjectionBackendTiledRenderer.tileRanges( ...
                 outputSize, options.TileSize);
             if options.ExecutionMode == "threads"
                 tileResults = ProjectionBackendTiledRenderer.renderTilesInThreads( ...
-                    scene, options, outputGrid, tiles);
+                    renderPlan, options, outputGrid, tiles);
             else
                 tileResults = {};
             end
@@ -26,10 +38,10 @@ classdef ProjectionBackendTiledRenderer
             compositeImage = [];
             validMask = false(outputSize);
             layerReadbacks = struct([]);
-            layerIndex = [];
-            layerIndices = [];
-            useGPU = false;
-            gpuInfo = ProjectionBackendGpuSupport.resolve(false);
+            layerIndex = renderPlan.LayerIndices(1);
+            layerIndices = renderPlan.LayerIndices;
+            useGPU = renderPlan.UseGPU;
+            gpuInfo = renderPlan.GpuInfo;
             tileReports = ProjectionBackendTiledRenderer.emptyTileReports();
             tileReportIndex = 0;
 
@@ -42,15 +54,9 @@ classdef ProjectionBackendTiledRenderer
                 else
                     tile = tiles(tileIndex);
                     [tileReadback, report] = ProjectionBackendTiledRenderer.renderTile( ...
-                        scene, options, outputGrid, tile);
+                        renderPlan, options, outputGrid, tile);
                 end
 
-                if isempty(layerIndices)
-                    layerIndex = tileReadback.LayerIndex;
-                    layerIndices = tileReadback.LayerIndices;
-                    useGPU = tileReadback.UseGPU;
-                    gpuInfo = tileReadback.GpuInfo;
-                end
                 if isempty(compositeImage)
                     compositeImage = ProjectionBackendTiledRenderer.allocateImage( ...
                         outputSize, tileReadback.Image);
@@ -96,11 +102,12 @@ classdef ProjectionBackendTiledRenderer
             readback.TileSize = options.TileSize;
             readback.TileCount = numel(tileReports);
             readback.TileReports = tileReports;
+            readback.RenderPlan = ProjectionBackendRenderPlan.summary(renderPlan);
         end
     end
 
     methods (Static, Access = private)
-        function options = mergeOptions(scene, options, execution)
+        function [options, preparedLayers] = mergeOptions(scene, options, execution)
             if isempty(options)
                 options = struct();
             end
@@ -131,8 +138,10 @@ classdef ProjectionBackendTiledRenderer
             end
             defaults.TileSize = ProjectionBackendTiledRenderer.validateTileSize( ...
                 defaults.TileSize);
+            preparedLayers = struct([]);
             if isempty(defaults.OutputGrid)
-                defaults.OutputGrid = ProjectionBackendOutputGrid.plan(scene, defaults);
+                [defaults.OutputGrid, preparedLayers] = ...
+                    ProjectionBackendOutputGrid.plan(scene, defaults);
             else
                 defaults.OutputGrid = ProjectionBackendTiledRenderer.validateOutputGrid( ...
                     defaults.OutputGrid);
@@ -152,13 +161,14 @@ classdef ProjectionBackendTiledRenderer
             options = defaults;
         end
 
-        function tileResults = renderTilesInThreads(scene, options, outputGrid, tiles)
+        function tileResults = renderTilesInThreads( ...
+                renderPlan, options, outputGrid, tiles)
             ProjectionBackendTiledRenderer.ensureThreadPool();
             tileResults = cell(1, numel(tiles));
             parfor tileIndex = 1:numel(tiles)
                 tile = tiles(tileIndex);
                 [tileReadback, report] = ProjectionBackendTiledRenderer.renderTile( ...
-                    scene, options, outputGrid, tile);
+                    renderPlan, options, outputGrid, tile);
                 tileResults{tileIndex} = struct(Tile=tile, Readback=tileReadback, ...
                     Report=report);
             end
@@ -180,14 +190,16 @@ classdef ProjectionBackendTiledRenderer
             tf = contains(string(class(pool)), "ThreadPool");
         end
 
-        function [tileReadback, report] = renderTile(scene, options, outputGrid, tile)
+        function [tileReadback, report] = renderTile( ...
+                renderPlan, options, outputGrid, tile)
             tileOptions = options;
             tileOptions.OutputGrid = ProjectionBackendTiledRenderer.tileOutputGrid( ...
                 outputGrid, tile.RowRange, tile.ColumnRange);
             tileOptions.OutputSize = tileOptions.OutputGrid.OutputSize;
 
             tileTimer = tic;
-            tileReadback = ProjectionReadbackRenderer.renderScene(scene, tileOptions);
+            tileReadback = ProjectionReadbackRenderer.renderPlan( ...
+                renderPlan, tileOptions.OutputGrid);
             renderSeconds = toc(tileTimer);
             report = ProjectionBackendTiledRenderer.tileReport( ...
                 tile, tileReadback, renderSeconds);
@@ -381,6 +393,17 @@ classdef ProjectionBackendTiledRenderer
                 value = value.(fieldName);
             else
                 value = defaultValue;
+            end
+        end
+
+        function validatePlanOptions(renderPlan, options)
+            if ~isequal(double(renderPlan.OutputSize), ...
+                    double(options.OutputGrid.OutputSize)) || ...
+                    renderPlan.Interpolation ~= lower(string(options.Interpolation)) || ...
+                    renderPlan.IncludeLayerReadbacks ~= ...
+                    logical(options.IncludeLayerReadbacks)
+                error("ProjectionBackendTiledRenderer:planMismatch", ...
+                    "Render plan does not match tiled output or interpolation options.");
             end
         end
 

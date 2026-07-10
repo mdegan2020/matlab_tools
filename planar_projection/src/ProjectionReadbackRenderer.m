@@ -7,43 +7,70 @@ classdef ProjectionReadbackRenderer
             if nargin < 2
                 options = struct();
             end
+            try
+                plan = ProjectionBackendRenderPlan.compile(scene, options);
+            catch ME
+                if ME.identifier == "ProjectionBackendRenderPlan:invalidOptions"
+                    error("ProjectionReadbackRenderer:invalidOptions", ...
+                        "%s", ME.message);
+                elseif ME.identifier == "ProjectionBackendRenderPlan:invalidScene"
+                    error("ProjectionReadbackRenderer:invalidScene", ...
+                        "%s", ME.message);
+                elseif ME.identifier == "ProjectionBackendRenderPlan:noVisibleLayer"
+                    error("ProjectionReadbackRenderer:noVisibleLayer", ...
+                        "%s", ME.message);
+                end
+                rethrow(ME);
+            end
+            readback = ProjectionReadbackRenderer.renderPlan(plan);
+        end
 
-            ProjectionReadbackRenderer.validateScene(scene);
-            layerIndices = ProjectionReadbackRenderer.visibleLayerIndices(scene.layers);
-            firstLayer = scene.layers(layerIndices(1));
-            options = ProjectionReadbackRenderer.mergeOptions(options, firstLayer);
+        function readback = renderPlan(plan, outputGrid)
+            %renderPlan Render a compiled backend plan over an optional grid.
+            plan = ProjectionBackendRenderPlan.validate(plan);
+            if nargin < 2
+                outputGrid = plan.OutputGrid;
+            end
+            outputGrid = ProjectionReadbackRenderer.validateOutputGrid(outputGrid);
+            options = struct();
+            options.OutputSize = plan.OutputSize;
+            options.OutputGrid = outputGrid;
+            options.Interpolation = plan.Interpolation;
+            options.InvalidFillValue = plan.InvalidFillValue;
+            options.IncludeLayerReadbacks = plan.IncludeLayerReadbacks;
+            options.UseGPU = plan.UseGPU;
+            options.GpuInfo = plan.GpuInfo;
+            if ~isempty(outputGrid)
+                options.OutputSize = ProjectionReadbackRenderer.validateOutputSize( ...
+                    outputGrid.OutputSize);
+            end
 
-            firstPlane = firstLayer.CurrentProjectionPlane;
-            firstMesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                firstLayer, firstPlane, scene.renderOrigin);
+            firstMesh = plan.Layers(1).Mesh;
             samplingGrid = ProjectionReadbackRenderer.createSamplingGrid( ...
-                scene.frameCamera, firstMesh, options);
+                plan.FrameCamera, firstMesh, options);
 
             compositeImage = [];
             validMask = false(options.OutputSize);
             anaglyphOrdinal = 0;
             layerReadbacks = struct([]);
 
-            for outputIndex = 1:numel(layerIndices)
-                layerIndex = layerIndices(outputIndex);
-                layer = scene.layers(layerIndex);
-                plane = layer.CurrentProjectionPlane;
-                mesh = ProjectionMeshBuilder.buildLayerMesh(layer, plane, scene.renderOrigin);
+            for outputIndex = 1:numel(plan.Layers)
+                layerPlan = plan.Layers(outputIndex);
                 [layerImage, layerValidMask, queryPlaneCoordinates] = ...
                     ProjectionReadbackRenderer.renderLayer( ...
-                    scene.frameCamera, layer, plane, mesh, samplingGrid, options);
+                    plan.FrameCamera, layerPlan, samplingGrid, options);
 
                 [compositeImage, validMask, anaglyphOrdinal] = ...
                     ProjectionReadbackRenderer.blendLayer( ...
                     compositeImage, validMask, layerImage, layerValidMask, ...
-                    layer, options, anaglyphOrdinal);
+                    layerPlan, options, anaglyphOrdinal);
 
                 if options.IncludeLayerReadbacks
                     layerReadbacks(outputIndex).Image = layerImage;
                     layerReadbacks(outputIndex).ValidMask = layerValidMask;
-                    layerReadbacks(outputIndex).LayerIndex = layerIndex;
+                    layerReadbacks(outputIndex).LayerIndex = layerPlan.LayerIndex;
                     layerReadbacks(outputIndex).QueryPlaneCoordinates = queryPlaneCoordinates;
-                    layerReadbacks(outputIndex).Mesh = mesh;
+                    layerReadbacks(outputIndex).Mesh = layerPlan.Mesh;
                 end
             end
 
@@ -58,8 +85,8 @@ classdef ProjectionReadbackRenderer
             readback.ValidMask = validMask;
             readback.OutputSize = options.OutputSize;
             readback.Interpolation = options.Interpolation;
-            readback.LayerIndex = layerIndices(1);
-            readback.LayerIndices = layerIndices;
+            readback.LayerIndex = plan.LayerIndices(1);
+            readback.LayerIndices = plan.LayerIndices;
             readback.CameraGrid = samplingGrid;
             readback.QueryPlaneCoordinates = ...
                 ProjectionReadbackRenderer.firstLayerField(layerReadbacks, ...
@@ -69,86 +96,12 @@ classdef ProjectionReadbackRenderer
             readback.LayerReadbacks = layerReadbacks;
             readback.UseGPU = options.UseGPU;
             readback.GpuInfo = options.GpuInfo;
-            if isfield(options, "OutputGrid")
-                readback.OutputGrid = options.OutputGrid;
-            else
-                readback.OutputGrid = [];
-            end
+            readback.OutputGrid = outputGrid;
+            readback.RenderPlan = ProjectionBackendRenderPlan.summary(plan);
         end
     end
 
     methods (Static, Access = private)
-        function validateScene(scene)
-            if ~isstruct(scene) || ~isscalar(scene) || ~isfield(scene, "frameCamera") || ...
-                    ~isfield(scene, "renderOrigin") || ~isfield(scene, "layers")
-                error("ProjectionReadbackRenderer:invalidScene", ...
-                    "Scene must contain frameCamera, renderOrigin, and layers.");
-            end
-
-            PlanarProjection.validateCamera(scene.frameCamera);
-            if isempty(scene.layers) || ~isstruct(scene.layers)
-                error("ProjectionReadbackRenderer:invalidScene", ...
-                    "Scene must contain at least one layer.");
-            end
-        end
-
-        function layerIndices = visibleLayerIndices(layers)
-            visible = [layers.Visible];
-            layerIndices = find(visible);
-            if isempty(layerIndices)
-                error("ProjectionReadbackRenderer:noVisibleLayer", ...
-                    "Scene must contain at least one visible layer.");
-            end
-        end
-
-        function options = mergeOptions(options, layer)
-            if isempty(options)
-                options = struct();
-            end
-            if ~isstruct(options) || ~isscalar(options)
-                error("ProjectionReadbackRenderer:invalidOptions", ...
-                    "Options must be a scalar struct.");
-            end
-
-            defaults = struct();
-            defaults.OutputSize = [numel(layer.MeshSampling.RowIndices), ...
-                numel(layer.MeshSampling.ColumnIndices)];
-            defaults.OutputGrid = [];
-            defaults.Interpolation = "bilinear";
-            defaults.InvalidFillValue = NaN;
-            defaults.IncludeLayerReadbacks = true;
-            defaults.UseGPU = false;
-            defaults.GpuInfo = ProjectionBackendGpuSupport.resolve(false);
-
-            names = fieldnames(options);
-            for k = 1:numel(names)
-                defaults.(names{k}) = options.(names{k});
-            end
-
-            defaults.OutputGrid = ProjectionReadbackRenderer.validateOutputGrid( ...
-                defaults.OutputGrid);
-            if ~isempty(defaults.OutputGrid)
-                defaults.OutputSize = ProjectionReadbackRenderer.validateOutputSize( ...
-                    defaults.OutputGrid.OutputSize);
-            else
-                defaults.OutputSize = ProjectionReadbackRenderer.validateOutputSize( ...
-                    defaults.OutputSize);
-            end
-            defaults.Interpolation = ProjectionReadbackRenderer.validateInterpolation( ...
-                defaults.Interpolation);
-            defaults.InvalidFillValue = ProjectionReadbackRenderer.validateFillValue( ...
-                defaults.InvalidFillValue, "InvalidFillValue");
-            defaults.IncludeLayerReadbacks = ...
-                ProjectionReadbackRenderer.validateLogicalScalar( ...
-                defaults.IncludeLayerReadbacks, "IncludeLayerReadbacks");
-            defaults.UseGPU = ProjectionReadbackRenderer.validateLogicalScalar( ...
-                defaults.UseGPU, "UseGPU");
-            defaults.GpuInfo = ProjectionBackendGpuSupport.resolve(defaults.UseGPU);
-            defaults.UseGPU = defaults.GpuInfo.Enabled;
-
-            options = defaults;
-        end
-
         function samplingGrid = createSamplingGrid(frameCamera, mesh, options)
             if ~isempty(options.OutputGrid)
                 samplingGrid = ProjectionReadbackRenderer.createOutputSamplingGrid( ...
@@ -191,15 +144,12 @@ classdef ProjectionReadbackRenderer
         end
 
         function [outputImage, validMask, queryPlaneCoordinates] = renderLayer( ...
-                frameCamera, layer, plane, mesh, samplingGrid, options)
+                frameCamera, layerPlan, samplingGrid, options)
             queryPlaneCoordinates = ProjectionReadbackRenderer.queryPlaneCoordinates( ...
-                frameCamera, samplingGrid, plane);
-
-            worldPoints = reshape(mesh.WorldPoints, 3, []);
-            meshPlaneCoordinates = PlanarProjection.worldToPlane(worldPoints, plane);
-            sampledImage = layer.Image(mesh.RowIndices, mesh.ColumnIndices, :);
+                frameCamera, samplingGrid, layerPlan.Plane);
             [outputImage, validMask] = ProjectionReadbackRenderer.interpolateImage( ...
-                meshPlaneCoordinates, sampledImage, queryPlaneCoordinates, options);
+                layerPlan.InterpolantTemplate, layerPlan.SampledImage, ...
+                queryPlaneCoordinates, options);
         end
 
         function queryPlaneCoordinates = queryPlaneCoordinates( ...
@@ -215,19 +165,17 @@ classdef ProjectionReadbackRenderer
                 samplingGrid.QueryCameraCoordinates, frameCamera, plane);
         end
 
-        function [outputImage, validMask] = interpolateImage(meshPlaneCoordinates, sampledImage, ...
-                queryPlaneCoordinates, options)
+        function [outputImage, validMask] = interpolateImage( ...
+                interpolantTemplate, sampledImage, queryPlaneCoordinates, options)
             bandCount = size(sampledImage, 3);
             outputSize = options.OutputSize;
             outputImage = zeros([outputSize bandCount]);
             validMask = true(outputSize);
-            method = ProjectionReadbackRenderer.scatteredMethod(options.Interpolation);
+            interpolant = interpolantTemplate;
 
             for bandIndex = 1:bandCount
                 sampledBand = double(sampledImage(:, :, bandIndex));
-                interpolant = scatteredInterpolant( ...
-                    meshPlaneCoordinates(1, :).', meshPlaneCoordinates(2, :).', ...
-                    sampledBand(:), method, "none");
+                interpolant.Values = sampledBand(:);
                 renderedBand = reshape(interpolant( ...
                     queryPlaneCoordinates(1, :).', queryPlaneCoordinates(2, :).'), ...
                     outputSize);
@@ -378,39 +326,6 @@ classdef ProjectionReadbackRenderer
                 error("ProjectionReadbackRenderer:invalidOptions", ...
                     "OutputGrid must be a scalar output-grid struct.");
             end
-        end
-
-        function interpolation = validateInterpolation(interpolation)
-            interpolation = lower(string(interpolation));
-            if ~isscalar(interpolation) || ~ismember(interpolation, ["bilinear", "nearest"])
-                error("ProjectionReadbackRenderer:invalidOptions", ...
-                    "Interpolation must be ""bilinear"" or ""nearest"".");
-            end
-        end
-
-        function method = scatteredMethod(interpolation)
-            switch interpolation
-                case "bilinear"
-                    method = "linear";
-                case "nearest"
-                    method = "nearest";
-            end
-        end
-
-        function value = validateFillValue(value, name)
-            if ~isnumeric(value) || ~isscalar(value)
-                error("ProjectionReadbackRenderer:invalidOptions", ...
-                    "%s must be a numeric scalar.", name);
-            end
-            value = double(value);
-        end
-
-        function value = validateLogicalScalar(value, name)
-            if ~(islogical(value) || isnumeric(value)) || ~isscalar(value)
-                error("ProjectionReadbackRenderer:invalidOptions", ...
-                    "%s must be a scalar logical value.", name);
-            end
-            value = logical(value);
         end
 
         function value = firstLayerField(layerReadbacks, fieldName)

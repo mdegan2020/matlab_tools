@@ -30,7 +30,8 @@ texture budgets. Alignment UI and preview level storage are now lazy, file-backe
 fine tiles can be read by region, and single-band tiled previews use scalar
 graphics data. The CPU raster-preview prototype is retained as an optional
 diagnostic; the optimized surface renderer remains the production default.
-Backend Performance Pack 0 is next.
+Backend Performance Pack 0 now compiles reusable per-job mesh/interpolation
+plans and resolves GPU capability once. Backend Performance Pack 1 is next.
 
 Use the pack order in this document and commit and push each coherent, validated
 pack separately.
@@ -1205,6 +1206,33 @@ inverse-warp contract. They are follow-up backend work, not new historical
 Backend Milestones 11+.
 
 ### Backend Performance Pack 0: Compile Render Plan
+
+Status: complete on July 10, 2026.
+
+`ProjectionBackendRenderPlan` is the runtime-only compilation boundary for the
+existing sparse-intensity renderer. Output-grid planning returns the visible
+layer meshes it already built; the plan reuses those meshes, samples source
+intensities at the established mesh row/column positions, and creates one
+`scatteredInterpolant` topology template per visible layer. Each band changes
+only the template's values before evaluation, and every serial or thread-pool
+tile consumes the same immutable plan rather than rebuilding meshes and
+topology.
+
+GPU capability is resolved exactly once when the plan is compiled. Untiled and
+tiled readback consume the resulting effective `UseGPU` and `GpuInfo` values;
+tile loops do not call capability resolution. Plan summaries report output
+size, interpolation, numerical mode, visible layers, mesh/topology counts,
+reuse counts, compile time, and GPU-resolution count. The summary is JSON-safe
+and is included in validation results, render results, readbacks, and output
+metadata. Runtime plans themselves contain interpolation objects and are never
+serialized into jobs, metadata, scenes, layers, or sources.
+
+The numerical mode remains `sparseIntensityScatteredInterpolant`: this pack
+changes preparation lifetime, not radiometric semantics. Existing nearest and
+bilinear readback tests, tiled/untiled equivalence, optional GPU fallback, and
+`parpool("threads")` execution remain numerically unchanged. Focused tests also
+render one compiled plan with different tile counts and verify that mesh and
+topology build counts stay equal to the visible layer count.
 
 Deliverables:
 
