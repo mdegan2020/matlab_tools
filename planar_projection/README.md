@@ -394,12 +394,16 @@ Core controls:
 - Save and Load write/read a human-readable JSON viewer state containing camera,
   layer, alpha, blend, projection offset, OPK, tip, tilt, and twist settings.
 - The alignment panel is hidden by default and can be shown from the image
-  context menu. It can run auto-alignment for the selected pair or all visible
-  layers. Choose a fast or quality preset, detector, loss mode, optional ROI,
-  and enabled pair-table rows, then use Match, Solve, Preview, Apply, Revert,
-  and Clear. Match reports stage progress, applies geometric and native-pixel
-  displacement filtering, updates raw/filtered match counts, and draws match
-  overlays; Solve reuses the stored filtered matches and reports residual/OPK
+  context menu. It is now a compact launcher/status strip for a separate lazy,
+  nonmodal Alignment Workbench, leaving the image viewport available for
+  inspection. The Workbench runs auto-alignment for the selected pair or all
+  visible layers and stacks setup, match tables, solve/curation controls, and
+  diagnostics in one window. Choose a fast or quality preset, detector, loss
+  mode, optional coplanarity filter, ROI, and enabled pair-table rows, then use
+  the explicit Match, Filter, Solve, Preview, Apply, Revert, and Clear stages.
+  Match stops after deterministic feature matching and reports raw observations;
+  Filter is a distinct action that applies geometric, optional coplanarity, and
+  ROI filtering. Solve reuses the stored filtered matches and reports residual/OPK
   summaries in the status text, including warnings when corrections hit OPK
   bounds. GUI solves are marked failed, with Preview/Apply/Revert disabled, if
   they are match-limited, bound-limited, or residual-limited by the safe default
@@ -420,6 +424,18 @@ Core controls:
   lines require two valid endpoints, while valid endpoints of rejected/invalid
   records can still appear as faint diagnostic markers. Pure layer reordering
   preserves overlay world positions and alignment pair identity.
+
+The graphics-free `ProjectionAlignmentSession` owns working-image cache state,
+raw and filtered matches, curation/undo state, solve results, ROI bounds, and
+explicit stage revisions. Setup changes mark Match and every downstream stage
+stale; filter changes retain raw feature matches while marking Filter and later
+stages stale; solve-setting or table edits retain all matched observations and
+mark only Solve, Preview, and Apply stale. Re-solving after curation therefore
+does not rerun feature detection. The Workbench diagnostics show these stale
+states and raw/filtered/solved counts. The solver also accepts a runtime-only
+cancellation callback, so the GUI Cancel action is checked during optimizer
+iterations; opaque MATLAB detector calls remain cancellable only between API
+stages.
 
 The ROI button creates a central projection-plane starting region and arms
 left-drag redraw in the viewport. ROI filtering uses the actual projection-plane
@@ -497,6 +513,7 @@ every filter stage without requiring access to private GUI state:
 diagnostics = app.alignmentDiagnostics();
 diagnostics.Stage.FeatureDiagnostics
 diagnostics.Stage.FilterDiagnostics
+diagnostics.Stage.Session
 ```
 
 To audit exact repeats and a small OPK perturbation for every installed
@@ -521,9 +538,9 @@ pixel displacement.
 An optional `epipolarCoplanarity` filter evaluates normalized angular/Sampson
 ray coplanarity, robustly centers the current residual distribution, and keeps
 its stage state separate in the match ledger. Configure it programmatically
-with `FilterPipeline.CoplanarityMethod="robustMad"`; the separate Workbench will
-expose it as a staged filter control. Compare all filter models against terrain
-truth with:
+with `FilterPipeline.CoplanarityMethod="robustMad"`, or select Robust from the
+Workbench coplanarity-filter control before running Filter. Compare all filter
+models against terrain truth with:
 
 ```matlab
 addpath("scripts");

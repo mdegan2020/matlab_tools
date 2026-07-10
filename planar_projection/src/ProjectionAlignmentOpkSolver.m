@@ -2,15 +2,21 @@ classdef ProjectionAlignmentOpkSolver
     %ProjectionAlignmentOpkSolver Solve pairwise OPK alignment corrections.
 
     methods (Static)
-        function result = solve(scene, matchResult, options)
+        function result = solve(scene, matchResult, options, runtimeControl)
             %solve Estimate per-layer omega/phi/kappa corrections.
             if nargin < 3
                 options = struct();
+            end
+            if nargin < 4
+                runtimeControl = struct();
             end
             scene = ProjectionLayerIdentity.ensureScene(scene);
             ProjectionAlignmentOpkSolver.validateScene(scene);
             ProjectionAlignmentOpkSolver.validateMatchResult(matchResult);
             options = ProjectionAlignmentOptions.validate(options);
+            runtimeControl = ...
+                ProjectionAlignmentOpkSolver.validateRuntimeControl( ...
+                runtimeControl);
             if exist("lsqnonlin", "file") ~= 2
                 error("ProjectionAlignmentOpkSolver:missingOptimizer", ...
                     "lsqnonlin is required for OPK alignment solving.");
@@ -32,8 +38,17 @@ classdef ProjectionAlignmentOpkSolver
 
             solverOptions = optimoptions("lsqnonlin", Display="off", ...
                 MaxIterations=100, FunctionTolerance=1e-10, StepTolerance=1e-10);
+            if ~isempty(runtimeControl.CancellationFcn)
+                solverOptions.OutputFcn = @(~, ~, ~) ...
+                    ProjectionAlignmentOpkSolver.cancellationRequested( ...
+                    runtimeControl);
+            end
             [xSolved, residual, ~, exitFlag, output] = lsqnonlin( ...
                 residualFcn, x0, lowerBounds, upperBounds, solverOptions);
+            if ProjectionAlignmentOpkSolver.cancellationRequested(runtimeControl)
+                error("ProjectionAlignmentOpkSolver:cancelled", ...
+                    "OPK alignment solving was cancelled.");
+            end
             afterResiduals = ProjectionAlignmentOpkSolver.dataResiduals( ...
                 xSolved, scene, matchResult, layerIndices, commonPlane, options);
             perPairResiduals = ProjectionAlignmentOpkSolver.residualPairs( ...
@@ -68,6 +83,44 @@ classdef ProjectionAlignmentOpkSolver
     end
 
     methods (Static, Access = private)
+        function runtimeControl = validateRuntimeControl(runtimeControl)
+            if isempty(runtimeControl)
+                runtimeControl = struct();
+            end
+            if ~isstruct(runtimeControl) || ~isscalar(runtimeControl)
+                error("ProjectionAlignmentOpkSolver:invalidRuntimeControl", ...
+                    "Runtime control must be a scalar struct.");
+            end
+            allowedFields = "CancellationFcn";
+            unexpectedFields = setdiff(string(fieldnames(runtimeControl)), ...
+                allowedFields);
+            if ~isempty(unexpectedFields)
+                error("ProjectionAlignmentOpkSolver:invalidRuntimeControl", ...
+                    "Unexpected runtime control field: %s.", ...
+                    unexpectedFields(1));
+            end
+            if ~isfield(runtimeControl, "CancellationFcn")
+                runtimeControl.CancellationFcn = [];
+            end
+            if ~isempty(runtimeControl.CancellationFcn) && ...
+                    ~isa(runtimeControl.CancellationFcn, "function_handle")
+                error("ProjectionAlignmentOpkSolver:invalidRuntimeControl", ...
+                    "CancellationFcn must be empty or a function handle.");
+            end
+        end
+
+        function tf = cancellationRequested(runtimeControl)
+            tf = false;
+            if isempty(runtimeControl.CancellationFcn)
+                return
+            end
+            tf = runtimeControl.CancellationFcn();
+            if ~islogical(tf) || ~isscalar(tf)
+                error("ProjectionAlignmentOpkSolver:invalidCancellationResult", ...
+                    "CancellationFcn must return a logical scalar.");
+            end
+        end
+
         function residuals = residualVector(x, scene, matchResult, layerIndices, ...
                 startCorrections, commonPlane, options)
             dataResiduals = ProjectionAlignmentOpkSolver.dataResiduals( ...

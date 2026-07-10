@@ -55,6 +55,17 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
                 result.Diagnostics.RmsBefore);
         end
 
+        function testRuntimeCancellationStopsOptimizer(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+            options = ProjectionAlignmentOpkSolverTest.looseOptions();
+            runtimeControl = struct(CancellationFcn=@() true);
+
+            testCase.verifyError(@() ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, options, runtimeControl), ...
+                "ProjectionAlignmentOpkSolver:cancelled");
+        end
+
         function testBoundsConstrainSolvedCorrections(testCase)
             scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
             matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();

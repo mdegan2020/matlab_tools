@@ -1034,6 +1034,50 @@ UI contracts:
 - Delete disables the selected match; Undo restores session state.
 - Match/filter history is not serialized yet; applied/solved OPK is.
 
+#### Pack 5 implementation result
+
+- The main viewer alignment row is a compact lazy-created launcher, stage, and
+  status strip. `Open Workbench` creates one separate nonmodal programmatic
+  `uifigure` on first use and reopens the same hidden instance thereafter.
+  Startup still creates no alignment tables or Workbench graphics.
+- The Workbench stacks setup controls, explicit stage actions, pair and match
+  tables, overlay/curation controls, status, and persistent diagnostic text.
+  Accepted matches and feature points remain on by default; rejected states
+  share the faint style; post-solve Worst remains the top ten percent.
+- `ProjectionAlignmentSession` is the graphics-free source of workflow state.
+  It owns request/working-image/cache records, raw/pre-ROI/filtered matches,
+  curation/delete/undo state, selected row identity, solve result, ROI bounds,
+  cancellation, stage revision, and downstream-stale diagnostics. App-local
+  dependent properties are migration facades only; no graphics handle enters
+  the session, scene, layer, or source records.
+- Match and Filter are now separate operator stages. Match renders/reuses the
+  pair working images and stops after deterministic descriptor matching.
+  Filter applies the selected truthful 2D model, optional robust coplanarity
+  stage, and ROI. Solve cannot run until Filter is current. No Run All path
+  remains.
+- Setup changes invalidate Match and all downstream stages. Coplanarity/filter
+  changes retain raw matches and invalidate Filter onward. Loss changes and
+  manual table/delete edits retain filtered matches and invalidate only Solve,
+  Preview, and Apply. Re-solve therefore never repeats feature detection.
+- The prior overlay-to-table and table-to-overlay selection, Delete-disable,
+  Undo, stable layer identity, and source-observation reprojection contracts
+  are preserved at both the raw and filtered stages. Raw-stage overlays now
+  also refresh correctly after layer reorder, projection edits, and layer
+  nudges.
+- The Workbench exposes the Pack 4 coplanarity filter as Off/Robust. The Pack 6
+  epipolar solver loss remains intentionally absent until the balanced solver
+  implements it.
+- Optimizer cancellation is now checked through a runtime-only
+  `CancellationFcn` passed to `ProjectionAlignmentOpkSolver.solve`; it is never
+  serialized into requests or backend state. MATLAB feature-detector and
+  descriptor APIs are opaque blocking calls, so cancellation is checked before
+  and after those API-stage boundaries rather than inside them.
+- Focused session, Workbench, raw-stage refresh, cancellation, interaction, and
+  viewer-performance regression tests cover the new contracts. Backend
+  radiometry and serialization remain unchanged. Pack 5 final validation passes
+  all 366 tests after
+  `close all force; clear all; clear classes; rehash; results = runTests;`.
+
 ### Reliability Pack 6: Balanced network solve and physical safety
 
 #### 6.1 Implement common and differential attitude variables
@@ -1175,7 +1219,7 @@ Implement and validate one small coherent sub-pack at a time:
 4. Reliability Pack 3: deterministic mask-aware feature extraction and
    matching.
 5. Reliability Pack 4: truthful 2D models and coplanarity filtering.
-6. Reliability Pack 5: separate staged Alignment Workbench/session.
+6. Reliability Pack 5: complete — separate staged Alignment Workbench/session.
 7. Reliability Pack 6: balanced network solver, epipolar loss, observability,
    and unified safety.
 8. Reliability Pack 7: Shift+left common anchor drag.

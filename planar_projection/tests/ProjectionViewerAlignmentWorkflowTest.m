@@ -16,10 +16,12 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
 
     methods (TestMethodSetup)
         function closeExistingViewer(testCase)
-            delete(findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype"));
-            testCase.addTeardown(@() delete(findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype")));
+            names = ["Projection Viewer Prototype", "Alignment Workbench"];
+            for name = names
+                delete(findall(groot, "Type", "figure", "Name", name));
+            end
+            testCase.addTeardown(@() ...
+                ProjectionViewerAlignmentWorkflowTest.closeAlignmentFigures());
         end
     end
 
@@ -44,6 +46,9 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentDetectorDropDown");
             lossDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentLossDropDown");
+            coplanarityDropDown = ...
+                ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentCoplanarityDropDown");
             roiButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentRoiButton");
             clearRoiButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -64,6 +69,8 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentUndoCurationButton");
             matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentMatchButton");
+            filterButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentFilterButton");
             solveButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentSolveButton");
             cancelButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -87,6 +94,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(scopeDropDown.Value), "selectedPair");
             testCase.verifyEqual(string(detectorDropDown.Value), "auto");
             testCase.verifyEqual(string(lossDropDown.Value), "projectionPlane2D");
+            testCase.verifyEqual(string(coplanarityDropDown.Value), "none");
             testCase.verifyEqual(diagnostics.Request.FilterGeometricMethod, ...
                 "similarity");
             testCase.verifyEqual( ...
@@ -112,6 +120,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(deleteMatchButton.Enable), "on");
             testCase.verifyEqual(string(undoCurationButton.Enable), "on");
             testCase.verifyEqual(string(matchButton.Enable), "on");
+            testCase.verifyEqual(string(filterButton.Enable), "off");
             testCase.verifyEqual(string(solveButton.Enable), "off");
             testCase.verifyEqual(string(cancelButton.Enable), "off");
             testCase.verifyEqual(string(previewButton.Enable), "off");
@@ -161,6 +170,44 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
 
             testCase.verifyTrue(contains(string(statusLabel.Text), ...
                 "No enabled alignment pairs"));
+        end
+
+        function testMatchAndFilterAreSeparateStages(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(false);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            detector = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
+            matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchButton");
+            filterButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentFilterButton");
+            solveButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentSolveButton");
+            detector.Value = "sift";
+
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            afterMatch = app.alignmentDiagnostics();
+
+            testCase.verifyEqual(afterMatch.Stage.Session.Stage, "matched");
+            testCase.verifyFalse(afterMatch.Stage.Session.Stale.Match);
+            testCase.verifyTrue(afterMatch.Stage.Session.Stale.Filter);
+            testCase.verifyEqual(string(filterButton.Enable), "on");
+            testCase.verifyEqual(string(solveButton.Enable), "off");
+
+            filterButton.ButtonPushedFcn(filterButton, struct());
+            drawnow
+            afterFilter = app.alignmentDiagnostics();
+
+            testCase.verifyEqual(afterFilter.Stage.Session.Stage, "curated");
+            testCase.verifyFalse(afterFilter.Stage.Session.Stale.Filter);
+            testCase.verifyEqual(string(solveButton.Enable), "on");
         end
 
         function testAlignmentDiagnosticsReportsSamplerAndMeshCost(testCase)
@@ -268,6 +315,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
 
             matchButton.ButtonPushedFcn(matchButton, struct());
             drawnow
+            ProjectionViewerAlignmentWorkflowTest.filterMatches();
 
             stateAfterMatch = app.exportState();
             diagnosticsAfterMatch = app.alignmentDiagnostics();
@@ -424,6 +472,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             detectorDropDown.Value = "sift";
             matchButton.ButtonPushedFcn(matchButton, struct());
             drawnow
+            ProjectionViewerAlignmentWorkflowTest.filterMatches();
             diagnosticsAfterMatch = app.alignmentDiagnostics();
             data = pairTable.Data;
             data.Enabled(1) = false;
@@ -477,6 +526,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             detectorDropDown.Value = "sift";
             matchButton.ButtonPushedFcn(matchButton, struct());
             drawnow
+            ProjectionViewerAlignmentWorkflowTest.filterMatches();
             dataAfterMatch = matchTable.Data;
             testCase.assumeTrue(height(dataAfterMatch) > 3);
             testCase.verifyTrue(all(dataAfterMatch.Enabled));
@@ -543,6 +593,17 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 "ProjectionViewerAlignmentRejectedMatchOverlay"));
             testCase.verifyFalse(diagnosticsAfterEdit.Stage.HasSolveResult);
             testCase.verifyEqual( ...
+                diagnosticsAfterEdit.Stage.Session.Stage, "curated");
+            testCase.verifyFalse( ...
+                diagnosticsAfterEdit.Stage.Session.Stale.Match);
+            testCase.verifyFalse( ...
+                diagnosticsAfterEdit.Stage.Session.Stale.Filter);
+            testCase.verifyTrue( ...
+                diagnosticsAfterEdit.Stage.Session.Stale.Solve);
+            testCase.verifyEqual( ...
+                diagnosticsAfterEdit.Stage.Session.MatchRevision, ...
+                diagnosticsAfterFirstSolve.Stage.Session.MatchRevision);
+            testCase.verifyEqual( ...
                 diagnosticsAfterEdit.Stage.CuratedMatchCount, ...
                 diagnosticsAfterFirstSolve.Stage.FilteredMatchCount - 1);
             testCase.verifyEqual(string(previewButton.Enable), "off");
@@ -559,6 +620,8 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual( ...
                 diagnosticsAfterSecondSolve.Stage.SolvedMatchCount, ...
                 diagnosticsAfterFirstSolve.Stage.SolvedMatchCount - 1);
+            testCase.verifyFalse( ...
+                diagnosticsAfterSecondSolve.Stage.Session.Stale.Solve);
             testCase.verifyTrue(any(disabledMask));
             testCase.verifyFalse(dataAfterSecondSolve.Enabled(disabledMask));
             testCase.verifyEqual( ...
@@ -596,6 +659,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             detectorDropDown.Value = "sift";
             matchButton.ButtonPushedFcn(matchButton, struct());
             drawnow
+            ProjectionViewerAlignmentWorkflowTest.filterMatches();
             dataAfterMatch = matchTable.Data;
             testCase.assumeGreaterThanOrEqual(height(dataAfterMatch), 10);
 
@@ -651,6 +715,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             detectorDropDown.Value = "sift";
             matchButton.ButtonPushedFcn(matchButton, struct());
             drawnow
+            ProjectionViewerAlignmentWorkflowTest.filterMatches();
             solveButton.ButtonPushedFcn(solveButton, struct());
             drawnow
             diagnosticsAfterSolve = app.alignmentDiagnostics();
@@ -790,6 +855,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             roiButton.ButtonPushedFcn(roiButton, struct());
             matchButton.ButtonPushedFcn(matchButton, struct());
             drawnow
+            ProjectionViewerAlignmentWorkflowTest.filterMatches();
             withRoi = app.alignmentDiagnostics();
 
             clearRoiButton.ButtonPushedFcn(clearRoiButton, struct());
@@ -907,6 +973,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             lossDropDown.Value = "rayToRay3D";
             matchButton.ButtonPushedFcn(matchButton, struct());
             drawnow
+            ProjectionViewerAlignmentWorkflowTest.filterMatches();
             solveButton.ButtonPushedFcn(solveButton, struct());
             drawnow
 
@@ -918,6 +985,13 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
     end
 
     methods (Static, Access = private)
+        function closeAlignmentFigures()
+            names = ["Projection Viewer Prototype", "Alignment Workbench"];
+            for name = names
+                delete(findall(groot, "Type", "figure", "Name", name));
+            end
+        end
+
         function scene = makeTexturedScene(includePerturbation, layerCount)
             if nargin < 2
                 layerCount = 2;
@@ -949,11 +1023,29 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 menuItem.MenuSelectedFcn(menuItem, struct());
                 drawnow
             end
+            if isempty(findall(groot, "Type", "figure", ...
+                    "Name", "Alignment Workbench"))
+                launcher = findall(fig, "Tag", ...
+                    "ProjectionViewerAlignmentOpenWorkbenchButton");
+                launcher.ButtonPushedFcn(launcher, struct());
+                drawnow
+            end
         end
 
         function component = findTagged(parent, tag)
             components = findall(parent, "Tag", tag);
+            if isempty(components)
+                components = findall(groot, "Tag", tag);
+            end
             component = components(1);
+        end
+
+        function filterMatches()
+            filterButton = findall(groot, "Tag", ...
+                "ProjectionViewerAlignmentFilterButton");
+            filterButton = filterButton(1);
+            filterButton.ButtonPushedFcn(filterButton, struct());
+            drawnow
         end
 
         function offsets = viewVectorOffsets(state)

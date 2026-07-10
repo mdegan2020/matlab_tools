@@ -137,9 +137,37 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyTrue( ...
                 diagnosticsAfterCreate.Viewer.AlignmentControlsCreated);
             testCase.verifyEqual( ...
-                diagnosticsAfterCreate.Viewer.AlignmentTableCount, 2);
+                diagnosticsAfterCreate.Viewer.AlignmentTableCount, 0);
+            testCase.verifyFalse( ...
+                diagnosticsAfterCreate.Viewer.AlignmentWorkbenchCreated);
             testCase.verifyEqual( ...
                 diagnosticsAfterCreate.Counters.AlignmentUiCreations, 1);
+
+            launcher = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                fig, "ProjectionViewerAlignmentOpenWorkbenchButton");
+            launcher.ButtonPushedFcn(launcher, struct());
+            drawnow
+            workbench = findall(groot, "Type", "figure", ...
+                "Name", "Alignment Workbench");
+            testCase.verifyNumElements(workbench, 1);
+            testCase.verifyEqual(string(workbench.WindowStyle), "normal");
+            diagnosticsAfterWorkbench = app.performanceDiagnostics();
+            testCase.verifyTrue( ...
+                diagnosticsAfterWorkbench.Viewer.AlignmentWorkbenchCreated);
+            testCase.verifyEqual( ...
+                diagnosticsAfterWorkbench.Viewer.AlignmentTableCount, 2);
+            testCase.verifyEqual( ...
+                diagnosticsAfterWorkbench.Counters.AlignmentWorkbenchCreations, 1);
+            workbench.CloseRequestFcn(workbench, struct());
+            drawnow
+            testCase.verifyEqual(string(workbench.Visible), "off");
+            launcher.ButtonPushedFcn(launcher, struct());
+            drawnow
+            testCase.verifyEqual(string(workbench.Visible), "on");
+            diagnosticsAfterWorkbenchReopen = app.performanceDiagnostics();
+            testCase.verifyEqual( ...
+                diagnosticsAfterWorkbenchReopen.Counters. ...
+                AlignmentWorkbenchCreations, 1);
 
             alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
             drawnow
