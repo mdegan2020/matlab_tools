@@ -239,6 +239,32 @@ Tiled coverage is reconciled after interaction using cached samples. The
 performance diagnostics and CSV artifacts report sample-cache hits/misses,
 `SampleFcn` calls, affected-layer refreshes, and rigid translations.
 
+Alpha interaction is latest-value coalesced at a configurable render interval
+(`50 ms` by default), while slider release and `flushPreviewUpdates` render the
+exact final value. Alpha zero hides the graphics surfaces without changing the
+layer's serializable visibility flag; a positive alpha restores them. Alpha
+updates do not rebuild geometry or select tiles.
+
+Tiled reconciliation observes global display-only budgets (48 visible surfaces
+and `256 MiB` of graphics texture by default). A budget-limited view selects a
+coarser complete LOD rather than truncating coverage. An optional automatic
+policy can additionally target at most 12 tiles per visible layer; it is off by
+default pending workload-specific visual validation:
+
+```matlab
+app.configurePreviewBudget(struct( ...
+    MaxVisibleSurfaces=48, ...
+    MaxVisibleTextureBytes=256 * 1024^2, ...
+    TargetMaxTilesPerLayer=12, ...
+    AutomaticTilePolicy=true, ...
+    AlphaPreviewMinIntervalSeconds=0.05));
+```
+
+Run `viewer_surface_consolidation_evaluation` to compare equal-texel tiled and
+single-atlas transparency cost. Local 512- and 1024-side results showed no
+compelling atlas advantage, so the production viewer retains differential tile
+surfaces and defers raster/atlas architecture to the later prototype decision.
+
 ## Projection Viewer Prototype
 
 The interactive prototype is programmatic MATLAB app code, not an `.mlapp` file. From MATLAB:

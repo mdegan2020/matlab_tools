@@ -70,6 +70,80 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.verifyEqual(diagnostics.Timings.AlphaSeconds.Count, 1);
         end
 
+        function testRapidAlphaRequestsCoalesceAndReleaseIsExact(testCase)
+            scene = ProjectionViewerPerformanceTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            alphaSlider = ProjectionViewerPerformanceTest.findSlider(fig, 5);
+            surfaceHandle = findall(fig, "Type", "surface", ...
+                "Tag", "ProjectionViewerLayerSurface");
+            app.configurePreviewBudget(struct( ...
+                AlphaPreviewMinIntervalSeconds=10));
+            app.resetPerformanceDiagnostics();
+
+            alphaSlider.ValueChangingFcn(alphaSlider, struct(Value=0.8));
+            alphaSlider.ValueChangingFcn(alphaSlider, struct(Value=0.6));
+            alphaSlider.ValueChangingFcn(alphaSlider, struct(Value=0.4));
+            activeDiagnostics = app.performanceDiagnostics();
+            activeState = app.exportState();
+
+            testCase.verifyEqual(activeDiagnostics.Counters.AlphaRequests, 3);
+            testCase.verifyEqual( ...
+                activeDiagnostics.Counters.AlphaCoalescedRequests, 2);
+            testCase.verifyEqual(activeDiagnostics.Counters.RenderedFrames, 1);
+            testCase.verifyEqual(activeDiagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual(activeDiagnostics.Counters.TileRefreshes, 0);
+            testCase.verifyEqual(activeState.Layers.Alpha, 0.4);
+            testCase.verifyEqual(surfaceHandle.FaceAlpha, 0.8);
+            testCase.verifyTrue( ...
+                activeDiagnostics.Viewer.PendingAlphaMask);
+
+            alphaSlider.Value = 0.4;
+            alphaSlider.ValueChangedFcn(alphaSlider, struct());
+            settledDiagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual(surfaceHandle.FaceAlpha, 0.4);
+            testCase.verifyFalse( ...
+                settledDiagnostics.Viewer.PendingAlphaMask);
+            testCase.verifyEqual( ...
+                settledDiagnostics.Counters.AlphaFinalizations, 1);
+            testCase.verifyEqual(settledDiagnostics.Counters.RenderedFrames, 2);
+        end
+
+        function testExactZeroAlphaHidesAndPositiveAlphaRestoresSurface(testCase)
+            scene = ProjectionViewerPerformanceTest.makeScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            alphaSlider = ProjectionViewerPerformanceTest.findSlider(fig, 5);
+            surfaceHandle = findall(fig, "Type", "surface", ...
+                "Tag", "ProjectionViewerLayerSurface");
+            app.resetPerformanceDiagnostics();
+
+            alphaSlider.Value = 0;
+            alphaSlider.ValueChangedFcn(alphaSlider, struct());
+            zeroState = app.exportState();
+            testCase.verifyEqual(string(surfaceHandle.Visible), "off");
+            testCase.verifyTrue(zeroState.Layers.Visible);
+            testCase.verifyEqual(zeroState.Layers.Alpha, 0);
+
+            alphaSlider.Value = 0.5;
+            alphaSlider.ValueChangedFcn(alphaSlider, struct());
+            diagnostics = app.performanceDiagnostics();
+
+            testCase.verifyEqual(string(surfaceHandle.Visible), "on");
+            testCase.verifyEqual(surfaceHandle.FaceAlpha, 0.5);
+            testCase.verifyEqual( ...
+                diagnostics.Counters.AlphaVisibilityTransitions, 2);
+            testCase.verifyEqual(diagnostics.Counters.MeshBuilds, 0);
+            testCase.verifyEqual(diagnostics.Counters.TileRefreshes, 0);
+        end
+
         function testCrosshairMotionOnlyUpdatesStableLineGeometry(testCase)
             scene = ProjectionViewerPerformanceTest.makeScene();
             app = ProjectionViewerApp(scene);
@@ -554,6 +628,50 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
                 diagnostics.Viewer.SurfacePoolCount, 2);
         end
 
+        function testGlobalPreviewBudgetCoarsensWithoutChangingState(testCase)
+            scene = ProjectionViewerPerformanceTest.makeTwoReusableTiledScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            app.configurePreviewTiling(struct(TileSize=512));
+            app.configurePreviewBudget(struct( ...
+                MaxVisibleSurfaces=192, ...
+                MaxVisibleTextureBytes=512 * 1024^2, ...
+                AutomaticTilePolicy=false));
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Projection Viewer Prototype");
+            ax = findall(fig, "Type", "axes");
+            ax.CameraViewAngle = 0.5;
+            fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
+            ProjectionViewerPerformanceTest.settleCameraPreview( ...
+                app, fig, 8);
+            unbudgetedDiagnostics = app.performanceDiagnostics();
+            stateBefore = app.exportState();
+            app.resetPerformanceDiagnostics();
+
+            options = app.configurePreviewBudget(struct( ...
+                MaxVisibleSurfaces=4, MaxVisibleTextureBytes=16 * 1024^2, ...
+                TargetMaxTilesPerLayer=12, AutomaticTilePolicy=true));
+            diagnostics = app.performanceDiagnostics();
+            stateAfter = app.exportState();
+
+            testCase.verifyEqual(options.MaxVisibleSurfaces, 4);
+            testCase.verifyEqual(options.MaxVisibleTextureBytes, 16 * 1024^2);
+            testCase.verifyEqual(stateAfter, stateBefore);
+            testCase.verifyGreaterThan( ...
+                unbudgetedDiagnostics.Viewer.VisibleTileSurfaceCount, 4);
+            testCase.verifyLessThanOrEqual( ...
+                diagnostics.Viewer.VisibleTileSurfaceCount, 4);
+            testCase.verifyLessThanOrEqual( ...
+                diagnostics.Viewer.VisibleTextureBytes, 16 * 1024^2);
+            testCase.verifyEqual( ...
+                diagnostics.Viewer.LayerSurfaceBudgets, [2 2]);
+            testCase.verifyTrue(any( ...
+                diagnostics.Viewer.BudgetLimitedLayerMask));
+            testCase.verifyGreaterThan( ...
+                diagnostics.Counters.BudgetLimitedLodSelections, 0);
+        end
+
         function testEvaluationRunsAllScenariosAndRestoresState(testCase)
             options = struct(SyntheticImageSize=[64 64], ...
                 SyntheticLayerCount=1, SyntheticPattern="constant", ...
@@ -576,6 +694,21 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
                 summary.Scenarios(2).Diagnostics.Counters.CrosshairUpdates, 2);
             testCase.verifyEqual( ...
                 summary.Scenarios(3).Diagnostics.Counters.RenderedFrames, 2);
+        end
+
+        function testSurfaceConsolidationEvaluationUsesEqualTexelBudgets(testCase)
+            summary = viewer_surface_consolidation_evaluation(struct( ...
+                TileGrid=[2 2], TileSize=32, Iterations=2, ...
+                FigureSize=[400 300], WriteArtifacts=false));
+
+            testCase.verifyEqual([summary.Records.SurfaceCount], [4 1]);
+            testCase.verifyEqual( ...
+                summary.Records(1).TextureBytes, ...
+                summary.Records(2).TextureBytes);
+            testCase.verifyGreaterThan( ...
+                [summary.Records.MedianSeconds], [0 0]);
+            testCase.verifyGreaterThan(summary.MedianSpeedup, 0);
+            testCase.verifyNotEmpty(summary.Limitations);
         end
     end
 
@@ -612,6 +745,16 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             scene = ProjectionViewerHarness.createSceneFromImages( ...
                 {imageData, imageData}, ["large_1.tif", "large_2.tif"], ...
                 options);
+        end
+
+        function scene = makeTwoReusableTiledScene()
+            imageData = zeros(2001, 2001, "uint8");
+            options = struct(GSD=0.01, NominalRange=1000, ...
+                PlatformStepMeters=0.01, RowStride=250, ...
+                ColumnStride=250, DisplayTextureMaxPixels=10000);
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                {imageData, imageData}, ...
+                ["reusable_1.tif", "reusable_2.tif"], options);
         end
 
         function scene = makeReusableTiledScene()
@@ -660,6 +803,14 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
                 secondHandle = secondSurfaces(secondKeys == key);
                 tf = tf && isscalar(firstHandle) && isscalar(secondHandle) && ...
                     firstHandle == secondHandle;
+            end
+        end
+
+        function settleCameraPreview(app, fig, iterationCount)
+            for k = 1:iterationCount
+                fig.WindowScrollWheelFcn( ...
+                    fig, struct(VerticalScrollCount=0));
+                app.flushPreviewUpdates();
             end
         end
     end

@@ -13,7 +13,7 @@ expected `15000 x 10000` through `30000 x 20000` source and output sizes.
 
 The audit and local measurements are complete. Performance implementation is in
 progress and was explicitly prioritized on July 10, 2026. Viewer Performance
-Packs 0-5 are complete: the app now exposes bounded runtime diagnostics and
+Packs 0-6 are complete: the app now exposes bounded runtime diagnostics and
 the repeatable evaluation harness exercises alpha, crosshair, twist, pan,
 slow/fast/reversing LOD-boundary zoom, WASD, and OPK scenarios. Crosshair motion
 is demand-activated and no longer restacks overlay lines during steady pointer
@@ -25,7 +25,8 @@ hidden surface pool now avoid whole-layer graphics replacement when viewport
 coverage changes. Source ray/origin samples are cached separately from derived
 projection meshes, projection-offset edits use exact rigid surface translation,
 and OPK/alignment refreshes are limited to affected layers. Viewer Performance
-Pack 6 is next.
+Pack 6 adds coalesced/exact alpha rendering and global display-only surface and
+texture budgets. Viewer Performance Pack 7 is next.
 
 Use the pack order in this document and commit and push each coherent, validated
 pack separately.
@@ -204,8 +205,9 @@ structural evidence, not portable timing targets:
 The transition is immediate in both directions. In this case it multiplied
 texture samples by four, tripled the surface count, and more than doubled the
 measured reconciliation time even though the view changed by only half a
-degree. Single-channel source tiles are currently expanded to RGB for graphics,
-so their uploaded `CData` byte count is about three times the source byte count.
+degree. Single-channel integer source tiles are currently converted to `single`
+and expanded to RGB for graphics, so their uploaded `CData` byte count is about
+twelve times the `uint8` source byte count.
 
 Candidate solution:
 
@@ -371,25 +373,26 @@ an antialiased reduction filter. This is fast to build but increases the risk
 of aliasing and visible shimmer near an LOD boundary. It makes perceptual
 validation especially important before delaying fine-level promotion.
 
-The single-channel path currently calls `repmat` to prepare an RGB display
-texture. A full `1024 x 1024` `uint8` source tile is about `1.05 MB`, but its
-graphics `CData` is about `3.15 MB`. For the intended 100-150 MP grayscale use
-case, that conversion increases preparation work, cache pressure, and texture
-upload volume without adding source information.
+The single-channel path currently converts integer input to `single` and calls
+`repmat` to prepare an RGB display texture. A full `1024 x 1024` `uint8` source
+tile is about `1.05 MB`, but its graphics `CData` is about `12.58 MB`
+(`12 MiB`). For the intended 100-150 MP grayscale use case, that conversion
+increases preparation work, cache pressure, and texture upload volume without
+adding source information.
 
 The current `1024`-pixel tile side is a reasonable provisional default, but the
 available measurements do not establish it as optimal. A simplified two-layer
 renderer found only small, noisy alpha/roll differences between `256`, `512`,
 `1024`, and `2048` tiles. The more decisive current cost is candidate scanning:
 
-| Full-resolution image | Tile side | Candidate tiles | RGB bytes/full tile |
+| Full-resolution image | Tile side | Candidate tiles | Single RGB `CData`/full tile |
 | --- | ---: | ---: | ---: |
-| `10000 x 10000` | 512 | 400 | 0.79 MB |
-| `10000 x 10000` | 1024 | 100 | 3.15 MB |
-| `10000 x 10000` | 2048 | 25 | 12.58 MB |
-| `15000 x 10000` | 512 | 600 | 0.79 MB |
-| `15000 x 10000` | 1024 | 150 | 3.15 MB |
-| `15000 x 10000` | 2048 | 40 | 12.58 MB |
+| `10000 x 10000` | 512 | 400 | 3.15 MB |
+| `10000 x 10000` | 1024 | 100 | 12.58 MB |
+| `10000 x 10000` | 2048 | 25 | 50.33 MB |
+| `15000 x 10000` | 512 | 600 | 3.15 MB |
+| `15000 x 10000` | 1024 | 150 | 12.58 MB |
+| `15000 x 10000` | 2048 | 40 | 50.33 MB |
 
 Candidate tiles are currently scanned and given temporary geometry even when
 they are not visible. Moving directly to `512` would therefore multiply that
@@ -995,6 +998,43 @@ Viewer Performance Pack 5: Target projection geometry updates
 ```
 
 ### Viewer Performance Pack 6: Transparency And Object Budget
+
+Status: complete on July 10, 2026.
+
+Alpha `ValueChanging` callbacks now update state and the alpha label immediately
+but render at most once per configurable interval (default `50 ms`). Newer
+intermediate values replace older pending values; `ValueChanged` and
+`flushPreviewUpdates` always render the exact final alpha. No alpha path builds
+meshes or reconciles tile selection. Exact alpha zero sets current layer
+surfaces invisible while leaving the serializable `Visible` flag unchanged;
+positive alpha restores surfaces when the layer itself is visible.
+
+The display-only reconciliation policy now applies a global default budget of
+48 visible surfaces and `256 MiB` of prepared graphics texture across visible
+layers, with fair per-layer shares after accounting for untiled surfaces. A
+budget rejection chooses a coarser complete LOD rather than truncating tiles and
+creating holes. Diagnostics expose per-layer surface/texture shares, limiting
+decisions, overruns, pending/rendered alpha, and corrected single-channel
+graphics byte estimates. `configurePreviewBudget` changes these runtime-only
+limits. Its optional automatic policy is off by default; when enabled it also
+targets at most 12 visible tiles per layer, without promoting a finer LOD merely
+to reach a minimum object count.
+
+On the local two-TIFF scene, 20 rapid alpha requests produced one active render,
+coalesced ten alternate values (the remaining repeats already matched the
+rendered value), and produced one exact settled render in about `77 ms` total.
+The selected layer retained exact final state with zero mesh and `SampleFcn`
+work.
+
+`scripts/viewer_surface_consolidation_evaluation.m` compares equal-texel tiled
+surfaces against one rectangular atlas surface. With twelve `512`-side
+single-RGB tiles (`36 MiB`), the atlas was slower locally: about `56.8 ms`
+median versus `49.4 ms` tiled (`0.87x`). With twelve `1024`-side tiles
+(`144 MiB`), the atlas improved median time only about seven percent
+(`164 ms` versus `175 ms`) and did not materially improve the high percentile.
+Object consolidation alone therefore does not justify its geometry/overfetch
+complexity; retain differential tiles and revisit raster/atlas architecture in
+Pack 8.
 
 Deliverables:
 

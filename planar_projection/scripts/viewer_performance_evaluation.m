@@ -10,7 +10,7 @@ function [summary, app] = viewer_performance_evaluation(options)
 %   open for inspection. Supported options are ImagePaths, SyntheticImageSize,
 %   SyntheticLayerCount, SyntheticPattern, DisplayTileSize,
 %   ScenarioIterations, LodBoundaryAngles, UseSynthetic, SceneOptions,
-%   OutputDirectory, WriteArtifacts, and KeepAppOpen.
+%   PreviewBudgetOptions, OutputDirectory, WriteArtifacts, and KeepAppOpen.
 
 if nargin < 1
     options = struct();
@@ -33,6 +33,10 @@ configurationTimer = tic;
 initialRuntime = app.performanceDiagnostics();
 if initialRuntime.Viewer.DisplayTileSize ~= options.DisplayTileSize
     app.configurePreviewTiling(struct(TileSize=options.DisplayTileSize));
+    drawnow
+end
+if ~isempty(fieldnames(options.PreviewBudgetOptions))
+    app.configurePreviewBudget(options.PreviewBudgetOptions);
     drawnow
 end
 previewConfigurationSeconds = toc(configurationTimer);
@@ -73,11 +77,13 @@ finalState = app.exportState();
 
 summary = struct();
 summary.Format = "ProjectionViewerPerformanceEvaluation";
-summary.Version = 2;
+summary.Version = 3;
 summary.Fixture = fixture;
 summary.LaunchSeconds = launchSeconds;
 summary.PreviewConfigurationSeconds = previewConfigurationSeconds;
 summary.DisplayTileSize = options.DisplayTileSize;
+configuredRuntime = app.performanceDiagnostics();
+summary.PreviewBudget = configuredRuntime.Viewer.GlobalPreviewBudget;
 summary.InitialDiagnostics = initialDiagnostics;
 summary.Scenarios = records;
 summary.FinalStateMatchesInitial = isequaln(finalState, initialState);
@@ -114,6 +120,7 @@ defaults.UseSynthetic = false;
 defaults.SceneOptions = struct(RowStride=64, ColumnStride=64, ...
     DisplayTextureMaxPixels=2e6, GSD=0.01, NominalRange=1e6, ...
     PlatformStepMeters=0.01);
+defaults.PreviewBudgetOptions = struct();
 defaults.OutputDirectory = fullfile(projectRoot, ...
     "artifacts", "viewer_performance");
 defaults.WriteArtifacts = true;
@@ -142,6 +149,11 @@ defaults.UseSynthetic = validateLogicalScalar( ...
 if ~isstruct(defaults.SceneOptions) || ~isscalar(defaults.SceneOptions)
     error("viewer_performance_evaluation:invalidOptions", ...
         "SceneOptions must be a scalar struct.");
+end
+if ~isstruct(defaults.PreviewBudgetOptions) || ...
+        ~isscalar(defaults.PreviewBudgetOptions)
+    error("viewer_performance_evaluation:invalidOptions", ...
+        "PreviewBudgetOptions must be a scalar struct.");
 end
 defaults.OutputDirectory = char(string(defaults.OutputDirectory));
 defaults.WriteArtifacts = validateLogicalScalar( ...
@@ -364,6 +376,9 @@ sampleCacheHits = zeros(scenarioCount, 1);
 sampleCacheMisses = zeros(scenarioCount, 1);
 layerGeometryRefreshes = zeros(scenarioCount, 1);
 rigidProjectionTranslations = zeros(scenarioCount, 1);
+alphaRequests = zeros(scenarioCount, 1);
+alphaCoalescedRequests = zeros(scenarioCount, 1);
+budgetLimitedLodSelections = zeros(scenarioCount, 1);
 for k = 1:scenarioCount
     record = summary.Scenarios(k);
     counters = record.Diagnostics.Counters;
@@ -382,17 +397,23 @@ for k = 1:scenarioCount
     layerGeometryRefreshes(k) = counters.LayerGeometryRefreshes;
     rigidProjectionTranslations(k) = ...
         counters.RigidProjectionTranslations;
+    alphaRequests(k) = counters.AlphaRequests;
+    alphaCoalescedRequests(k) = counters.AlphaCoalescedRequests;
+    budgetLimitedLodSelections(k) = ...
+        counters.BudgetLimitedLodSelections;
 end
 scenarioTable = table(names, activeWallSeconds, wallSeconds, ...
     frameRequests, renderedFrames, ...
     meshBuilds, surfaceCreations, surfaceDeletions, tileCandidates, ...
     sampleFcnCalls, sampleCacheHits, sampleCacheMisses, ...
     layerGeometryRefreshes, rigidProjectionTranslations, ...
+    alphaRequests, alphaCoalescedRequests, budgetLimitedLodSelections, ...
     VariableNames=["Scenario", "ActiveWallSeconds", "WallSeconds", ...
     "FrameRequests", "RenderedFrames", "MeshBuilds", "SurfaceCreations", ...
     "SurfaceDeletions", "TileCandidates", "SampleFcnCalls", ...
     "SampleCacheHits", "SampleCacheMisses", "LayerGeometryRefreshes", ...
-    "RigidProjectionTranslations"]);
+    "RigidProjectionTranslations", "AlphaRequests", ...
+    "AlphaCoalescedRequests", "BudgetLimitedLodSelections"]);
 writetable(scenarioTable, fullfile(outputDirectory, ...
     "viewer_performance_scenarios.csv"));
 end

@@ -25,6 +25,12 @@ classdef ProjectionViewerApp < handle
         PreviewPredictedCandidateCounts double
         PreviewPredictedVisibleTileCounts double
         PreviewPredictedTextureBytes double
+        PreviewLayerSurfaceBudgets double
+        PreviewLayerTextureBudgets double
+        PreviewBudgetLimitedLayerMask logical
+        RenderedLayerAlphas double
+        PendingAlphaMask logical
+        AlphaPreviewTimer
         IsPreviewCameraReady logical = false
         ProjectionTipDegrees double = 0
         ProjectionTiltDegrees double = 0
@@ -49,6 +55,11 @@ classdef ProjectionViewerApp < handle
         PreviewTileCacheMaxBytes double = 256 * 1024 ^ 2
         PreviewSampleCacheMaxBytes double = 64 * 1024 ^ 2
         PreviewSurfacePoolMaxCount double = 64
+        PreviewMaxVisibleSurfaces double = 48
+        PreviewMaxVisibleTextureBytes double = 256 * 1024 ^ 2
+        PreviewTargetMaxTilesPerLayer double = 12
+        PreviewAutomaticTilePolicy logical = false
+        AlphaPreviewMinIntervalSeconds double = 0.05
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
         InitialViewportFillFraction double = 0.5
@@ -180,6 +191,7 @@ classdef ProjectionViewerApp < handle
                 viewerState = ProjectionViewerState.validate( ...
                     viewerState, numel(app.Scene.layers));
                 app.applyViewerStateToScene(viewerState);
+                app.resetAlphaRuntimeState();
             end
             app.createComponents();
             app.createSurface();
@@ -242,6 +254,7 @@ classdef ProjectionViewerApp < handle
             app.cancelCameraReconciliation();
             state = ProjectionViewerState.validate(state, numel(app.Scene.layers));
             app.applyViewerStateToScene(state);
+            app.resetAlphaRuntimeState();
             app.refreshProjectionSurfaces(app.DefaultMeshSampling);
             app.configureFrameCamera();
             if isfield(state, "Camera")
@@ -368,7 +381,8 @@ classdef ProjectionViewerApp < handle
         end
 
         function flushPreviewUpdates(app)
-            %flushPreviewUpdates Apply the latest pending camera reconciliation.
+            %flushPreviewUpdates Apply pending alpha and camera updates.
+            app.flushPendingAlphaUpdates();
             app.flushCameraReconciliation();
         end
 
@@ -431,6 +445,58 @@ classdef ProjectionViewerApp < handle
                 options.MaxBytes);
             app.PreviewSampledGeometryCache = ProjectionViewerLruCache( ...
                 options.SampleMaxBytes);
+        end
+
+        function options = configurePreviewBudget(app, overrides)
+            %configurePreviewBudget Set display-only object/render budgets.
+            if nargin < 2 || isempty(overrides)
+                overrides = struct();
+            end
+            if ~isstruct(overrides) || ~isscalar(overrides)
+                error("ProjectionViewerApp:invalidPreviewBudgetOptions", ...
+                    "Preview budget overrides must be a scalar struct.");
+            end
+            options = struct( ...
+                MaxVisibleSurfaces=app.PreviewMaxVisibleSurfaces, ...
+                MaxVisibleTextureBytes=app.PreviewMaxVisibleTextureBytes, ...
+                TargetMaxTilesPerLayer=app.PreviewTargetMaxTilesPerLayer, ...
+                AutomaticTilePolicy=app.PreviewAutomaticTilePolicy, ...
+                AlphaPreviewMinIntervalSeconds= ...
+                app.AlphaPreviewMinIntervalSeconds);
+            names = fieldnames(overrides);
+            for k = 1:numel(names)
+                if ~isfield(options, names{k})
+                    error("ProjectionViewerApp:invalidPreviewBudgetOptions", ...
+                        "Unknown preview budget option %s.", names{k});
+                end
+                options.(names{k}) = overrides.(names{k});
+            end
+            options.MaxVisibleSurfaces = app.validatePositiveIntegerOption( ...
+                options.MaxVisibleSurfaces, "MaxVisibleSurfaces");
+            options.MaxVisibleTextureBytes = ...
+                app.validatePositiveIntegerOption( ...
+                options.MaxVisibleTextureBytes, "MaxVisibleTextureBytes");
+            options.TargetMaxTilesPerLayer = ...
+                app.validatePositiveIntegerOption( ...
+                options.TargetMaxTilesPerLayer, ...
+                "TargetMaxTilesPerLayer");
+            options.AutomaticTilePolicy = app.validateLogicalOption( ...
+                options.AutomaticTilePolicy, "AutomaticTilePolicy");
+            options.AlphaPreviewMinIntervalSeconds = ...
+                app.validateNonnegativeScalarOption( ...
+                options.AlphaPreviewMinIntervalSeconds, ...
+                "AlphaPreviewMinIntervalSeconds");
+
+            app.flushPendingAlphaUpdates();
+            app.PreviewMaxVisibleSurfaces = options.MaxVisibleSurfaces;
+            app.PreviewMaxVisibleTextureBytes = ...
+                options.MaxVisibleTextureBytes;
+            app.PreviewTargetMaxTilesPerLayer = ...
+                options.TargetMaxTilesPerLayer;
+            app.PreviewAutomaticTilePolicy = options.AutomaticTilePolicy;
+            app.AlphaPreviewMinIntervalSeconds = ...
+                options.AlphaPreviewMinIntervalSeconds;
+            app.refreshTiledProjectionSurfaces();
         end
     end
 
@@ -2972,6 +3038,12 @@ classdef ProjectionViewerApp < handle
             app.PreviewPredictedCandidateCounts = zeros(1, layerCount);
             app.PreviewPredictedVisibleTileCounts = zeros(1, layerCount);
             app.PreviewPredictedTextureBytes = zeros(1, layerCount);
+            app.PreviewLayerSurfaceBudgets = zeros(1, layerCount);
+            app.PreviewLayerTextureBudgets = zeros(1, layerCount);
+            app.PreviewBudgetLimitedLayerMask = false(1, layerCount);
+            app.RenderedLayerAlphas = [app.Scene.layers.Alpha];
+            app.PendingAlphaMask = false(1, layerCount);
+            app.AlphaPreviewTimer = [];
             app.clearPreviewTileRuntimeCache();
             app.clearPreviewSampledGeometryCache();
             for layerIndex = 1:layerCount
@@ -3095,7 +3167,8 @@ classdef ProjectionViewerApp < handle
                 displayTexture, ...
                 FaceColor="texturemap", EdgeColor="none", LineStyle="none", ...
                 FaceAlpha=app.previewFaceAlphaForLayer(mesh.Alpha, layerIndex), ...
-                Visible=app.onOff(mesh.Visible), ...
+                Visible=app.onOff(app.previewSurfaceIsVisible( ...
+                mesh.Visible, mesh.Alpha)), ...
                 ContextMenu=app.ImageContextMenu, Tag=tag);
             app.PerformanceMonitor.increment("SurfaceCreations");
             app.PerformanceMonitor.increment( ...
@@ -3231,6 +3304,7 @@ classdef ProjectionViewerApp < handle
 
         function tiles = previewTilesForLayer(app, layerIndex, cameraContext)
             pyramid = app.PreviewPyramids{layerIndex};
+            budget = app.previewLayerBudget(layerIndex);
             if ~app.IsPreviewCameraReady
                 coarsestLevelIndex = numel(pyramid.Levels);
                 app.PreviewDesiredLevelIndices(layerIndex) = coarsestLevelIndex;
@@ -3249,21 +3323,85 @@ classdef ProjectionViewerApp < handle
 
             startLevelIndex = app.previewLevelIndexForLayer( ...
                 layerIndex, cameraContext);
-            maxVisibleTiles = app.PreviewTilingOptions.MaxVisibleTilesPerLayer;
+            maxVisibleTiles = min( ...
+                app.PreviewTilingOptions.MaxVisibleTilesPerLayer, ...
+                budget.MaxSurfaces);
+            if app.PreviewAutomaticTilePolicy
+                maxVisibleTiles = min(maxVisibleTiles, ...
+                    app.PreviewTargetMaxTilesPerLayer);
+            end
             tiles = ProjectionPreviewPyramid.emptyTiles();
             geometry = app.previewGeometryCacheForLayer(layerIndex);
+            app.PreviewBudgetLimitedLayerMask(layerIndex) = false;
 
             for levelIndex = startLevelIndex:numel(pyramid.Levels)
                 app.PreviewPendingLevelIndices(layerIndex) = levelIndex;
                 tiles = app.visiblePreviewTiles( ...
                     layerIndex, geometry, levelIndex, cameraContext);
-                if numel(tiles) <= maxVisibleTiles
+                textureBytes = app.previewTilesTextureBytes( ...
+                    layerIndex, tiles);
+                if numel(tiles) <= maxVisibleTiles && ...
+                        textureBytes <= budget.MaxTextureBytes
                     return
                 end
+                app.PreviewBudgetLimitedLayerMask(layerIndex) = true;
+                app.PerformanceMonitor.increment( ...
+                    "BudgetLimitedLodSelections");
             end
 
-            if numel(tiles) > maxVisibleTiles
-                tiles = tiles(1:maxVisibleTiles);
+            if numel(tiles) > maxVisibleTiles || ...
+                    app.previewTilesTextureBytes(layerIndex, tiles) > ...
+                    budget.MaxTextureBytes
+                app.PerformanceMonitor.increment("PreviewBudgetOverruns");
+            end
+        end
+
+        function budget = previewLayerBudget(app, layerIndex)
+            visibleMask = [app.Scene.layers.Visible] & ...
+                [app.Scene.layers.Alpha] > 0;
+            visibleTiledMask = visibleMask & app.PreviewTiledLayerMask;
+            tiledLayerCount = max(1, nnz(visibleTiledMask));
+            untiledLayerCount = nnz(visibleMask & ~app.PreviewTiledLayerMask);
+            availableSurfaces = max(1, ...
+                app.PreviewMaxVisibleSurfaces - untiledLayerCount);
+            surfaceShare = max(1, floor( ...
+                availableSurfaces / tiledLayerCount));
+
+            untiledTextureBytes = 0;
+            untiledIndices = find(visibleMask & ~app.PreviewTiledLayerMask);
+            for untiledIndex = reshape(untiledIndices, 1, [])
+                untiledTextureBytes = untiledTextureBytes + ...
+                    app.arrayBytes( ...
+                    app.Scene.layers(untiledIndex).DisplayTexture);
+            end
+            availableTextureBytes = max(1, ...
+                app.PreviewMaxVisibleTextureBytes - untiledTextureBytes);
+            textureShare = max(1, floor( ...
+                availableTextureBytes / tiledLayerCount));
+
+            app.PreviewLayerSurfaceBudgets(layerIndex) = surfaceShare;
+            app.PreviewLayerTextureBudgets(layerIndex) = textureShare;
+            budget = struct(MaxSurfaces=surfaceShare, ...
+                MaxTextureBytes=textureShare);
+        end
+
+        function bytes = previewTilesTextureBytes(app, layerIndex, tiles)
+            if isempty(tiles)
+                bytes = 0;
+                return
+            end
+            texturePixels = sum(arrayfun( ...
+                @(tile) prod(double(tile.TextureSize)), tiles));
+            bytes = texturePixels * ...
+                app.previewDisplayBytesPerPixel(layerIndex);
+        end
+
+        function bytes = previewDisplayBytesPerPixel(app, layerIndex)
+            pyramid = app.PreviewPyramids{layerIndex};
+            if pyramid.BandCount == 3
+                bytes = 3 * app.imageClassBytes(pyramid.ImageClass);
+            else
+                bytes = 3 * app.imageClassBytes("single");
             end
         end
 
@@ -3321,8 +3459,8 @@ classdef ProjectionViewerApp < handle
             app.PreviewPredictedVisibleTileCounts(layerIndex) = ...
                 diagnostics.VisibleCount;
             app.PreviewPredictedTextureBytes(layerIndex) = ...
-                diagnostics.VisibleTexturePixels * 3 * ...
-                app.imageClassBytes(app.PreviewPyramids{layerIndex}.ImageClass);
+                diagnostics.VisibleTexturePixels * ...
+                app.previewDisplayBytesPerPixel(layerIndex);
             tiles = geometry.Levels(levelIndex).Tiles(visibleMask);
         end
 
@@ -3420,7 +3558,7 @@ classdef ProjectionViewerApp < handle
             end
 
             tiledLayerIndices = find(app.PreviewTiledLayerMask & ...
-                [app.Scene.layers.Visible]);
+                [app.Scene.layers.Visible] & [app.Scene.layers.Alpha] > 0);
             if isempty(tiledLayerIndices)
                 app.PerformanceMonitor.recordTiming( ...
                     "TileRefreshSeconds", toc(refreshTimer));
@@ -3663,7 +3801,8 @@ classdef ProjectionViewerApp < handle
         function mesh = previewTileAppearanceMesh(app, mesh, layerIndex)
             layer = app.Scene.layers(layerIndex);
             mesh.Alpha = layer.Alpha;
-            mesh.Visible = layer.Visible;
+            mesh.Visible = app.previewSurfaceIsVisible( ...
+                layer.Visible, layer.Alpha);
         end
 
         function retirePreviewTileSurfaces(app, surfaceHandles)
@@ -3731,6 +3870,8 @@ classdef ProjectionViewerApp < handle
             if isempty(surfaceHandles)
                 return
             end
+            alpha = app.Scene.layers(layerIndex).Alpha;
+            isVisible = app.previewSurfaceIsVisible(isVisible, alpha);
             set(surfaceHandles, "Visible", char(app.onOff(isVisible)));
         end
 
@@ -3740,7 +3881,15 @@ classdef ProjectionViewerApp < handle
                 return
             end
             faceAlpha = app.previewFaceAlphaForLayer(alpha, layerIndex);
-            set(surfaceHandles, "FaceAlpha", faceAlpha);
+            isVisible = app.previewSurfaceIsVisible( ...
+                app.Scene.layers(layerIndex).Visible, alpha);
+            currentVisibility = string(get(surfaceHandles, "Visible"));
+            visibilityChanges = nnz( ...
+                (currentVisibility == "on") ~= isVisible);
+            set(surfaceHandles, "FaceAlpha", faceAlpha, ...
+                "Visible", char(app.onOff(isVisible)));
+            app.PerformanceMonitor.increment( ...
+                "AlphaVisibilityTransitions", visibilityChanges);
         end
 
         function raiseCrosshairOverlay(app)
@@ -4612,36 +4761,79 @@ classdef ProjectionViewerApp < handle
             app.PreviewTimer = tic;
         end
 
-        function alphaChanging(app, source, event)
+        function alphaChanging(app, ~, event)
             alpha = app.validateSliderAlpha(event.Value);
-            source.Value = alpha;
-            app.updateSelectedLayerAlpha(alpha);
+            app.requestSelectedLayerAlpha(alpha, false);
         end
 
         function updateAlphaFromSlider(app)
             alpha = app.validateSliderAlpha(app.AlphaSlider.Value);
-            app.AlphaSlider.Value = alpha;
-            app.updateSelectedLayerAlpha(alpha);
+            app.requestSelectedLayerAlpha(alpha, true);
             app.PreviewTimer = tic;
         end
 
-        function updateSelectedLayerAlpha(app, alpha)
+        function requestSelectedLayerAlpha(app, alpha, forceRender)
             layerIndex = app.SelectedLayerIndex;
             layer = app.Scene.layers(layerIndex);
-            if layer.Alpha == alpha
-                return
-            end
-            frameTimer = app.beginPerformanceFrame();
+            app.PerformanceMonitor.increment("AlphaRequests");
             layer.Alpha = alpha;
             app.Scene.layers(layerIndex) = layer;
-            app.setLayerSurfaceAlpha(layerIndex, alpha);
-            if ~isempty(app.CurrentMesh)
+            if layerIndex == app.SelectedLayerIndex && ...
+                    ~isempty(app.CurrentMesh) && ...
+                    isfield(app.CurrentMesh, "Alpha")
                 app.CurrentMesh.Alpha = alpha;
             end
-            app.updateLabels(app.ProjectionTipDegrees, ...
-                app.ProjectionTiltDegrees, app.ViewTwistDegrees, alpha);
+            app.updateAlphaLabel(alpha);
+            app.PendingAlphaMask(layerIndex) = ...
+                app.RenderedLayerAlphas(layerIndex) ~= alpha;
+            if ~app.PendingAlphaMask(layerIndex)
+                return
+            end
+
+            canRender = forceRender || isempty(app.AlphaPreviewTimer) || ...
+                toc(app.AlphaPreviewTimer) >= ...
+                app.AlphaPreviewMinIntervalSeconds;
+            if ~canRender
+                app.PerformanceMonitor.increment("AlphaCoalescedRequests");
+                return
+            end
+            app.renderLayerAlpha(layerIndex, forceRender);
+        end
+
+        function flushPendingAlphaUpdates(app)
+            layerIndices = find(app.PendingAlphaMask);
+            for layerIndex = reshape(layerIndices, 1, [])
+                app.renderLayerAlpha(layerIndex, true);
+            end
+        end
+
+        function renderLayerAlpha(app, layerIndex, isFinal)
+            frameTimer = app.beginPerformanceFrame();
+            alpha = app.Scene.layers(layerIndex).Alpha;
+            previousAlpha = app.RenderedLayerAlphas(layerIndex);
+            app.setLayerSurfaceAlpha(layerIndex, alpha);
+            app.RenderedLayerAlphas(layerIndex) = alpha;
+            app.PendingAlphaMask(layerIndex) = false;
+            if isFinal
+                app.PerformanceMonitor.increment("AlphaFinalizations");
+            end
             drawnow limitrate
             app.finishPerformanceFrame(frameTimer, "AlphaSeconds");
+            app.AlphaPreviewTimer = tic;
+            if previousAlpha == 0 && alpha > 0 && ...
+                    app.usesTiledPreview(layerIndex)
+                app.scheduleCameraReconciliation();
+            end
+        end
+
+        function updateAlphaLabel(app, alpha)
+            app.AlphaLabel.Text = sprintf("Alpha %.2f", alpha);
+        end
+
+        function resetAlphaRuntimeState(app)
+            app.RenderedLayerAlphas = [app.Scene.layers.Alpha];
+            app.PendingAlphaMask = false(1, numel(app.Scene.layers));
+            app.AlphaPreviewTimer = [];
         end
 
         function updateProjection(app, tipDegrees, tiltDegrees, alpha, meshSamplings)
@@ -4785,7 +4977,8 @@ classdef ProjectionViewerApp < handle
             end
             surfaceHandle.FaceAlpha = app.previewFaceAlphaForLayer( ...
                 mesh.Alpha, layerIndex);
-            surfaceHandle.Visible = app.onOff(mesh.Visible);
+            surfaceHandle.Visible = app.onOff( ...
+                app.previewSurfaceIsVisible(mesh.Visible, mesh.Alpha));
         end
 
         function maxVertices = previewTileMeshVertexLimit(app, meshSamplings)
@@ -4811,7 +5004,9 @@ classdef ProjectionViewerApp < handle
                     layer.DisplayTexture, layerIndex);
                 surfaceHandle.FaceAlpha = app.previewFaceAlphaForLayer( ...
                     layer.Alpha, layerIndex);
-                surfaceHandle.Visible = app.onOff(layer.Visible);
+                surfaceHandle.Visible = app.onOff( ...
+                    app.previewSurfaceIsVisible( ...
+                    layer.Visible, layer.Alpha));
             end
         end
 
@@ -4829,7 +5024,9 @@ classdef ProjectionViewerApp < handle
                     tileLayer.DisplayTexture, layerIndex);
                 surfaceHandles(tileIndex).FaceAlpha = app.previewFaceAlphaForLayer( ...
                     tileLayer.Alpha, layerIndex);
-                surfaceHandles(tileIndex).Visible = app.onOff(tileLayer.Visible);
+                surfaceHandles(tileIndex).Visible = app.onOff( ...
+                    app.previewSurfaceIsVisible( ...
+                    tileLayer.Visible, tileLayer.Alpha));
             end
         end
 
@@ -4851,6 +5048,10 @@ classdef ProjectionViewerApp < handle
                     app.visibleAnaglyphLayerCount() > 1
                 alpha = min(alpha, app.AnaglyphPreviewFaceAlpha);
             end
+        end
+
+        function tf = previewSurfaceIsVisible(~, isVisible, alpha)
+            tf = logical(isVisible) && alpha > 0;
         end
 
         function channelIndex = anaglyphChannelForLayer(app, layerIndex)
@@ -5041,6 +5242,26 @@ classdef ProjectionViewerApp < handle
             value = double(value);
         end
 
+        function value = validateNonnegativeScalarOption(~, value, name)
+            if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || ...
+                    value < 0
+                error("ProjectionViewerApp:invalidPreviewBudgetOptions", ...
+                    "%s must be a nonnegative finite scalar.", name);
+            end
+            value = double(value);
+        end
+
+        function value = validateLogicalOption(~, value, name)
+            if ~isscalar(value) || ...
+                    ~(islogical(value) || ...
+                    (isnumeric(value) && isfinite(value) && ...
+                    any(value == [0 1])))
+                error("ProjectionViewerApp:invalidPreviewBudgetOptions", ...
+                    "%s must be a logical scalar.", name);
+            end
+            value = logical(value);
+        end
+
         function resetView(app)
             app.cancelCameraReconciliation();
             app.Scene = app.ResetScene;
@@ -5180,6 +5401,16 @@ classdef ProjectionViewerApp < handle
                 app.PreviewPredictedVisibleTileCounts(fliplr(swapIndices));
             app.PreviewPredictedTextureBytes(swapIndices) = ...
                 app.PreviewPredictedTextureBytes(fliplr(swapIndices));
+            app.PreviewLayerSurfaceBudgets(swapIndices) = ...
+                app.PreviewLayerSurfaceBudgets(fliplr(swapIndices));
+            app.PreviewLayerTextureBudgets(swapIndices) = ...
+                app.PreviewLayerTextureBudgets(fliplr(swapIndices));
+            app.PreviewBudgetLimitedLayerMask(swapIndices) = ...
+                app.PreviewBudgetLimitedLayerMask(fliplr(swapIndices));
+            app.RenderedLayerAlphas(swapIndices) = ...
+                app.RenderedLayerAlphas(fliplr(swapIndices));
+            app.PendingAlphaMask(swapIndices) = ...
+                app.PendingAlphaMask(fliplr(swapIndices));
             app.PreviewTileDataCache.clear();
             app.PreviewSampledGeometryCache.clear();
             app.SelectedLayerIndex = targetIndex;
@@ -5339,6 +5570,10 @@ classdef ProjectionViewerApp < handle
             runtime.PredictedVisibleTileCounts = ...
                 app.PreviewPredictedVisibleTileCounts;
             runtime.PredictedTextureBytes = app.PreviewPredictedTextureBytes;
+            runtime.LayerSurfaceBudgets = app.PreviewLayerSurfaceBudgets;
+            runtime.LayerTextureBudgets = app.PreviewLayerTextureBudgets;
+            runtime.BudgetLimitedLayerMask = ...
+                app.PreviewBudgetLimitedLayerMask;
             runtime.VisibleSurfaceCount = visibleSurfaceCount;
             runtime.VisibleTileSurfaceCount = visibleTileSurfaceCount;
             runtime.VisibleTexturePixels = visibleTexturePixels;
@@ -5351,6 +5586,17 @@ classdef ProjectionViewerApp < handle
             runtime.LodPromoteThreshold = app.PreviewLodPromoteThreshold;
             runtime.LodDemoteThreshold = app.PreviewLodDemoteThreshold;
             runtime.ViewportHaloFraction = app.PreviewViewportHaloFraction;
+            runtime.GlobalPreviewBudget = struct( ...
+                MaxVisibleSurfaces=app.PreviewMaxVisibleSurfaces, ...
+                MaxVisibleTextureBytes= ...
+                app.PreviewMaxVisibleTextureBytes, ...
+                TargetMaxTilesPerLayer= ...
+                app.PreviewTargetMaxTilesPerLayer, ...
+                AutomaticTilePolicy=app.PreviewAutomaticTilePolicy);
+            runtime.AlphaPreviewMinIntervalSeconds = ...
+                app.AlphaPreviewMinIntervalSeconds;
+            runtime.RenderedLayerAlphas = app.RenderedLayerAlphas;
+            runtime.PendingAlphaMask = app.PendingAlphaMask;
             runtime.TileDataCache = app.PreviewTileDataCache.diagnostics();
             runtime.SampledGeometryCache = ...
                 app.PreviewSampledGeometryCache.diagnostics();
