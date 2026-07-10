@@ -414,6 +414,94 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
                 ProjectionAlignmentOpkSolverTest.looseOptions()), ...
                 "ProjectionAlignmentOpkSolver:insufficientMatches");
         end
+
+        function testCommonAnchorMovesBothLayersAndPreservesDifferential(testCase)
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+            scene = ProjectionAlignmentOpkSolverTest.makeRegularizedScene();
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+            plane = scene.layers(1).CurrentProjectionPlane;
+            options = ProjectionAlignmentOpkSolverTest.looseOptions();
+            state = ProjectionAlignmentCommonAnchor.prepare( ...
+                scene, matchResult, [1 2], 3, plane, options);
+            intendedDelta = [0.002 -0.001];
+            target = state.StartingCentroid + ...
+                (state.Jacobian * intendedDelta.').';
+
+            result = ProjectionAlignmentCommonAnchor.refine(state, target);
+
+            testCase.verifyTrue(result.Success, result.FailureReason);
+            solvedOpk = reshape( ...
+                [result.Corrections.ViewVectorAngularOffsetsDegrees], 3, []).';
+            startOpk = reshape( ...
+                [state.StartingCorrections.ViewVectorAngularOffsetsDegrees], ...
+                3, []).';
+            deltas = solvedOpk - startOpk;
+            testCase.verifyEqual(deltas(1, 1:2), deltas(2, 1:2), ...
+                AbsTol=1e-10);
+            testCase.verifyEqual(deltas(:, 3), zeros(2, 1), AbsTol=1e-12);
+            testCase.verifyEqual(solvedOpk(1, :) - solvedOpk(2, :), ...
+                startOpk(1, :) - startOpk(2, :), AbsTol=1e-10);
+            testCase.verifyLessThan(result.TargetErrorMeters, 1e-3);
+            testCase.verifyFalse(result.AnyBoundHit);
+        end
+
+        function testCommonAnchorLeavesProjectionOffsetsUntouched(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makeBaseTwoLayerScene();
+            scene.layers(1).ProjectionOffsetMeters = [3; -2];
+            scene.layers(2).ProjectionOffsetMeters = [-4; 5];
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+            state = ProjectionAlignmentCommonAnchor.prepare( ...
+                scene, matchResult, [1 2], 1, ...
+                scene.layers(1).CurrentProjectionPlane, ...
+                ProjectionAlignmentOpkSolverTest.looseOptions());
+
+            preview = ProjectionAlignmentCommonAnchor.preview( ...
+                state, state.StartingCentroid + [0.01 0.01]);
+
+            testCase.verifyEqual( ...
+                preview.Scene.layers(1).ProjectionOffsetMeters, [3; -2]);
+            testCase.verifyEqual( ...
+                preview.Scene.layers(2).ProjectionOffsetMeters, [-4; 5]);
+        end
+
+        function testCommonAnchorRejectsBoundHit(testCase)
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+            scene = ProjectionAlignmentOpkSolverTest.makeBaseTwoLayerScene();
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+            options = ProjectionAlignmentOpkSolverTest.tightOptions();
+            state = ProjectionAlignmentCommonAnchor.prepare( ...
+                scene, matchResult, [1 2], 2, ...
+                scene.layers(1).CurrentProjectionPlane, options);
+            requestedDelta = 4 * state.CommonBoundsDegrees;
+            target = state.StartingCentroid + ...
+                (state.Jacobian * requestedDelta.').';
+
+            result = ProjectionAlignmentCommonAnchor.refine(state, target);
+
+            testCase.verifyFalse(result.Success);
+            testCase.verifyTrue(result.AnyBoundHit);
+            testCase.verifyTrue(contains(result.FailureReason, "bound"));
+        end
+
+        function testSceneComparisonReportsAllMetrics(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makeBaseTwoLayerScene();
+            changedScene = scene;
+            changedScene.layers(1).ViewVectorAngularOffsetsDegrees = ...
+                [0.001; 0; 0];
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+
+            diagnostics = ProjectionAlignmentOpkSolver.compareScenes( ...
+                scene, changedScene, matchResult, ...
+                ProjectionAlignmentOpkSolverTest.looseOptions());
+
+            testCase.verifyTrue(isfield(diagnostics, "ProjectionPlane2D"));
+            testCase.verifyTrue(isfield(diagnostics, "ForwardRay3D"));
+            testCase.verifyTrue(isfield(diagnostics, "EpipolarCoplanarity"));
+            testCase.verifyEqual( ...
+                diagnostics.ForwardRay3D.RmsBefore, 0, AbsTol=1e-12);
+            testCase.verifyGreaterThan( ...
+                diagnostics.ProjectionPlane2D.RmsAfter, 0);
+        end
     end
 
     methods (Static, Access = private)

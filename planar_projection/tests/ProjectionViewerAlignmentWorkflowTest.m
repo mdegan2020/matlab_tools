@@ -1032,6 +1032,112 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyFalse(startsWith(string(statusLabel.Text), ...
                 "Alignment failed:"));
         end
+
+        function testShiftLeftDragAppliesAndUndoesCommonAnchor(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(true);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            ax = findall(fig, "Type", "axes");
+            detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
+            matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchButton");
+            undoButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentUndoCurationButton");
+            statusLabel = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentStatusLabel");
+
+            detectorDropDown.Value = "sift";
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            ProjectionViewerAlignmentWorkflowTest.filterMatches();
+            acceptedOverlay = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchOverlay");
+            clickPoint = [acceptedOverlay.XData(1), acceptedOverlay.YData(1), ...
+                acceptedOverlay.ZData(1)];
+            acceptedOverlay.ButtonDownFcn(acceptedOverlay, ...
+                struct(IntersectionPoint=clickPoint));
+            drawnow
+
+            stateBefore = app.exportState();
+            opkBefore = ProjectionViewerAlignmentWorkflowTest. ...
+                viewVectorOffsets(stateBefore);
+            offsetBefore = reshape( ...
+                [stateBefore.Layers.ProjectionOffsetMeters], 2, []).';
+            center = ax.InnerPosition(1:2) + ax.InnerPosition(3:4) / 2;
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAlignmentWorkflowTest.makeKeyEvent("shift"));
+            fig.SelectionType = "normal";
+            fig.CurrentPoint = center;
+            fig.WindowButtonDownFcn(fig, struct(Modifier="shift"));
+            testCase.assertNotEmpty(fig.WindowButtonMotionFcn);
+            fig.CurrentPoint = center + [4 3];
+            fig.WindowButtonMotionFcn(fig, struct());
+            testCase.verifyTrue(isvalid(acceptedOverlay), ...
+                "Live anchor preview should not rebuild the full overlay set.");
+            fig.WindowButtonUpFcn(fig, struct());
+            fig.WindowKeyReleaseFcn(fig, ...
+                ProjectionViewerAlignmentWorkflowTest.makeKeyEvent("shift"));
+            drawnow
+
+            stateAfter = app.exportState();
+            opkAfter = ProjectionViewerAlignmentWorkflowTest. ...
+                viewVectorOffsets(stateAfter);
+            offsetAfter = reshape( ...
+                [stateAfter.Layers.ProjectionOffsetMeters], 2, []).';
+            delta = opkAfter - opkBefore;
+            diagnostics = app.alignmentDiagnostics();
+
+            testCase.verifyEqual(delta(1, 1:2), delta(2, 1:2), ...
+                AbsTol=1e-8);
+            testCase.verifyGreaterThan(norm(delta(1, 1:2)), 0);
+            testCase.verifyEqual(delta(:, 3), zeros(2, 1), AbsTol=1e-12);
+            testCase.verifyEqual(offsetAfter, offsetBefore, AbsTol=1e-12);
+            testCase.verifyEqual(diagnostics.Stage.ManualAdjustmentCount, 1);
+            testCase.verifyFalse(diagnostics.Stage.HasSolveResult);
+            testCase.verifyTrue(contains(string(statusLabel.Text), ...
+                "Common anchor applied"));
+
+            undoButton.ButtonPushedFcn(undoButton, struct());
+            drawnow
+            undoneState = app.exportState();
+            undoneOpk = ProjectionViewerAlignmentWorkflowTest. ...
+                viewVectorOffsets(undoneState);
+            undoneDiagnostics = app.alignmentDiagnostics();
+
+            testCase.verifyEqual(undoneOpk, opkBefore, AbsTol=1e-10);
+            testCase.verifyEqual( ...
+                undoneDiagnostics.Stage.ManualAdjustmentUndoCount, 0);
+            testCase.verifyTrue(contains(string(statusLabel.Text), ...
+                "Undid common-anchor"));
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAlignmentWorkflowTest.makeKeyEvent("shift"));
+            fig.SelectionType = "normal";
+            fig.CurrentPoint = center;
+            fig.WindowButtonDownFcn(fig, struct(Modifier="shift"));
+            fig.CurrentPoint = center + [3 2];
+            fig.WindowButtonMotionFcn(fig, struct());
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAlignmentWorkflowTest.makeKeyEvent("escape"));
+            fig.WindowButtonUpFcn(fig, struct());
+            fig.WindowKeyReleaseFcn(fig, ...
+                ProjectionViewerAlignmentWorkflowTest.makeKeyEvent("shift"));
+            drawnow
+            cancelledState = app.exportState();
+            cancelledOpk = ProjectionViewerAlignmentWorkflowTest. ...
+                viewVectorOffsets(cancelledState);
+
+            testCase.verifyEqual(cancelledOpk, opkBefore, AbsTol=1e-10);
+            testCase.verifyTrue(contains(string(statusLabel.Text), "cancelled"));
+        end
     end
 
     methods (Static, Access = private)

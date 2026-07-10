@@ -387,6 +387,11 @@ Core controls:
   using the same selected-layer projection offset as W/A/S/D.
 - Alt/Option + left-drag adjusts omega and phi for the selected layer so the
   projected image tracks the mouse drag.
+- After selecting an enabled accepted alignment correspondence, Shift +
+  left-drag moves its confidence-weighted stereo anchor by applying the same
+  bounded omega/phi increment to both images. Common kappa, differential OPK,
+  projection offsets, and source rays/origins remain fixed. Release runs an
+  exact safety refinement; Esc cancels and restores the starting OPK exactly.
 - W/A/S/D translates the selected layer up/left/down/right on the projection
   plane.
 - I/K adjust phi, J/L adjust omega, and U/O adjust kappa. Omega and phi default
@@ -419,8 +424,14 @@ Core controls:
   feature points by default, with optional faint rejected matches and post-solve
   worst-residual highlights.
   Overlay clicks select the nearest match-table row; Delete marks selected
-  rows as session-local deleted observations, and Undo restores curation from
-  a stack. Overlay endpoints are reprojected independently through current
+  rows as session-local deleted observations, and Undo restores the latest
+  curation or common-anchor adjustment from a session-local stack. A committed
+  anchor adjustment marks Solve/Preview/Apply stale but preserves matches and
+  manual curation for immediate re-solve. Its diagnostics report stable layer
+  IDs, match identity, target/achieved plane coordinates, OPK changes,
+  conditioning, bounds, and before/after forward-ray RMS. Only the resulting
+  OPK participates in normal viewer-state serialization; manual provenance is
+  runtime-only. Overlay endpoints are reprojected independently through current
   sampled source rays, OPK, and projection offsets; an invalid endpoint cannot
   move a whole pair back to stale working-image coordinates. Correspondence
   lines require two valid endpoints, while valid endpoints of rejected/invalid
@@ -428,8 +439,9 @@ Core controls:
   preserves overlay world positions and alignment pair identity.
 
 The graphics-free `ProjectionAlignmentSession` owns working-image cache state,
-raw and filtered matches, curation/undo state, solve results, ROI bounds, and
-explicit stage revisions. Setup changes mark Match and every downstream stage
+raw and filtered matches, curation/undo state, session-only manual-adjustment
+history, solve results, ROI bounds, and explicit stage revisions. Setup changes
+mark Match and every downstream stage
 stale; filter changes retain raw feature matches while marking Filter and later
 stages stale; solve-setting or table edits retain all matched observations and
 mark only Solve, Preview, and Apply stale. Re-solving after curation therefore

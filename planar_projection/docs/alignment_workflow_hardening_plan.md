@@ -1240,6 +1240,44 @@ Acceptance criteria:
 - The gesture uses the existing differential viewer refresh path and remains
   responsive on large tiled imagery.
 
+#### Pack 7 implementation result
+
+- `ProjectionAlignmentCommonAnchor` is a pure graphics-free two-DOF adjustment
+  model. It captures stable layer IDs, accepted source observations, current
+  plane, starting corrections, covariance-derived endpoint weights, exact
+  FOV/configured omega/phi bounds, and a central-difference 2x2 centroid
+  Jacobian. It applies one common omega/phi increment to both layers, so the
+  OPK differential and both kappa values remain fixed exactly; it never changes
+  source geometry or `ProjectionOffsetMeters`.
+- Shift+left is active only for an enabled accepted selected correspondence.
+  Plain left, Control+left, and Alt/Option+left retain their existing pan,
+  projection-offset, and selected-layer OPK meanings. The pointer-to-centroid
+  grab offset prevents a jump when the press is not exactly at the centroid;
+  Esc or an invalid preview restores the mouse-down scene.
+- Motion uses the cached Jacobian, the existing reduced drag mesh/differential
+  layer refresh, and redraws only the selected anchor. The potentially large
+  general match-overlay set remains intact during motion and is reprojected
+  once on release, avoiding a full overlay rebuild per mouse event.
+- Release uses bounded `lsqnonlin` refinement against centroid placement with a
+  disparity-change penalty. Nonconvergence, a weak 2x2 Jacobian, any common
+  omega/phi bound hit, or more than ten-percent material degradation of the
+  full accepted set's forward-ray 3D RMS rejects the edit and restores exact
+  starting corrections. `ProjectionAlignmentOpkSolver.compareScenes` exposes
+  the same stacked plane, forward-ray, and coplanarity metrics for this check.
+- A successful release records one session-local undo entry and detailed
+  diagnostics: stable pair/layer/match identity, target and achieved plane
+  coordinates, endpoint coordinates, both layers' OPK changes, adjusted common
+  modes, Jacobian/singular conditioning, bounds, and forward-ray RMS before and
+  after. It invalidates only Solve/Preview/Apply, retains matches and curation,
+  and keeps final OPK in the ordinary viewer-state serialization path. The
+  existing Workbench Undo action is revision-ordered across curation and manual
+  anchor edits.
+- Focused coverage verifies common motion/differential preservation, fixed
+  kappa and projection offsets, bound rejection, stacked metric comparison,
+  session-only history, live-overlay reuse, release commit, undo, and Esc
+  rollback. Pack 7 final validation passes all 382 tests after
+  `close all force; clear all; clear classes; rehash; results = runTests;`.
+
 ### Reliability Pack 8: Real-data validation and documentation
 
 Build a repeatable validation matrix covering detector choice, loss choice,
@@ -1280,7 +1318,8 @@ Implement and validate one small coherent sub-pack at a time:
 6. Reliability Pack 5: complete — separate staged Alignment Workbench/session.
 7. Reliability Pack 6: complete — balanced network solver, epipolar loss,
    observability, and unified safety.
-8. Reliability Pack 7: Shift+left common anchor drag.
+8. Reliability Pack 7: complete — Shift+left common-anchor drag with bounded
+   refinement, rollback, diagnostics, and undo.
 9. Reliability Pack 8: full real-data validation and operator documentation.
 
 For each sub-pack: inspect the relevant source/tests, implement only that scope,

@@ -155,6 +155,8 @@ classdef ProjectionViewerApp < handle
         AlignmentRoiListeners = []
         AlignmentRoiDrawingActive logical = false
         AlignmentRoiStartPoint double = [NaN NaN]
+        AlignmentAnchorDragState struct = struct()
+        AlignmentAnchorDragCancelled logical = false
     end
 
     properties (Access = private, Dependent)
@@ -1091,7 +1093,7 @@ classdef ProjectionViewerApp < handle
             app.AlignmentDeleteMatchButton.Layout.Column = 12;
 
             app.AlignmentUndoCurationButton = uibutton(app.AlignmentGrid, ...
-                Text="Undo", Tooltip="Undo last match curation", ...
+                Text="Undo", Tooltip="Undo last curation or common-anchor adjustment", ...
                 Tag="ProjectionViewerAlignmentUndoCurationButton", ...
                 ButtonPushedFcn=@(~, ~) app.undoAlignmentCuration());
             app.AlignmentUndoCurationButton.Layout.Row = 4;
@@ -1664,6 +1666,15 @@ classdef ProjectionViewerApp < handle
             stageDiagnostics.RoiRejectedRecordCount = ...
                 app.alignmentLedgerRejectionCount( ...
                 app.AlignmentFilteredMatchResult, "roi");
+            stageDiagnostics.ManualAdjustmentCount = ...
+                numel(app.AlignmentSession.ManualAdjustmentHistory);
+            stageDiagnostics.ManualAdjustmentUndoCount = ...
+                numel(app.AlignmentSession.ManualAdjustmentUndoStack);
+            stageDiagnostics.LastManualAdjustment = struct();
+            if ~isempty(app.AlignmentSession.ManualAdjustmentHistory)
+                stageDiagnostics.LastManualAdjustment = ...
+                    app.AlignmentSession.ManualAdjustmentHistory{end};
+            end
             stageDiagnostics.FeatureDiagnostics = struct();
             if app.hasMatchResult(app.AlignmentRawMatchResult) && ...
                     isfield(app.AlignmentRawMatchResult, "Diagnostics")
@@ -2655,6 +2666,10 @@ classdef ProjectionViewerApp < handle
             lines(10) = "Solved observations: " + string( ...
                 app.totalAlignmentMatchCount(app.AlignmentResult));
             lines(11) = "ROI: " + app.onOff(~isempty(app.AlignmentRoiBounds));
+            if state.ManualAdjustmentCount > 0
+                lines(end + 1) = "Manual anchor adjustments: " + ...
+                    string(state.ManualAdjustmentCount);
+            end
             result = app.AlignmentResult;
             if isstruct(result) && isfield(result, "Diagnostics") && ...
                     isfield(result.Diagnostics, "Observability") && ...
@@ -2727,7 +2742,8 @@ classdef ProjectionViewerApp < handle
         function pushAlignmentCurationUndoState(app)
             snapshot = struct( ...
                 CuratedMatchMask={app.AlignmentCuratedMatchMask}, ...
-                DeletedMatchMask={app.AlignmentDeletedMatchMask});
+                DeletedMatchMask={app.AlignmentDeletedMatchMask}, ...
+                Revision=double(app.AlignmentSession.Revision));
             app.AlignmentCurationUndoStack{end + 1} = snapshot;
         end
 
@@ -2761,8 +2777,16 @@ classdef ProjectionViewerApp < handle
         end
 
         function undoAlignmentCuration(app)
+            curationRevision = app.latestAlignmentUndoRevision( ...
+                app.AlignmentCurationUndoStack);
+            manualRevision = app.latestAlignmentUndoRevision( ...
+                app.AlignmentSession.ManualAdjustmentUndoStack);
+            if manualRevision > curationRevision
+                app.undoManualAlignmentAdjustment();
+                return
+            end
             if isempty(app.AlignmentCurationUndoStack)
-                app.setAlignmentStatus("No match curation to undo.");
+                app.setAlignmentStatus("No alignment edit to undo.");
                 return
             end
 
@@ -2771,6 +2795,39 @@ classdef ProjectionViewerApp < handle
             app.AlignmentCuratedMatchMask = snapshot.CuratedMatchMask;
             app.AlignmentDeletedMatchMask = snapshot.DeletedMatchMask;
             app.finishAlignmentCurationEdit("Undid match curation. Solve again.");
+        end
+
+        function undoManualAlignmentAdjustment(app)
+            [record, found] = app.AlignmentSession.popManualAdjustment();
+            if ~found
+                app.setAlignmentStatus("No manual alignment adjustment to undo.");
+                return
+            end
+            previousScene = app.Scene;
+            app.Scene = ProjectionAlignmentCommonAnchor.applyCorrections( ...
+                app.Scene, record.StartingCorrections);
+            layerIndices = app.changedProjectionLayerIndices( ...
+                previousScene, app.Scene);
+            app.refreshProjectionLayers( ...
+                layerIndices, app.DefaultMeshSampling, false);
+            app.updateControlsFromSelectedLayer();
+            app.setAlignmentActionEnabled(false);
+            app.setAlignmentSolveEnabled(app.hasSolvableFilteredMatches());
+            app.refreshAlignmentOverlays(true);
+            app.refreshSelectedAlignmentMatchOverlay();
+            app.setAlignmentStatus( ...
+                "Undid common-anchor adjustment. Solve diagnostics remain stale.");
+        end
+
+        function revision = latestAlignmentUndoRevision(~, stack)
+            revision = -Inf;
+            if isempty(stack)
+                return
+            end
+            record = stack{end};
+            if isstruct(record) && isfield(record, "Revision")
+                revision = double(record.Revision);
+            end
         end
 
         function alignmentMatchTableSelected(app, event)
@@ -3378,6 +3435,9 @@ classdef ProjectionViewerApp < handle
                 return
             end
             app.selectAlignmentMatchRecord(records(recordIndex));
+            if app.IsShiftDown || app.eventHasShift(event)
+                app.beginAlignmentAnchorDrag();
+            end
         end
 
         function clickPoint = alignmentOverlayClickPoint(app, event)
@@ -4948,6 +5008,12 @@ classdef ProjectionViewerApp < handle
         end
 
         function keyPressed(app, event)
+            if app.eventKeyIs(event, "escape") && ...
+                    app.DragMode == "adjustCommonAnchor"
+                app.cancelAlignmentAnchorDrag( ...
+                    "Common-anchor adjustment cancelled.");
+                return
+            end
             if app.eventHasControl(event)
                 app.IsControlDown = true;
             end
@@ -5126,8 +5192,12 @@ classdef ProjectionViewerApp < handle
                 return
             end
             hasControl = app.IsControlDown || app.eventHasControl(event);
+            hasShift = app.IsShiftDown || app.eventHasShift(event);
             hasAlt = app.IsAltDown || app.eventHasAlt(event);
-            if hasControl && any(selectionType == ["normal", "alt"])
+            if hasShift && any(selectionType == ["normal", "extend"])
+                app.beginAlignmentAnchorDrag();
+                return
+            elseif hasControl && any(selectionType == ["normal", "alt"])
                 app.DragMode = "translateLayer";
             elseif hasAlt && selectionType == "normal"
                 app.DragMode = "adjustViewVectors";
@@ -5163,6 +5233,8 @@ classdef ProjectionViewerApp < handle
                     app.adjustSelectedLayerViewVectorsByPixelDelta(pixelDelta);
                 case "drawAlignmentRoi"
                     app.updateDrawnAlignmentRoi();
+                case "adjustCommonAnchor"
+                    app.updateAlignmentAnchorDrag();
             end
         end
 
@@ -5171,6 +5243,11 @@ classdef ProjectionViewerApp < handle
             app.DragMode = "none";
             app.LastPointerLocation = [NaN NaN];
             app.refreshPointerMotionCallback();
+            if dragMode == "adjustCommonAnchor"
+                app.finishAlignmentAnchorDrag();
+                app.NeedsDragFinalize = false;
+                return
+            end
             if dragMode == "panCamera"
                 app.flushCameraReconciliation();
             end
@@ -5189,6 +5266,234 @@ classdef ProjectionViewerApp < handle
                 app.PreviewTimer = tic;
             end
             app.NeedsDragFinalize = false;
+        end
+
+        function started = beginAlignmentAnchorDrag(app)
+            started = false;
+            if app.DragMode == "adjustCommonAnchor"
+                started = true;
+                return
+            end
+            if isempty(app.AlignmentMatchTable) || ...
+                    ~isvalid(app.AlignmentMatchTable) || ...
+                    isempty(app.AlignmentSelectedMatchRows)
+                app.setAlignmentStatus( ...
+                    "Select an accepted match before Shift+left anchor drag.");
+                return
+            end
+            data = app.AlignmentMatchTable.Data;
+            row = app.AlignmentSelectedMatchRows(1);
+            if ~istable(data) || row < 1 || row > height(data) || ...
+                    ~data.Enabled(row) || ...
+                    ismember(string(data.State(row)), ["disabled", "deleted"])
+                app.setAlignmentStatus( ...
+                    "Shift+left anchor drag requires an enabled accepted match.");
+                return
+            end
+            pointerPoint = app.currentPointerProjectionPlanePoint();
+            if any(~isfinite(pointerPoint))
+                app.setAlignmentStatus( ...
+                    "The anchor cursor does not intersect the projection plane.");
+                return
+            end
+
+            try
+                pair = app.pairFromKey(data.Pair(row));
+                matches = app.alignmentAcceptedSolveMatches();
+                options = app.currentAlignmentOptions();
+                state = ProjectionAlignmentCommonAnchor.prepare( ...
+                    app.Scene, matches, pair, data.MatchIndex(row), ...
+                    app.currentProjectionPlane(), options);
+                state.PointerOffset = state.StartingCentroid - pointerPoint;
+                state.LastTarget = state.StartingCentroid;
+                state.HasMoved = false;
+                app.AlignmentAnchorDragState = state;
+                app.AlignmentAnchorDragCancelled = false;
+                app.DragMode = "adjustCommonAnchor";
+                app.LastPointerLocation = app.UIFigure.CurrentPoint;
+                app.refreshPointerMotionCallback();
+                app.setAlignmentStatus(sprintf( ...
+                    "Dragging common anchor %d for %s; release to refine, Esc to cancel.", ...
+                    state.MatchIndex, char(data.Pair(row))));
+                started = true;
+            catch ME
+                app.AlignmentAnchorDragState = struct();
+                app.setAlignmentStatus( ...
+                    "Cannot start common-anchor drag: " + string(ME.message));
+            end
+        end
+
+        function updateAlignmentAnchorDrag(app)
+            state = app.AlignmentAnchorDragState;
+            if isempty(fieldnames(state))
+                return
+            end
+            pointerPoint = app.currentPointerProjectionPlanePoint();
+            if any(~isfinite(pointerPoint))
+                return
+            end
+            target = pointerPoint + state.PointerOffset;
+            try
+                preview = ProjectionAlignmentCommonAnchor.preview(state, target);
+                previousScene = app.Scene;
+                app.Scene = preview.Scene;
+                layerIndices = app.changedProjectionLayerIndices( ...
+                    previousScene, app.Scene);
+                if ~isempty(layerIndices)
+                    app.refreshProjectionLayers( ...
+                        layerIndices, app.DragMeshSampling, false);
+                end
+                state.LastTarget = target;
+                state.HasMoved = state.HasMoved || ...
+                    norm(target - state.StartingCentroid) > 1e-9;
+                app.AlignmentAnchorDragState = state;
+                app.refreshSelectedAlignmentMatchOverlay();
+                drawnow limitrate
+            catch ME
+                app.cancelAlignmentAnchorDrag( ...
+                    "Common-anchor preview failed: " + string(ME.message));
+            end
+        end
+
+        function finishAlignmentAnchorDrag(app)
+            state = app.AlignmentAnchorDragState;
+            if isempty(fieldnames(state)) || app.AlignmentAnchorDragCancelled
+                app.AlignmentAnchorDragState = struct();
+                app.AlignmentAnchorDragCancelled = false;
+                return
+            end
+            if ~state.HasMoved
+                app.restoreAlignmentAnchorStartScene(state);
+                app.AlignmentAnchorDragState = struct();
+                app.setAlignmentStatus("Common-anchor adjustment unchanged.");
+                return
+            end
+
+            app.setAlignmentStatus("Refining common-anchor adjustment...");
+            adjustmentStored = false;
+            try
+                result = ProjectionAlignmentCommonAnchor.refine( ...
+                    state, state.LastTarget);
+                if ~result.Success
+                    app.restoreAlignmentAnchorStartScene(state);
+                    app.setAlignmentStatus( ...
+                        "Common-anchor adjustment rejected: " + ...
+                        result.FailureReason);
+                else
+                    previousScene = app.Scene;
+                    app.Scene = result.Scene;
+                    layerIndices = app.changedProjectionLayerIndices( ...
+                        previousScene, app.Scene);
+                    app.refreshProjectionLayers( ...
+                        layerIndices, app.DefaultMeshSampling, false);
+                    app.updateControlsFromSelectedLayer();
+                    record = app.commonAnchorAdjustmentRecord(result);
+                    app.AlignmentSession.storeManualAdjustment(record);
+                    adjustmentStored = true;
+                    app.setAlignmentActionEnabled(false);
+                    app.setAlignmentSolveEnabled( ...
+                        app.hasSolvableFilteredMatches());
+                    app.refreshAlignmentOverlays(true);
+                    app.refreshSelectedAlignmentMatchOverlay();
+                    app.setAlignmentStatus(sprintf( ...
+                        "Common anchor applied to both images; target error %.4g m, ray RMS %.4g -> %.4g. Solve diagnostics are stale.", ...
+                        result.TargetErrorMeters, result.ForwardRayRmsBefore, ...
+                        result.ForwardRayRmsAfter));
+                end
+            catch ME
+                if adjustmentStored
+                    app.AlignmentSession.popManualAdjustment();
+                end
+                app.restoreAlignmentAnchorStartScene(state);
+                app.setAlignmentStatus( ...
+                    "Common-anchor adjustment failed: " + string(ME.message));
+            end
+            app.AlignmentAnchorDragState = struct();
+            app.AlignmentAnchorDragCancelled = false;
+        end
+
+        function cancelAlignmentAnchorDrag(app, statusText)
+            state = app.AlignmentAnchorDragState;
+            app.AlignmentAnchorDragCancelled = true;
+            app.DragMode = "none";
+            app.LastPointerLocation = [NaN NaN];
+            app.refreshPointerMotionCallback();
+            if ~isempty(fieldnames(state))
+                app.restoreAlignmentAnchorStartScene(state);
+            end
+            app.AlignmentAnchorDragState = struct();
+            app.setAlignmentStatus(statusText);
+        end
+
+        function restoreAlignmentAnchorStartScene(app, state)
+            previousScene = app.Scene;
+            app.Scene = state.StartScene;
+            layerIndices = app.changedProjectionLayerIndices( ...
+                previousScene, app.Scene);
+            if ~isempty(layerIndices)
+                app.refreshProjectionLayers( ...
+                    layerIndices, app.DefaultMeshSampling, false);
+            end
+            app.updateControlsFromSelectedLayer();
+            app.refreshAlignmentOverlays(true);
+            app.refreshSelectedAlignmentMatchOverlay();
+        end
+
+        function matches = alignmentAcceptedSolveMatches(app)
+            matches = app.AlignmentFilteredMatchResult;
+            if app.hasScalarStruct(app.AlignmentWorkingImages) && ...
+                    isfield(app.AlignmentWorkingImages, "Schedule")
+                enabledPairs = app.enabledAlignmentPairs( ...
+                    app.AlignmentWorkingImages.Schedule);
+                matches = app.applyEnabledPairsToMatchResult( ...
+                    matches, enabledPairs);
+            end
+            matches = app.applyCuratedMaskToMatchResult(matches);
+        end
+
+        function record = commonAnchorAdjustmentRecord(~, result)
+            startOpk = reshape( ...
+                [result.StartingCorrections.ViewVectorAngularOffsetsDegrees], ...
+                3, []).';
+            finalOpk = reshape( ...
+                [result.Corrections.ViewVectorAngularOffsetsDegrees], 3, []).';
+            record = struct(Kind="commonAnchor", ...
+                MatchIndex=result.MatchIndex, Pair=result.Pair, ...
+                LayerIds=result.LayerIds, ...
+                TargetPlanePoint=result.TargetPlanePoint, ...
+                AchievedPlanePoint=result.Centroid, ...
+                TargetErrorMeters=result.TargetErrorMeters, ...
+                StartingProjectionPoints=result.StartingProjectionPoints, ...
+                AchievedProjectionPoints=result.ProjectionPoints, ...
+                EndpointWeights=result.EndpointWeights, ...
+                StartingDisparity=result.StartingDisparity, ...
+                AchievedDisparity=result.Disparity, ...
+                StartingCorrections=result.StartingCorrections, ...
+                FinalCorrections=result.Corrections, ...
+                OpkChangesDegrees=finalOpk - startOpk, ...
+                CommonDeltaDegrees=result.CommonDeltaDegrees, ...
+                AdjustedCommonModes=result.AdjustedCommonModes, ...
+                Jacobian=result.Jacobian, ...
+                JacobianReciprocalCondition= ...
+                    result.JacobianReciprocalCondition, ...
+                JacobianSingularValues=result.JacobianSingularValues, ...
+                BoundsDegrees=result.CommonBoundsDegrees, ...
+                BoundHitMask=result.BoundHitMask, ...
+                ForwardRayRmsBefore=result.ForwardRayRmsBefore, ...
+                ForwardRayRmsAfter=result.ForwardRayRmsAfter);
+        end
+
+        function refreshSelectedAlignmentMatchOverlay(app)
+            if isempty(app.AlignmentSelectedMatchRows) || ...
+                    isempty(app.AlignmentMatchTable) || ...
+                    ~isvalid(app.AlignmentMatchTable)
+                return
+            end
+            data = app.AlignmentMatchTable.Data;
+            row = app.AlignmentSelectedMatchRows(1);
+            if istable(data) && row >= 1 && row <= height(data)
+                app.drawSelectedAlignmentMatchOverlay(data(row, :));
+            end
         end
 
         function updateDrawnAlignmentRoi(app)
@@ -6140,6 +6445,8 @@ classdef ProjectionViewerApp < handle
             app.DragMode = "none";
             app.LastPointerLocation = [NaN NaN];
             app.NeedsDragFinalize = false;
+            app.AlignmentAnchorDragState = struct();
+            app.AlignmentAnchorDragCancelled = false;
             app.IsPreviewCameraReady = false;
             app.clearAlignmentComputationState();
             app.clearAlignmentWorkingImageCache();
@@ -6780,6 +7087,7 @@ classdef ProjectionViewerApp < handle
                 "Left drag: pan the camera"
                 "Control + left drag: translate the selected layer"
                 "Alt/Option + left drag: adjust selected-layer omega and phi"
+                "Shift + left drag: move the selected accepted stereo anchor with both images"
                 "Double left click: show the next layer and hide the others"
                 ""
                 "Keyboard"

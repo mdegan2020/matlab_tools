@@ -88,5 +88,30 @@ classdef ProjectionAlignmentSessionTest < matlab.unittest.TestCase
             testCase.verifyEqual(session.WorkingImageCacheHits, 2);
             testCase.verifyEqual(session.Stage, "setup");
         end
+
+        function testManualAdjustmentIsSessionOnlyUndoableState(testCase)
+            session = ProjectionAlignmentSession();
+            session.storeMatches(struct(Id="request"), struct(Id="working"), ...
+                struct(Id="raw"), struct(Id="preRoi"), ...
+                struct(Id="filtered"), {true(3, 1)}, {false(3, 1)});
+            session.storeSolve(struct(Status="solved"));
+            session.storeManualAdjustment(struct( ...
+                Kind="commonAnchor", StartingCorrections=struct(Id="start"), ...
+                FinalCorrections=struct(Id="final")));
+
+            state = session.diagnostics();
+            [record, found] = session.popManualAdjustment();
+            undoneState = session.diagnostics();
+
+            testCase.verifyEqual(state.Stage, "curated");
+            testCase.verifyTrue(state.Stale.Solve);
+            testCase.verifyEqual(state.ManualAdjustmentCount, 1);
+            testCase.verifyEqual(state.ManualAdjustmentUndoCount, 1);
+            testCase.verifyTrue(found);
+            testCase.verifyEqual(record.Kind, "commonAnchor");
+            testCase.verifyEqual(undoneState.ManualAdjustmentCount, 1);
+            testCase.verifyEqual(undoneState.ManualAdjustmentUndoCount, 0);
+            testCase.verifyTrue(session.ManualAdjustmentHistory{1}.Undone);
+        end
     end
 end

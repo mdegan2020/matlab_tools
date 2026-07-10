@@ -85,9 +85,53 @@ classdef ProjectionAlignmentOpkSolver
             revertedScene = ProjectionAlignmentOpkSolver.setCorrections( ...
                 scene, result.Diagnostics.StartingCorrections);
         end
+
+        function diagnostics = compareScenes(sceneBefore, sceneAfter, ...
+                matchResult, options)
+            %compareScenes Evaluate all physical metrics between two scenes.
+            if nargin < 4
+                options = struct();
+            end
+            sceneBefore = ProjectionLayerIdentity.ensureScene(sceneBefore);
+            sceneAfter = ProjectionLayerIdentity.ensureScene(sceneAfter);
+            ProjectionAlignmentOpkSolver.validateScene(sceneBefore);
+            ProjectionAlignmentOpkSolver.validateScene(sceneAfter);
+            ProjectionAlignmentOpkSolver.validateMatchResult(matchResult);
+            options = ProjectionAlignmentOptions.validate(options);
+            layerIndices = ProjectionAlignmentOpkSolver.matchLayerIndices( ...
+                matchResult);
+            startCorrections = ProjectionAlignmentOpkSolver.layerCorrections( ...
+                sceneBefore, layerIndices);
+            parameterModel = ProjectionAlignmentParameterModel.create( ...
+                sceneBefore, matchResult, layerIndices, startCorrections, ...
+                options);
+            xBefore = parameterModel.X0;
+            xAfter = ProjectionAlignmentOpkSolver.parametersForScene( ...
+                parameterModel, sceneAfter);
+            commonPlane = sceneBefore.layers(layerIndices(1)).CurrentProjectionPlane;
+            diagnostics = ProjectionAlignmentOpkSolver.comparisonDiagnostics( ...
+                xBefore, xAfter, sceneBefore, matchResult, parameterModel, ...
+                commonPlane, options);
+        end
     end
 
     methods (Static, Access = private)
+        function x = parametersForScene(parameterModel, scene)
+            x = parameterModel.X0;
+            for k = 1:parameterModel.LayerCount
+                layerIndex = ProjectionLayerIdentity.indexForId( ...
+                    scene, parameterModel.LayerIds(k));
+                correction = ProjectionAlignmentOpkSolver.layerCorrections( ...
+                    scene, layerIndex);
+                x(parameterModel.OpkIndices(k, :)) = ...
+                    correction.ViewVectorAngularOffsetsDegrees;
+                if any(parameterModel.OffsetIndices(k, :) > 0)
+                    x(parameterModel.OffsetIndices(k, :)) = ...
+                        correction.ProjectionOffsetMeters;
+                end
+            end
+        end
+
         function runtimeControl = validateRuntimeControl(runtimeControl)
             if isempty(runtimeControl)
                 runtimeControl = struct();

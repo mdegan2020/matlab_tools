@@ -10,6 +10,8 @@ classdef ProjectionAlignmentSession < handle
         CuratedMatchMask cell = {}
         DeletedMatchMask cell = {}
         CurationUndoStack cell = {}
+        ManualAdjustmentUndoStack cell = {}
+        ManualAdjustmentHistory cell = {}
         SelectedMatchRows double = []
         Result struct = struct()
         RoiBounds double = []
@@ -40,6 +42,8 @@ classdef ProjectionAlignmentSession < handle
             session.CuratedMatchMask = {};
             session.DeletedMatchMask = {};
             session.CurationUndoStack = {};
+            session.ManualAdjustmentUndoStack = {};
+            session.ManualAdjustmentHistory = {};
             session.SelectedMatchRows = [];
             session.Result = struct();
             session.CancelRequested = false;
@@ -160,6 +164,38 @@ classdef ProjectionAlignmentSession < handle
             session.ApplyRevision = uint64(0);
         end
 
+        function storeManualAdjustment(session, record)
+            if ~isstruct(record) || ~isscalar(record)
+                error("ProjectionAlignmentSession:invalidManualAdjustment", ...
+                    "Manual adjustment record must be a scalar struct.");
+            end
+            session.invalidateSolve();
+            record.Revision = double(session.Revision);
+            record.Undone = false;
+            session.ManualAdjustmentUndoStack{end + 1} = record;
+            session.ManualAdjustmentHistory{end + 1} = record;
+        end
+
+        function [record, found] = popManualAdjustment(session)
+            found = ~isempty(session.ManualAdjustmentUndoStack);
+            record = struct();
+            if ~found
+                return
+            end
+            record = session.ManualAdjustmentUndoStack{end};
+            session.ManualAdjustmentUndoStack(end) = [];
+            for k = numel(session.ManualAdjustmentHistory):-1:1
+                candidate = session.ManualAdjustmentHistory{k};
+                if isfield(candidate, "Revision") && ...
+                        candidate.Revision == record.Revision
+                    candidate.Undone = true;
+                    session.ManualAdjustmentHistory{k} = candidate;
+                    break
+                end
+            end
+            session.invalidateSolve();
+        end
+
         function markPreviewed(session)
             session.bumpRevision();
             session.Stage = "previewed";
@@ -214,6 +250,10 @@ classdef ProjectionAlignmentSession < handle
                 Solve=session.SolveRevision == 0, ...
                 Preview=session.PreviewRevision == 0, ...
                 Apply=session.ApplyRevision == 0);
+            state.ManualAdjustmentCount = ...
+                numel(session.ManualAdjustmentHistory);
+            state.ManualAdjustmentUndoCount = ...
+                numel(session.ManualAdjustmentUndoStack);
         end
     end
 
