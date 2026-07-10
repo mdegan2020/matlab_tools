@@ -370,9 +370,11 @@ projection-plane angles or change apparent scale on the first edit.
 
 Large layers may use `ProjectionPreviewPyramid` to create display-only pyramid
 levels and tiled preview surfaces. Tile selection uses the current camera view
-and chooses an appropriate decimation level for the visible footprint. This is
-strictly an app responsiveness feature: backend jobs keep the original layer
-`Image` data and do not consume preview pyramid levels.
+and chooses an appropriate decimation level for the visible footprint. Cached
+tile footprints and camera bounds use render-origin-relative coordinates;
+absolute world coordinates must not be compared directly with the graphics
+camera. This is strictly an app responsiveness feature: backend jobs keep the
+original layer `Image` data and do not consume preview pyramid levels.
 
 ### Headless Readback
 

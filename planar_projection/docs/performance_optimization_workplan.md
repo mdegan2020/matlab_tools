@@ -35,6 +35,11 @@ surface footprint by translating camera position and target together, then fits
 the view angle without the former `0.05`-degree floor. It preserves camera
 direction and distance and fixes blank/offscreen and tiny-footprint launch
 states without changing scene geometry, display LOD policy, or backend data.
+A follow-up correction fixes a Pack 3 coordinate-frame regression: cached tile
+visibility footprints now use render-origin-relative coordinates, matching the
+graphics surfaces and camera. Previously, large nonzero real-world origins
+could make every candidate appear offscreen during the first reconciliation,
+leaving only hidden pooled surfaces and a blank viewport.
 Backend Performance Pack 0 now compiles reusable per-job mesh/interpolation
 plans and resolves GPU capability once. Backend Performance Pack 1 makes
 full-source inverse-warp radiometry the backend default while retaining the old

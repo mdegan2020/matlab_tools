@@ -1,5 +1,5 @@
 classdef ProjectionPreviewTileGeometry
-    %ProjectionPreviewTileGeometry Cache display-tile world footprints.
+    %ProjectionPreviewTileGeometry Cache display-tile render-space footprints.
     %
     % The returned structs contain only derived numeric geometry and tile
     % bounds. They are runtime-only viewer data and are safe to discard.
@@ -21,7 +21,8 @@ classdef ProjectionPreviewTileGeometry
 
             levelCount = numel(pyramid.Levels);
             levels = repmat(struct(Tiles=ProjectionPreviewPyramid.emptyTiles(), ...
-                WorldCorners=zeros(3, 4, 0), SampledWorldPoints=zeros(3, 0)), ...
+                RenderCorners=zeros(3, 4, 0), ...
+                SampledRenderPoints=zeros(3, 0)), ...
                 1, levelCount);
             for levelIndex = 1:levelCount
                 tiles = ProjectionPreviewPyramid.tileBounds( ...
@@ -34,17 +35,17 @@ classdef ProjectionPreviewTileGeometry
                     RowIndices=rowIndices, ColumnIndices=columnIndices);
                 mesh = meshBuilderFcn(sampledLayer, plane, renderOrigin);
                 levels(levelIndex).Tiles = tiles;
-                levels(levelIndex).WorldCorners = ...
-                    ProjectionPreviewTileGeometry.tileWorldCorners(mesh, tiles);
-                levels(levelIndex).SampledWorldPoints = ...
-                    reshape(mesh.WorldPoints, 3, []);
+                levels(levelIndex).RenderCorners = ...
+                    ProjectionPreviewTileGeometry.tileRenderCorners(mesh, tiles);
+                levels(levelIndex).SampledRenderPoints = ...
+                    reshape(mesh.RenderPoints, 3, []);
             end
 
             cache = struct();
             cache.ImageSize = double(pyramid.ImageSize);
             cache.TileSize = double(tileSize);
             cache.Levels = levels;
-            cache.LayerWorldPoints = levels(1).SampledWorldPoints;
+            cache.LayerRenderPoints = levels(1).SampledRenderPoints;
             cache.MeshBuildCount = levelCount;
         end
 
@@ -52,7 +53,7 @@ classdef ProjectionPreviewTileGeometry
                 cache, levelIndex, cameraContext)
             %visibleMask Vectorize screen-space tile overlap testing.
             level = cache.Levels(levelIndex);
-            corners = level.WorldCorners;
+            corners = level.RenderCorners;
             tileCount = size(corners, 3);
             if tileCount == 0
                 visibleMask = false(1, 0);
@@ -90,7 +91,7 @@ classdef ProjectionPreviewTileGeometry
         function [projectedWidthPixels, projectedHeightPixels] = ...
                 projectedExtentPixels(cache, cameraContext)
             %projectedExtentPixels Project cached layer extent to the viewport.
-            points = cache.LayerWorldPoints;
+            points = cache.LayerRenderPoints;
             projectedWidth = max(cameraContext.RightVector(:).' * points) - ...
                 min(cameraContext.RightVector(:).' * points);
             projectedHeight = max(cameraContext.UpVector(:).' * points) - ...
@@ -112,7 +113,7 @@ classdef ProjectionPreviewTileGeometry
             columnIndices = unique(columnLimits(:).', "sorted");
         end
 
-        function corners = tileWorldCorners(mesh, tiles)
+        function corners = tileRenderCorners(mesh, tiles)
             tileCount = numel(tiles);
             corners = zeros(3, 4, tileCount);
             for tileIndex = 1:tileCount
@@ -121,10 +122,10 @@ classdef ProjectionPreviewTileGeometry
                 [~, columnLocations] = ismember( ...
                     tiles(tileIndex).SourceColumnLimits, mesh.ColumnIndices);
                 corners(:, :, tileIndex) = [ ...
-                    mesh.WorldPoints(:, rowLocations(1), columnLocations(1)), ...
-                    mesh.WorldPoints(:, rowLocations(1), columnLocations(2)), ...
-                    mesh.WorldPoints(:, rowLocations(2), columnLocations(2)), ...
-                    mesh.WorldPoints(:, rowLocations(2), columnLocations(1))];
+                    mesh.RenderPoints(:, rowLocations(1), columnLocations(1)), ...
+                    mesh.RenderPoints(:, rowLocations(1), columnLocations(2)), ...
+                    mesh.RenderPoints(:, rowLocations(2), columnLocations(2)), ...
+                    mesh.RenderPoints(:, rowLocations(2), columnLocations(1))];
             end
         end
     end

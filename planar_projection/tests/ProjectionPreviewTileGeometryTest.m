@@ -22,8 +22,8 @@ classdef ProjectionPreviewTileGeometryTest < matlab.unittest.TestCase
 
             testCase.verifyEqual(cache.MeshBuildCount, numel(pyramid.Levels));
             testCase.verifyEqual(numel(cache.Levels(1).Tiles), 9);
-            testCase.verifySize(cache.Levels(1).WorldCorners, [3 4 9]);
-            testCase.verifyGreaterThan(size(cache.LayerWorldPoints, 2), 4);
+            testCase.verifySize(cache.Levels(1).RenderCorners, [3 4 9]);
+            testCase.verifyGreaterThan(size(cache.LayerRenderPoints, 2), 4);
         end
 
         function testVectorizedVisibilityMatchesScalarReference(testCase)
@@ -40,7 +40,7 @@ classdef ProjectionPreviewTileGeometryTest < matlab.unittest.TestCase
             [actualMask, diagnostics] = ...
                 ProjectionPreviewTileGeometry.visibleMask(cache, 1, context);
             expectedMask = ProjectionPreviewTileGeometryTest.scalarVisibleMask( ...
-                cache.Levels(1).WorldCorners, context);
+                cache.Levels(1).RenderCorners, context);
 
             testCase.verifyEqual(actualMask, expectedMask);
             testCase.verifyEqual(diagnostics.CandidateCount, 9);
@@ -67,6 +67,28 @@ classdef ProjectionPreviewTileGeometryTest < matlab.unittest.TestCase
             testCase.verifyGreaterThan(widthPixels, 1);
             testCase.verifyGreaterThan(heightPixels, 1);
         end
+
+        function testVisibilityHonorsNonzeroRenderOrigin(testCase)
+            scene = ProjectionPreviewTileGeometryTest.makeScene();
+            layer = scene.layers;
+            plane = layer.CurrentProjectionPlane;
+            renderOrigin = plane.P0 + 1e6 * plane.basis(:, 1) + ...
+                2e6 * plane.basis(:, 2);
+            pyramid = ProjectionPreviewPyramid.build( ...
+                layer.Image, struct(TileSize=4));
+            cache = ProjectionPreviewTileGeometry.build( ...
+                layer, pyramid, plane, renderOrigin, 4);
+            mesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                layer, plane, renderOrigin);
+            context = ProjectionPreviewTileGeometryTest.cameraContextFromPoints( ...
+                reshape(mesh.RenderPoints, 3, []), plane);
+
+            [visibleMask, diagnostics] = ...
+                ProjectionPreviewTileGeometry.visibleMask(cache, 1, context);
+
+            testCase.verifyTrue(any(visibleMask));
+            testCase.verifyGreaterThan(diagnostics.VisibleCount, 0);
+        end
     end
 
     methods (Static, Access = private)
@@ -78,7 +100,13 @@ classdef ProjectionPreviewTileGeometryTest < matlab.unittest.TestCase
         end
 
         function context = cameraContext(cache, plane)
-            points = cache.LayerWorldPoints;
+            points = cache.LayerRenderPoints;
+            context = ...
+                ProjectionPreviewTileGeometryTest.cameraContextFromPoints( ...
+                points, plane);
+        end
+
+        function context = cameraContextFromPoints(points, plane)
             center = mean(points, 2);
             rightVector = plane.basis(:, 1);
             upVector = plane.basis(:, 2);

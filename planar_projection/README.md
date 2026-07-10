@@ -250,9 +250,12 @@ LOD policy uses asymmetric promotion/demotion hysteresis and a viewport halo;
 it does not change backend inputs or serialized viewer state. The performance
 evaluation reports active and settled diagnostics separately.
 
-Tile visibility uses cached world footprints built from one shared
-tile-boundary mesh per pyramid level. Camera reconciliation projects all
-candidate footprints in one vectorized operation and skips hidden layers.
+Tile visibility uses cached tile footprints built from one shared
+tile-boundary mesh per pyramid level. The cached numeric coordinates are
+render-origin-relative, matching the graphics surfaces and camera even when
+the source geometry uses large real-world/ECEF-like coordinates. Camera
+reconciliation projects all candidate footprints in one vectorized operation
+and skips hidden layers.
 Cache keys cover the plane, OPK, projection offset, source identity/image size,
 render origin, and tile layout. `configurePreviewTiling` changes runtime display
 tile options and rebuilds only viewer data; exported backend imagery and viewer
