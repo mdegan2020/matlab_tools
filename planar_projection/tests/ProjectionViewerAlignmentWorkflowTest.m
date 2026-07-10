@@ -140,11 +140,19 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentPairTable");
             matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentMatchButton");
+            moveDownButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerMoveLayerDownButton");
             statusLabel = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentStatusLabel");
             data = pairTable.Data;
             data.Enabled(:) = false;
             pairTable.Data = data;
+
+            moveDownButton.ButtonPushedFcn(moveDownButton, struct());
+            drawnow
+
+            testCase.verifyFalse(pairTable.Data.Enabled(1));
+            testCase.verifyEqual(string(pairTable.Data.Pair(1)), "1 -> 2");
 
             matchButton.ButtonPushedFcn(matchButton, struct());
             drawnow
@@ -679,6 +687,109 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual( ...
                 diagnosticsAfterUndo.Stage.CuratedMatchCount, ...
                 diagnosticsAfterSolve.Stage.FilteredMatchCount);
+        end
+
+        function testOverlayCoordinatesRemainFixedAcrossLayerReorder(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(false);
+            referenceId = string(scene.layers(1).LayerId);
+            movingId = string(scene.layers(2).LayerId);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
+            matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchButton");
+            moveDownButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerMoveLayerDownButton");
+            referenceDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentReferenceDropDown");
+            movingDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMovingDropDown");
+            matchTable = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchTable");
+
+            detectorDropDown.Value = "sift";
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            overlayBefore = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchOverlay");
+            coordinatesBefore = ...
+                ProjectionViewerAlignmentWorkflowTest.overlayCoordinates( ...
+                overlayBefore);
+
+            moveDownButton.ButtonPushedFcn(moveDownButton, struct());
+            drawnow
+
+            overlayAfter = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchOverlay");
+            coordinatesAfter = ...
+                ProjectionViewerAlignmentWorkflowTest.overlayCoordinates( ...
+                overlayAfter);
+            stateAfter = app.exportState();
+            referenceIndex = str2double(string(referenceDropDown.Value));
+            movingIndex = str2double(string(movingDropDown.Value));
+
+            testCase.verifyEqual(coordinatesAfter, coordinatesBefore, ...
+                AbsTol=ProjectionViewerAlignmentWorkflowTest.Tol);
+            testCase.verifyEqual(string(stateAfter.Layers(1).LayerId), movingId);
+            testCase.verifyEqual(string(stateAfter.Layers(2).LayerId), referenceId);
+            testCase.verifyEqual( ...
+                string(stateAfter.Layers(referenceIndex).LayerId), referenceId);
+            testCase.verifyEqual( ...
+                string(stateAfter.Layers(movingIndex).LayerId), movingId);
+            testCase.verifyTrue(all(matchTable.Data.Pair == "1 -> 2"));
+            testCase.verifyEqual(overlayAfter.UserData(1).PairLayerIds, ...
+                [movingId referenceId]);
+        end
+
+        function testClearingRoiRestoresPreRoiMatchesWithoutRematch(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(false);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
+            roiButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentRoiButton");
+            clearRoiButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentClearRoiButton");
+            matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchButton");
+
+            detectorDropDown.Value = "sift";
+            roiButton.ButtonPushedFcn(roiButton, struct());
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            withRoi = app.alignmentDiagnostics();
+
+            clearRoiButton.ButtonPushedFcn(clearRoiButton, struct());
+            drawnow
+            cleared = app.alignmentDiagnostics();
+
+            testCase.verifyTrue(withRoi.Stage.RoiActive);
+            testCase.verifyGreaterThanOrEqual( ...
+                withRoi.Stage.PreRoiMatchCount, ...
+                withRoi.Stage.FilteredMatchCount);
+            testCase.verifyEqual(withRoi.Stage.RoiRejectedRecordCount, ...
+                withRoi.Stage.PreRoiMatchCount - ...
+                withRoi.Stage.FilteredMatchCount);
+            testCase.verifyFalse(cleared.Stage.RoiActive);
+            testCase.verifyEqual(cleared.Stage.FilteredMatchCount, ...
+                cleared.Stage.PreRoiMatchCount);
+            testCase.verifyEqual(cleared.Stage.RawMatchCount, ...
+                withRoi.Stage.RawMatchCount);
+            testCase.verifyTrue(cleared.Stage.HasWorkingImages);
         end
 
         function testAlignmentOverlaysRefreshAfterLayerNudge(testCase)

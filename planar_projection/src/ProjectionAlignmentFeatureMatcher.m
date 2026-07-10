@@ -151,6 +151,7 @@ classdef ProjectionAlignmentFeatureMatcher
                     imageData, points);
                 feature = struct();
                 feature.LayerIndex = layerImage.LayerIndex;
+                feature.LayerId = string(layerImage.LayerId);
                 feature.Detector = detector.Method;
                 feature.Count = ProjectionAlignmentFeatureMatcher.pointCount(validPoints);
                 feature.Points = validPoints;

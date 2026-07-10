@@ -1017,8 +1017,15 @@ classdef ProjectionAlignmentOpkSolver
         end
 
         function scene = setCorrections(scene, corrections)
+            scene = ProjectionLayerIdentity.ensureScene(scene);
             for k = 1:numel(corrections)
-                layerIndex = corrections(k).LayerIndex;
+                if isfield(corrections(k), "LayerId") && ...
+                        strlength(string(corrections(k).LayerId)) > 0
+                    layerIndex = ProjectionLayerIdentity.indexForId( ...
+                        scene, corrections(k).LayerId);
+                else
+                    layerIndex = corrections(k).LayerIndex;
+                end
                 scene.layers(layerIndex).ViewVectorAngularOffsetsDegrees = ...
                     corrections(k).ViewVectorAngularOffsetsDegrees(:);
             end

@@ -592,8 +592,9 @@ Implementation status:
 
 ```text
 Reliability Pack 0: complete
-Reliability Pack 1: next
-Reliability Packs 2-8: pending
+Reliability Pack 1: complete
+Reliability Pack 2: next (comparison and user-review gate)
+Reliability Packs 3-8: pending
 ```
 
 ### Reliability Pack 0: Observable records, units, and layer identity
@@ -695,6 +696,38 @@ Acceptance criteria:
 - One invalid rejected observation cannot move other overlays.
 - ROI on/off and redraw are deterministic and do not access nonexistent
   fields.
+
+Implementation note:
+
+- `ProjectionAlignmentObservationProjector` now reprojects current source
+  observations through `SampleRayFcn` when available, applies current OPK and
+  projection offset, and reports validity/status per endpoint. Normal exact-ray
+  sampling is vectorized; a scalar fallback isolates custom sampler failures.
+  An invalid/off-source observation never causes the rest of a pair to fall
+  back to stale working-image coordinates.
+- Main-view correspondence lines require two currently valid endpoints.
+  Individually valid endpoints remain available as faint rejected diagnostic
+  markers, while records with invalid reprojection remain in the table/ledger.
+  Overlay selection continues to select the corresponding table row.
+- `ProjectionAlignmentLayerResolver` refreshes numeric compatibility indices
+  from stable layer IDs throughout the active request, schedule, working
+  images, feature/match records, ledgers, solver observations, and solved
+  corrections. Reordering layers preserves the selected reference/moving
+  identities, match-table identity, solve variables, and overlay world
+  coordinates. Applying solved corrections also resolves `LayerId` first.
+- ROI filtering now uses `MovingPlaneCoordinates` and
+  `ReferencePlaneCoordinates`, retains the complete ledger, and records an
+  explicit cumulative `roi` stage/rejection reason. The app stores the
+  pre-ROI filtered result, so clearing or redrawing the projection-plane ROI
+  re-filters existing matches and invalidates the solve without rerunning
+  detection or descriptor matching. The ROI button arms a left-drag redraw in
+  the viewport; the initial central rectangle remains a useful starting
+  selection.
+- Focused validation covers independent invalid observations, exact-ray
+  projection/offset behavior, stable nested reindexing, invariant overlay
+  coordinates after layer reorder, and ROI clear/restore without rematching.
+- Pack 1 validation passes with 328 tests after
+  `close all force; clear classes; rehash; results = runTests;`.
 
 ### Reliability Pack 2: Stable alignment working images
 

@@ -414,7 +414,18 @@ Core controls:
   worst-residual highlights.
   Overlay clicks select the nearest match-table row; Delete marks selected
   rows as session-local deleted observations, and Undo restores curation from
-  a stack.
+  a stack. Overlay endpoints are reprojected independently through current
+  sampled source rays, OPK, and projection offsets; an invalid endpoint cannot
+  move a whole pair back to stale working-image coordinates. Correspondence
+  lines require two valid endpoints, while valid endpoints of rejected/invalid
+  records can still appear as faint diagnostic markers. Pure layer reordering
+  preserves overlay world positions and alignment pair identity.
+
+The ROI button creates a central projection-plane starting region and arms
+left-drag redraw in the viewport. ROI filtering uses the actual projection-plane
+match coordinates, retains rejected records and their `roi` reason in the full
+ledger, and re-filters the stored pre-ROI result on redraw or clear without
+rerunning feature detection or descriptor matching.
 
 Alignment records use stable serializable layer IDs in addition to current
 display indices, so identity survives state save/load and layer-order changes.

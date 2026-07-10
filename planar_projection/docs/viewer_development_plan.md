@@ -783,12 +783,17 @@ Implementation status:
   coplanarity filtering, an approved separate Alignment Workbench, balanced
   common/differential network solving, an `epipolarCoplanarity` loss,
   Shift+left common-anchor drag, and representative real-data validation.
-- Real-Data Reliability Pack 0 is complete. Stable layer IDs now flow through
+- Real-Data Reliability Packs 0-1 are complete. Stable layer IDs now flow through
   viewer state, alignment requests/schedules/working images, match pairs,
   solver corrections, and backend payloads. A non-destructive raw-match ledger
   records explicit stage masks/reasons and coordinate/residual units;
   `SolverObservations` is canonical while `Inliers` is a compatibility alias.
-  Reliability Pack 1 is next.
+  Current overlay reprojection uses exact sampled rays when available, reports
+  endpoint validity independently, and remains invariant to layer reorder.
+  Projection-plane ROI redraw/clear re-filters the stored pre-ROI match result
+  without rerunning feature matching. Reliability Pack 2 is next and contains
+  the explicit sparse-versus-full-source alignment-working-image comparison
+  and user-review gate.
 
 ### Auto Alignment Design Decisions
 

@@ -109,6 +109,16 @@ classdef ProjectionMeshBuilder
             VY = R * basePlane.basis(:, 2);
             plane = PlanarProjection.definePlaneFromBasis(basePlane.P0, VX, VY);
         end
+
+        function R = viewVectorRotationMatrix(layer, plane)
+            %viewVectorRotationMatrix Return the layer OPK correction rotation.
+            [R, ~] = ProjectionMeshBuilder.layerViewVectorRotation(layer, plane);
+        end
+
+        function offset = projectionOffsetMeters(layer)
+            %projectionOffsetMeters Return the current in-plane layer offset.
+            offset = ProjectionMeshBuilder.layerProjectionOffset(layer);
+        end
     end
 
     methods (Static, Access = private)

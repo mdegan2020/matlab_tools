@@ -141,6 +141,7 @@ classdef ProjectionViewerApp < handle
         AlignmentRequest struct = struct()
         AlignmentWorkingImages struct = struct()
         AlignmentRawMatchResult struct = struct()
+        AlignmentPreRoiMatchResult struct = struct()
         AlignmentFilteredMatchResult struct = struct()
         AlignmentCuratedMatchMask cell = {}
         AlignmentDeletedMatchMask cell = {}
@@ -152,6 +153,8 @@ classdef ProjectionViewerApp < handle
         AlignmentRoiBounds double = []
         AlignmentRoiHandle = []
         AlignmentRoiListeners = []
+        AlignmentRoiDrawingActive logical = false
+        AlignmentRoiStartPoint double = [NaN NaN]
         AlignmentCancelRequested logical = false
     end
 
@@ -960,10 +963,12 @@ classdef ProjectionViewerApp < handle
                 app.throwIfAlignmentCancelled();
                 filteredMatches = ProjectionAlignmentMatchFilter.filter( ...
                     matchResult, options);
+                preRoiMatches = filteredMatches;
                 filteredMatches = app.applyAlignmentRoi(filteredMatches);
                 app.AlignmentRequest = request;
                 app.AlignmentWorkingImages = workingImages;
                 app.AlignmentRawMatchResult = matchResult;
+                app.AlignmentPreRoiMatchResult = preRoiMatches;
                 app.AlignmentFilteredMatchResult = filteredMatches;
                 app.AlignmentCuratedMatchMask = ...
                     app.defaultAlignmentCuratedMatchMask(filteredMatches);
@@ -1259,6 +1264,8 @@ classdef ProjectionViewerApp < handle
             stageDiagnostics.HasSolveResult = app.hasAlignmentResult();
             stageDiagnostics.RawMatchCount = app.totalAlignmentMatchCount( ...
                 app.AlignmentRawMatchResult);
+            stageDiagnostics.PreRoiMatchCount = ...
+                app.totalAlignmentMatchCount(app.AlignmentPreRoiMatchResult);
             stageDiagnostics.FilteredMatchCount = ...
                 app.totalAlignmentMatchCount(app.AlignmentFilteredMatchResult);
             stageDiagnostics.SolvedMatchCount = ...
@@ -1268,6 +1275,22 @@ classdef ProjectionViewerApp < handle
             stageDiagnostics.CuratedMatchCount = ...
                 sum(app.curatedAlignmentMatchCounts( ...
                 app.AlignmentFilteredMatchResult));
+            stageDiagnostics.RoiActive = ~isempty(app.AlignmentRoiBounds);
+            stageDiagnostics.RoiBounds = app.AlignmentRoiBounds;
+            stageDiagnostics.RoiRejectedRecordCount = ...
+                app.alignmentLedgerRejectionCount( ...
+                app.AlignmentFilteredMatchResult, "roi");
+        end
+
+        function count = alignmentLedgerRejectionCount(app, matchResult, reason)
+            count = 0;
+            if ~app.hasMatchResult(matchResult)
+                return
+            end
+            records = ProjectionAlignmentMatchLedger.combine(matchResult);
+            for k = 1:numel(records)
+                count = count + any(records(k).RejectionReasons == reason);
+            end
         end
 
         function tf = hasScalarStruct(~, value)
@@ -1773,13 +1796,25 @@ classdef ProjectionViewerApp < handle
             for k = 1:numel(matchResult.Matches)
                 pairMatch = matchResult.Matches(k);
                 keepMask = app.pointsInsideAlignmentRoi( ...
-                    pairMatch.MovingProjectionPoints) & ...
+                    pairMatch.MovingPlaneCoordinates) & ...
                     app.pointsInsideAlignmentRoi( ...
-                    pairMatch.ReferenceProjectionPoints);
+                    pairMatch.ReferencePlaneCoordinates);
+                if isfield(pairMatch, "MatchLedger") && ...
+                        isfield(pairMatch, "MatchRecordIndices")
+                    fullKeepMask = [pairMatch.MatchLedger.Accepted].';
+                    recordIndices = pairMatch.MatchRecordIndices(:);
+                    fullKeepMask(recordIndices) = ...
+                        fullKeepMask(recordIndices) & keepMask;
+                    pairMatch.MatchLedger = ...
+                        ProjectionAlignmentMatchLedger.applyStage( ...
+                        pairMatch.MatchLedger, "roi", fullKeepMask);
+                end
                 matchResult.Matches(k) = app.subsetAlignmentPairMatch( ...
                     pairMatch, keepMask);
             end
             finalCounts = [matchResult.Matches.Count];
+            matchResult.MatchLedger = ...
+                ProjectionAlignmentMatchLedger.combine(matchResult);
             matchResult.Diagnostics.Roi = struct( ...
                 Bounds=app.AlignmentRoiBounds, ...
                 RejectedCount=sum(initialCounts - finalCounts), ...
@@ -1827,11 +1862,16 @@ classdef ProjectionViewerApp < handle
             app.AlignmentRoiBounds = app.roiBoundsFromPosition(position);
             try
                 app.drawAlignmentRoiOverlay(position);
-                app.setAlignmentStatus("ROI active.");
+                app.AlignmentRoiDrawingActive = true;
+                app.AlignmentRoiStartPoint = [NaN NaN];
+                app.refreshAlignmentRoiFiltering();
+                app.setAlignmentStatus( ...
+                    "ROI active; left-drag in the viewport to redraw it.");
             catch
                 app.AlignmentRoiHandle = [];
                 app.AlignmentRoiListeners = [];
-                app.setAlignmentStatus("ROI set to central projection area.");
+                app.AlignmentRoiDrawingActive = false;
+                app.setAlignmentStatus("Unable to draw the alignment ROI.");
             end
         end
 
@@ -1851,16 +1891,45 @@ classdef ProjectionViewerApp < handle
             end
             app.AlignmentRoiHandle = [];
             app.AlignmentRoiBounds = [];
+            app.AlignmentRoiDrawingActive = false;
+            app.AlignmentRoiStartPoint = [NaN NaN];
             if updateStatus
+                app.refreshAlignmentRoiFiltering();
                 app.setAlignmentStatus("ROI cleared.");
             end
         end
 
         function updateAlignmentRoiBounds(app)
             if app.hasValidAlignmentRoiHandle() && ...
-                    isprop(app.AlignmentRoiHandle, "Position")
-                app.AlignmentRoiBounds = app.roiBoundsFromPosition( ...
-                    app.AlignmentRoiHandle.Position);
+                    all(isfinite(app.AlignmentRoiBounds))
+                app.updateAlignmentRoiOverlay();
+            end
+        end
+
+        function refreshAlignmentRoiFiltering(app)
+            if ~app.hasMatchResult(app.AlignmentPreRoiMatchResult)
+                return
+            end
+            filteredMatches = app.applyAlignmentRoi( ...
+                app.AlignmentPreRoiMatchResult);
+            app.AlignmentFilteredMatchResult = filteredMatches;
+            app.AlignmentCuratedMatchMask = ...
+                app.defaultAlignmentCuratedMatchMask(filteredMatches);
+            app.AlignmentDeletedMatchMask = ...
+                app.defaultAlignmentDeletedMatchMask(filteredMatches);
+            app.AlignmentCurationUndoStack = {};
+            app.AlignmentSelectedMatchRows = [];
+            app.AlignmentResult = struct();
+            app.setAlignmentActionEnabled(false);
+            app.setAlignmentSolveEnabled(app.hasSolvableFilteredMatches());
+            app.updateAlignmentMatchTable(filteredMatches, []);
+            app.drawAlignmentMatchOverlays(filteredMatches);
+            if app.hasScalarStruct(app.AlignmentWorkingImages) && ...
+                    isfield(app.AlignmentWorkingImages, "Schedule")
+                schedule = app.AlignmentWorkingImages.Schedule;
+                app.updateAlignmentPairTable(schedule, ...
+                    app.enabledAlignmentPairs(schedule), ...
+                    app.AlignmentRawMatchResult, filteredMatches);
             end
         end
 
@@ -1950,17 +2019,28 @@ classdef ProjectionViewerApp < handle
         end
 
         function drawAlignmentRoiOverlay(app, position)
-            bounds = app.roiBoundsFromPosition(position);
+            app.AlignmentRoiBounds = app.roiBoundsFromPosition(position);
+            app.updateAlignmentRoiOverlay();
+        end
+
+        function updateAlignmentRoiOverlay(app)
+            bounds = app.AlignmentRoiBounds;
             planeCoordinates = [ ...
                 bounds(1), bounds(2), bounds(2), bounds(1), bounds(1); ...
                 bounds(3), bounds(3), bounds(4), bounds(4), bounds(3)];
             worldPoints = PlanarProjection.reconstruct3d( ...
                 planeCoordinates, app.currentProjectionPlane()) - ...
                 app.Scene.renderOrigin;
-            app.AlignmentRoiHandle = line(app.Axes, ...
-                worldPoints(1, :), worldPoints(2, :), worldPoints(3, :), ...
-                Color=[0 1 1], LineWidth=1.5, HitTest="off", ...
-                PickableParts="none", Tag="ProjectionViewerAlignmentRoi");
+            if app.hasValidAlignmentRoiHandle()
+                app.AlignmentRoiHandle.XData = worldPoints(1, :);
+                app.AlignmentRoiHandle.YData = worldPoints(2, :);
+                app.AlignmentRoiHandle.ZData = worldPoints(3, :);
+            else
+                app.AlignmentRoiHandle = line(app.Axes, ...
+                    worldPoints(1, :), worldPoints(2, :), worldPoints(3, :), ...
+                    Color=[0 1 1], LineWidth=1.5, HitTest="off", ...
+                    PickableParts="none", Tag="ProjectionViewerAlignmentRoi");
+            end
             app.raiseCrosshairOverlay();
         end
 
@@ -2063,6 +2143,7 @@ classdef ProjectionViewerApp < handle
             app.AlignmentRequest = struct();
             app.AlignmentWorkingImages = struct();
             app.AlignmentRawMatchResult = struct();
+            app.AlignmentPreRoiMatchResult = struct();
             app.AlignmentFilteredMatchResult = struct();
             app.AlignmentCuratedMatchMask = {};
             app.AlignmentDeletedMatchMask = {};
@@ -2243,23 +2324,36 @@ classdef ProjectionViewerApp < handle
                 pairMatch.MovingPlaneCoordinates(matchIndex, :);
             pairSubset.ReferencePlaneCoordinates = ...
                 pairMatch.ReferencePlaneCoordinates(matchIndex, :);
-            [movingProjectionPoint, referenceProjectionPoint] = ...
+            [movingProjectionPoint, referenceProjectionPoint, ...
+                movingValid, referenceValid] = ...
                 app.currentAlignmentProjectionPoints(pairSubset);
+            if ~movingValid && ~referenceValid
+                return
+            end
             plane = app.currentProjectionPlane();
-            movingWorld = PlanarProjection.reconstruct3d( ...
-                movingProjectionPoint.', plane) - ...
-                app.Scene.renderOrigin;
-            referenceWorld = PlanarProjection.reconstruct3d( ...
-                referenceProjectionPoint.', plane) - ...
-                app.Scene.renderOrigin;
-            selectedLine = line(app.Axes, ...
-                [movingWorld(1) referenceWorld(1)], ...
-                [movingWorld(2) referenceWorld(2)], ...
-                [movingWorld(3) referenceWorld(3)], ...
-                Color=[1 0 1], LineWidth=2.5, HitTest="off", ...
-                PickableParts="none", ...
-                Tag="ProjectionViewerAlignmentSelectedMatchOverlay");
-            selectedMarkers = line(app.Axes, ...
+            selectedHandles = gobjects(0);
+            if movingValid
+                movingWorld = PlanarProjection.reconstruct3d( ...
+                    movingProjectionPoint.', plane) - app.Scene.renderOrigin;
+            else
+                movingWorld = nan(3, 1);
+            end
+            if referenceValid
+                referenceWorld = PlanarProjection.reconstruct3d( ...
+                    referenceProjectionPoint.', plane) - app.Scene.renderOrigin;
+            else
+                referenceWorld = nan(3, 1);
+            end
+            if movingValid && referenceValid
+                selectedHandles(end + 1) = line(app.Axes, ...
+                    [movingWorld(1) referenceWorld(1)], ...
+                    [movingWorld(2) referenceWorld(2)], ...
+                    [movingWorld(3) referenceWorld(3)], ...
+                    Color=[1 0 1], LineWidth=2.5, HitTest="off", ...
+                    PickableParts="none", ...
+                    Tag="ProjectionViewerAlignmentSelectedMatchOverlay");
+            end
+            selectedHandles(end + 1) = line(app.Axes, ...
                 [movingWorld(1) referenceWorld(1)], ...
                 [movingWorld(2) referenceWorld(2)], ...
                 [movingWorld(3) referenceWorld(3)], ...
@@ -2267,7 +2361,7 @@ classdef ProjectionViewerApp < handle
                 MarkerEdgeColor=[1 0 1], HitTest="off", ...
                 PickableParts="none", ...
                 Tag="ProjectionViewerAlignmentSelectedMatchOverlay");
-            app.AlignmentSelectedMatchOverlay = [selectedLine selectedMarkers];
+            app.AlignmentSelectedMatchOverlay = selectedHandles;
             app.raiseCrosshairOverlay();
         end
 
@@ -2363,54 +2457,48 @@ classdef ProjectionViewerApp < handle
             end
         end
 
-        function [movingPoints, referencePoints] = ...
+        function [movingPoints, referencePoints, movingValid, referenceValid] = ...
                 currentAlignmentProjectionPoints(app, pairMatch)
-            movingPoints = pairMatch.MovingPlaneCoordinates;
-            referencePoints = pairMatch.ReferencePlaneCoordinates;
+            count = double(pairMatch.Count);
+            movingPoints = nan(count, 2);
+            referencePoints = nan(count, 2);
+            movingValid = false(count, 1);
+            referenceValid = false(count, 1);
             requiredFields = ["MovingSourceRows", "MovingSourceColumns", ...
                 "ReferenceSourceRows", "ReferenceSourceColumns"];
             if any(~isfield(pairMatch, requiredFields))
+                if isfield(pairMatch, "MovingPlaneCoordinates")
+                    movingPoints = pairMatch.MovingPlaneCoordinates;
+                    movingValid = all(isfinite(movingPoints), 2);
+                end
+                if isfield(pairMatch, "ReferencePlaneCoordinates")
+                    referencePoints = pairMatch.ReferencePlaneCoordinates;
+                    referenceValid = all(isfinite(referencePoints), 2);
+                end
                 return
             end
 
-            try
-                movingPoints = app.projectLayerSourceObservationsToCurrentPlane( ...
-                    pairMatch.Pair(1), pairMatch.MovingSourceRows, ...
-                    pairMatch.MovingSourceColumns);
-                referencePoints = ...
-                    app.projectLayerSourceObservationsToCurrentPlane( ...
-                    pairMatch.Pair(2), pairMatch.ReferenceSourceRows, ...
-                    pairMatch.ReferenceSourceColumns);
-            catch
-                movingPoints = pairMatch.MovingPlaneCoordinates;
-                referencePoints = pairMatch.ReferencePlaneCoordinates;
-            end
+            pair = ProjectionAlignmentLayerResolver.pairIndices( ...
+                app.Scene, pairMatch);
+            [movingPoints, movingValid] = ...
+                app.projectLayerSourceObservationsToCurrentPlane( ...
+                pair(1), pairMatch.MovingSourceRows, ...
+                pairMatch.MovingSourceColumns);
+            [referencePoints, referenceValid] = ...
+                app.projectLayerSourceObservationsToCurrentPlane( ...
+                pair(2), pairMatch.ReferenceSourceRows, ...
+                pairMatch.ReferenceSourceColumns);
         end
 
-        function planePoints = projectLayerSourceObservationsToCurrentPlane( ...
+        function [planePoints, validMask, status] = ...
+                projectLayerSourceObservationsToCurrentPlane( ...
                 app, layerIndex, rows, columns)
-            rows = double(rows(:));
-            columns = double(columns(:));
-            plane = app.currentProjectionPlane();
-            layer = app.Scene.layers(layerIndex);
-            layer.CurrentProjectionPlane = plane;
-            layer.MeshSampling = app.DefaultMeshSampling(layerIndex);
-            mesh = app.buildInstrumentedLayerMesh( ...
-                layerIndex, layer, plane);
-
-            worldPoints = nan(3, numel(rows));
-            for componentIndex = 1:3
-                componentGrid = squeeze(mesh.WorldPoints(componentIndex, :, :));
-                worldPoints(componentIndex, :) = interp2( ...
-                    mesh.ColumnIndices, mesh.RowIndices, componentGrid, ...
-                    columns.', rows.', "linear", NaN);
-            end
-
-            if any(~isfinite(worldPoints), "all")
-                error("ProjectionViewerApp:invalidAlignmentOverlayPoint", ...
-                    "Alignment overlay source observations must lie inside the current layer mesh.");
-            end
-            planePoints = PlanarProjection.worldToPlane(worldPoints, plane).';
+            projection = ProjectionAlignmentObservationProjector.project( ...
+                app.Scene, layerIndex, rows, columns, ...
+                app.currentProjectionPlane());
+            planePoints = projection.PlaneCoordinates;
+            validMask = projection.ValidMask;
+            status = projection.Status;
         end
 
         function refreshAlignmentOverlays(app, force)
@@ -2471,10 +2559,11 @@ classdef ProjectionViewerApp < handle
         end
 
         function records = emptyAlignmentOverlayRecords(~)
-            records = struct("Pair", {}, "PairKey", {}, "MatchIndex", {}, ...
+            records = struct("Pair", {}, "PairLayerIds", {}, "PairKey", {}, ...
+                "MatchIndex", {}, ...
                 "State", {}, "MovingProjectionPoint", {}, ...
-                "ReferenceProjectionPoint", {}, "ResidualAfter", {}, ...
-                "IsWorst", {});
+                "ReferenceProjectionPoint", {}, "MovingValid", {}, ...
+                "ReferenceValid", {}, "ResidualAfter", {}, "IsWorst", {});
         end
 
         function records = alignmentOverlayRecordsFromMatchResult(app, ...
@@ -2496,7 +2585,7 @@ classdef ProjectionViewerApp < handle
             for pairIndex = 1:numel(matchResult.Matches)
                 pairMatch = matchResult.Matches(pairIndex);
                 recordIndices = app.matchRecordIndices(pairMatch);
-                [movingPoints, referencePoints] = ...
+                [movingPoints, referencePoints, movingValid, referenceValid] = ...
                     app.currentAlignmentProjectionPoints(pairMatch);
                 for matchIndex = 1:pairMatch.Count
                     cursor = cursor + 1;
@@ -2504,13 +2593,20 @@ classdef ProjectionViewerApp < handle
                     residualRecord = app.residualRecordForMatch( ...
                         result, pairMatch.Pair, recordIndex);
                     record = app.defaultAlignmentOverlayRecord();
-                    record.Pair = pairMatch.Pair;
-                    record.PairKey = app.pairKey(pairMatch.Pair);
+                    record.Pair = ProjectionAlignmentLayerResolver.pairIndices( ...
+                        app.Scene, pairMatch);
+                    record.PairLayerIds = app.pairLayerIdsForMatch(pairMatch);
+                    record.PairKey = app.pairKey(record.Pair);
                     record.MatchIndex = recordIndex;
                     record.State = state;
                     record.MovingProjectionPoint = movingPoints(matchIndex, :);
                     record.ReferenceProjectionPoint = ...
                         referencePoints(matchIndex, :);
+                    record.MovingValid = movingValid(matchIndex);
+                    record.ReferenceValid = referenceValid(matchIndex);
+                    if ~(record.MovingValid && record.ReferenceValid)
+                        record.State = "invalidProjection";
+                    end
                     record.ResidualAfter = residualRecord.After;
                     records(cursor) = record;
                 end
@@ -2531,6 +2627,9 @@ classdef ProjectionViewerApp < handle
                 solverRecord = solverRecords(k);
                 pairMatch = struct();
                 pairMatch.Pair = solverRecord.Pair;
+                if isfield(solverRecord, "PairLayerIds")
+                    pairMatch.PairLayerIds = solverRecord.PairLayerIds;
+                end
                 pairMatch.MovingSourceRows = solverRecord.MovingSourceRow;
                 pairMatch.MovingSourceColumns = solverRecord.MovingSourceColumn;
                 pairMatch.ReferenceSourceRows = ...
@@ -2542,16 +2641,24 @@ classdef ProjectionViewerApp < handle
                 pairMatch.ReferencePlaneCoordinates = ...
                     [solverRecord.ReferenceProjectionX ...
                     solverRecord.ReferenceProjectionY];
-                [movingPoints, referencePoints] = ...
+                pairMatch.Count = 1;
+                [movingPoints, referencePoints, movingValid, referenceValid] = ...
                     app.currentAlignmentProjectionPoints(pairMatch);
 
                 record = app.defaultAlignmentOverlayRecord();
-                record.Pair = solverRecord.Pair;
-                record.PairKey = string(solverRecord.PairKey);
+                record.Pair = ProjectionAlignmentLayerResolver.pairIndices( ...
+                    app.Scene, pairMatch);
+                record.PairLayerIds = app.pairLayerIdsForMatch(pairMatch);
+                record.PairKey = app.pairKey(record.Pair);
                 record.MatchIndex = solverRecord.MatchIndex;
                 record.State = "accepted";
                 record.MovingProjectionPoint = movingPoints(1, :);
                 record.ReferenceProjectionPoint = referencePoints(1, :);
+                record.MovingValid = movingValid(1);
+                record.ReferenceValid = referenceValid(1);
+                if ~(record.MovingValid && record.ReferenceValid)
+                    record.State = "invalidProjection";
+                end
                 record.ResidualAfter = solverRecord.ResidualAfter;
                 records(k) = record;
             end
@@ -2575,6 +2682,7 @@ classdef ProjectionViewerApp < handle
                     cursor = cursor + 1;
                     record = app.defaultAlignmentOverlayRecord();
                     record.Pair = pairMatch.Pair;
+                    record.PairLayerIds = app.pairLayerIdsForMatch(pairMatch);
                     record.PairKey = app.pairKey(pairMatch.Pair);
                     record.MatchIndex = matchIndex;
                     record.State = "accepted";
@@ -2582,16 +2690,35 @@ classdef ProjectionViewerApp < handle
                         pairMatch.MovingProjectionPoints(matchIndex, :);
                     record.ReferenceProjectionPoint = ...
                         pairMatch.ReferenceProjectionPoints(matchIndex, :);
+                    record.MovingValid = all(isfinite( ...
+                        record.MovingProjectionPoint));
+                    record.ReferenceValid = all(isfinite( ...
+                        record.ReferenceProjectionPoint));
+                    if ~(record.MovingValid && record.ReferenceValid)
+                        record.State = "invalidProjection";
+                    end
                     records(cursor) = record;
                 end
             end
         end
 
         function record = defaultAlignmentOverlayRecord(~)
-            record = struct(Pair=[0 0], PairKey="", MatchIndex=0, ...
+            record = struct(Pair=[0 0], PairLayerIds=strings(1, 0), ...
+                PairKey="", MatchIndex=0, ...
                 State="accepted", MovingProjectionPoint=[NaN NaN], ...
-                ReferenceProjectionPoint=[NaN NaN], ResidualAfter=NaN, ...
-                IsWorst=false);
+                ReferenceProjectionPoint=[NaN NaN], MovingValid=false, ...
+                ReferenceValid=false, ResidualAfter=NaN, IsWorst=false);
+        end
+
+        function layerIds = pairLayerIdsForMatch(app, pairMatch)
+            if isfield(pairMatch, "PairLayerIds") && ...
+                    numel(pairMatch.PairLayerIds) == 2
+                layerIds = reshape(string(pairMatch.PairLayerIds), 1, []);
+            else
+                pair = ProjectionAlignmentLayerResolver.pairIndices( ...
+                    app.Scene, pairMatch);
+                layerIds = ProjectionLayerIdentity.idsForIndices(app.Scene, pair);
+            end
         end
 
         function keys = alignmentOverlayRecordKeys(~, records)
@@ -2684,6 +2811,10 @@ classdef ProjectionViewerApp < handle
             if isempty(records)
                 return
             end
+            records = records([records.MovingValid] & [records.ReferenceValid]);
+            if isempty(records)
+                return
+            end
 
             [lineX, lineY, lineZ] = app.alignmentOverlayLineCoordinates(records);
             handles = line(app.Axes, lineX(:), lineY(:), lineZ(:), ...
@@ -2702,20 +2833,30 @@ classdef ProjectionViewerApp < handle
 
             [movingPoints, referencePoints] = ...
                 app.alignmentOverlayWorldPoints(records);
-            movingMarkers = line(app.Axes, movingPoints(1, :), ...
-                movingPoints(2, :), movingPoints(3, :), LineStyle="none", ...
-                Marker="o", MarkerSize=4, MarkerEdgeColor=movingColor, ...
-                HitTest="on", PickableParts="visible", Tag=movingTag, ...
-                UserData=records, ButtonDownFcn=@(src, event) ...
-                app.selectAlignmentMatchFromOverlay(src, event));
-            referenceMarkers = line(app.Axes, referencePoints(1, :), ...
-                referencePoints(2, :), referencePoints(3, :), ...
-                LineStyle="none", Marker="+", MarkerSize=5, ...
-                MarkerEdgeColor=referenceColor, HitTest="on", ...
-                PickableParts="visible", Tag=referenceTag, UserData=records, ...
-                ButtonDownFcn=@(src, event) ...
-                app.selectAlignmentMatchFromOverlay(src, event));
-            handles = [movingMarkers referenceMarkers];
+            movingMask = [records.MovingValid];
+            if any(movingMask)
+                movingRecords = records(movingMask);
+                handles(end + 1) = line(app.Axes, ...
+                    movingPoints(1, movingMask), movingPoints(2, movingMask), ...
+                    movingPoints(3, movingMask), LineStyle="none", ...
+                    Marker="o", MarkerSize=4, MarkerEdgeColor=movingColor, ...
+                    HitTest="on", PickableParts="visible", Tag=movingTag, ...
+                    UserData=movingRecords, ButtonDownFcn=@(src, event) ...
+                    app.selectAlignmentMatchFromOverlay(src, event));
+            end
+            referenceMask = [records.ReferenceValid];
+            if any(referenceMask)
+                referenceRecords = records(referenceMask);
+                handles(end + 1) = line(app.Axes, ...
+                    referencePoints(1, referenceMask), ...
+                    referencePoints(2, referenceMask), ...
+                    referencePoints(3, referenceMask), ...
+                    LineStyle="none", Marker="+", MarkerSize=5, ...
+                    MarkerEdgeColor=referenceColor, HitTest="on", ...
+                    PickableParts="visible", Tag=referenceTag, ...
+                    UserData=referenceRecords, ButtonDownFcn=@(src, event) ...
+                    app.selectAlignmentMatchFromOverlay(src, event));
+            end
         end
 
         function selectAlignmentMatchFromOverlay(app, source, event)
@@ -2754,8 +2895,14 @@ classdef ProjectionViewerApp < handle
                 app.alignmentOverlayWorldPoints(records);
             distances = inf(1, numel(records));
             for k = 1:numel(records)
-                distances(k) = app.pointToSegmentDistance(clickPoint(:), ...
-                    movingPoints(:, k), referencePoints(:, k));
+                if records(k).MovingValid && records(k).ReferenceValid
+                    distances(k) = app.pointToSegmentDistance(clickPoint(:), ...
+                        movingPoints(:, k), referencePoints(:, k));
+                elseif records(k).MovingValid
+                    distances(k) = norm(clickPoint(:) - movingPoints(:, k));
+                elseif records(k).ReferenceValid
+                    distances(k) = norm(clickPoint(:) - referencePoints(:, k));
+                end
             end
             [~, recordIndex] = min(distances);
         end
@@ -4445,6 +4592,16 @@ classdef ProjectionViewerApp < handle
             end
 
             selectionType = string(app.UIFigure.SelectionType);
+            if app.AlignmentRoiDrawingActive && selectionType == "normal"
+                planePoint = app.currentPointerProjectionPlanePoint();
+                if all(isfinite(planePoint))
+                    app.AlignmentRoiStartPoint = planePoint;
+                    app.DragMode = "drawAlignmentRoi";
+                    app.LastPointerLocation = app.UIFigure.CurrentPoint;
+                    app.refreshPointerMotionCallback();
+                end
+                return
+            end
             if selectionType == "open"
                 app.cycleLayer();
                 return
@@ -4485,6 +4642,8 @@ classdef ProjectionViewerApp < handle
                     app.translateSelectedLayerByPixelDelta(pixelDelta);
                 case "adjustViewVectors"
                     app.adjustSelectedLayerViewVectorsByPixelDelta(pixelDelta);
+                case "drawAlignmentRoi"
+                    app.updateDrawnAlignmentRoi();
             end
         end
 
@@ -4496,6 +4655,12 @@ classdef ProjectionViewerApp < handle
             if dragMode == "panCamera"
                 app.flushCameraReconciliation();
             end
+            if dragMode == "drawAlignmentRoi"
+                app.AlignmentRoiDrawingActive = false;
+                app.AlignmentRoiStartPoint = [NaN NaN];
+                app.refreshAlignmentRoiFiltering();
+                app.setAlignmentStatus("ROI updated; matches re-filtered.");
+            end
             if app.NeedsDragFinalize && dragMode == "translateLayer"
                 app.flushCameraReconciliation();
                 app.refreshAlignmentOverlays();
@@ -4505,6 +4670,48 @@ classdef ProjectionViewerApp < handle
                 app.PreviewTimer = tic;
             end
             app.NeedsDragFinalize = false;
+        end
+
+        function updateDrawnAlignmentRoi(app)
+            currentPoint = app.currentPointerProjectionPlanePoint();
+            startPoint = app.AlignmentRoiStartPoint;
+            if any(~isfinite(currentPoint)) || any(~isfinite(startPoint))
+                return
+            end
+            bounds = [min(startPoint(1), currentPoint(1)), ...
+                max(startPoint(1), currentPoint(1)), ...
+                min(startPoint(2), currentPoint(2)), ...
+                max(startPoint(2), currentPoint(2))];
+            if bounds(2) - bounds(1) <= eps || bounds(4) - bounds(3) <= eps
+                return
+            end
+            app.AlignmentRoiBounds = bounds;
+            app.updateAlignmentRoiBounds();
+            drawnow limitrate
+        end
+
+        function planePoint = currentPointerProjectionPlanePoint(app)
+            planePoint = [NaN NaN];
+            currentPoint = double(app.Axes.CurrentPoint);
+            if ~isequal(size(currentPoint), [2 3]) || ...
+                    any(~isfinite(currentPoint), "all")
+                return
+            end
+            renderPlane = app.currentProjectionPlane();
+            renderPlane.P0 = renderPlane.P0 - app.Scene.renderOrigin;
+            origin = currentPoint(1, :).';
+            direction = currentPoint(2, :).' - origin;
+            denominator = renderPlane.VN.' * direction;
+            if abs(denominator) <= 1e-12
+                return
+            end
+            range = (renderPlane.VN.' * (renderPlane.P0 - origin)) / ...
+                denominator;
+            renderPoint = origin + range * direction;
+            worldPoint = renderPoint + app.Scene.renderOrigin;
+            coordinates = PlanarProjection.worldToPlane( ...
+                worldPoint, app.currentProjectionPlane());
+            planePoint = coordinates(:).';
         end
 
         function panCameraByPixelDelta(app, pixelDelta)
@@ -5501,6 +5708,9 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
+            priorScene = app.Scene;
+            [referenceLayerId, movingLayerId] = ...
+                app.currentAlignmentDropDownLayerIds(priorScene);
             swapIndices = [app.SelectedLayerIndex targetIndex];
             app.Scene.layers(swapIndices) = app.Scene.layers(fliplr(swapIndices));
             app.DefaultMeshSampling(swapIndices) = ...
@@ -5546,9 +5756,103 @@ classdef ProjectionViewerApp < handle
             app.PreviewTileDataCache.clear();
             app.PreviewSampledGeometryCache.clear();
             app.SelectedLayerIndex = targetIndex;
+            app.reindexAlignmentSessionAfterLayerReorder(priorScene);
+            app.reindexAlignmentPairTableAfterLayerReorder(priorScene);
+            app.restoreAlignmentDropDownLayerIds( ...
+                referenceLayerId, movingLayerId);
             app.refreshProjectionSurfaces(app.DefaultMeshSampling);
             app.updateLayerDropDownItems();
             app.updateControlsFromSelectedLayer();
+            app.refreshAlignmentSessionViewsAfterLayerReorder();
+        end
+
+        function [referenceLayerId, movingLayerId] = ...
+                currentAlignmentDropDownLayerIds(app, scene)
+            referenceLayerId = "";
+            movingLayerId = "";
+            if isempty(app.AlignmentReferenceDropDown) || ...
+                    ~isvalid(app.AlignmentReferenceDropDown)
+                return
+            end
+            referenceIndex = app.validAlignmentLayerValue( ...
+                app.AlignmentReferenceDropDown.Value, 1);
+            movingIndex = app.validAlignmentLayerValue( ...
+                app.AlignmentMovingDropDown.Value, numel(scene.layers));
+            referenceLayerId = string(scene.layers(referenceIndex).LayerId);
+            movingLayerId = string(scene.layers(movingIndex).LayerId);
+        end
+
+        function restoreAlignmentDropDownLayerIds(app, referenceLayerId, movingLayerId)
+            if isempty(app.AlignmentReferenceDropDown) || ...
+                    ~isvalid(app.AlignmentReferenceDropDown)
+                return
+            end
+            if strlength(referenceLayerId) > 0
+                app.AlignmentReferenceDropDown.Value = string( ...
+                    ProjectionLayerIdentity.indexForId( ...
+                    app.Scene, referenceLayerId));
+            end
+            if strlength(movingLayerId) > 0
+                app.AlignmentMovingDropDown.Value = string( ...
+                    ProjectionLayerIdentity.indexForId( ...
+                    app.Scene, movingLayerId));
+            end
+        end
+
+        function reindexAlignmentSessionAfterLayerReorder(app, priorScene)
+            propertyNames = ["AlignmentRequest", "AlignmentWorkingImages", ...
+                "AlignmentRawMatchResult", "AlignmentPreRoiMatchResult", ...
+                "AlignmentFilteredMatchResult", "AlignmentResult"];
+            for propertyName = propertyNames
+                value = app.(propertyName);
+                if isstruct(value) && ~isempty(fieldnames(value))
+                    app.(propertyName) = ProjectionAlignmentLayerResolver.reindex( ...
+                        app.Scene, value, priorScene);
+                end
+            end
+        end
+
+        function reindexAlignmentPairTableAfterLayerReorder(app, priorScene)
+            if isempty(app.AlignmentPairTable) || ...
+                    ~isvalid(app.AlignmentPairTable)
+                return
+            end
+            data = app.AlignmentPairTable.Data;
+            requiredVariables = ["Pair", "Moving", "Reference"];
+            if ~istable(data) || ~all(ismember(requiredVariables, ...
+                    string(data.Properties.VariableNames)))
+                return
+            end
+            for rowIndex = 1:height(data)
+                oldPair = app.pairFromKey(data.Pair(rowIndex));
+                pairRecord = struct(Pair=oldPair, ...
+                    PairLayerIds=ProjectionLayerIdentity.idsForIndices( ...
+                    priorScene, oldPair));
+                newPair = ProjectionAlignmentLayerResolver.pairIndices( ...
+                    app.Scene, pairRecord, priorScene);
+                data.Pair(rowIndex) = app.pairKey(newPair);
+                data.Moving(rowIndex) = newPair(1);
+                data.Reference(rowIndex) = newPair(2);
+            end
+            app.AlignmentPairTable.Data = data;
+        end
+
+        function refreshAlignmentSessionViewsAfterLayerReorder(app)
+            if app.hasMatchResult(app.AlignmentFilteredMatchResult)
+                app.updateAlignmentMatchTable( ...
+                    app.AlignmentFilteredMatchResult, app.AlignmentResult);
+            end
+            if app.hasScalarStruct(app.AlignmentWorkingImages) && ...
+                    isfield(app.AlignmentWorkingImages, "Schedule")
+                schedule = app.AlignmentWorkingImages.Schedule;
+                app.updateAlignmentPairTable(schedule, ...
+                    app.enabledAlignmentPairs(schedule), ...
+                    app.AlignmentRawMatchResult, ...
+                    app.AlignmentFilteredMatchResult);
+            else
+                app.refreshAlignmentPairTable();
+            end
+            app.refreshAlignmentOverlays(true);
         end
 
         function updateControlsFromSelectedLayer(app)
