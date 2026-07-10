@@ -398,7 +398,10 @@ either mode.
 Alignment working images explicitly retain the historical sparse renderer as
 an alignment-only analysis policy. This prevents backend numerical-mode changes
 from silently changing GUI matching and safe-solve outcomes; alignment images
-never enter backend products.
+never enter backend products. Real-Data Reliability Pack 2 will explicitly
+compare this policy with a full-source inverse-warp alignment renderer before
+any alignment default changes; that experiment does not relax the backend
+separation.
 
 The readback helper is suitable for qualitative and unit-test validation. Large
 backend jobs use `ProjectionBackendTiledRenderer` through
@@ -773,9 +776,13 @@ Implementation status:
 - The remaining alignment items are follow-up quality and sensor-workflow
   decisions, not unstarted milestone gates.
 - Real-data GUI alignment hardening is tracked in
-  `docs/alignment_workflow_hardening_plan.md`. That plan covers staged
-  match/solve controls, stricter outlier filtering, plausible OPK bounds,
-  overlay clearing, and future manual match curation.
+  `docs/alignment_workflow_hardening_plan.md`. Its completed first wave covers
+  staged controls, guardrails, overlays, and manual curation. The selected
+  Real-Data Reliability Packs 0-8 cover complete match provenance, stable layer
+  identity and overlays, deterministic working images/matching, truthful 2D and
+  coplanarity filtering, an approved separate Alignment Workbench, balanced
+  common/differential network solving, an `epipolarCoplanarity` loss,
+  Shift+left common-anchor drag, and representative real-data validation.
 
 ### Auto Alignment Design Decisions
 
@@ -805,6 +812,12 @@ Implementation status:
   user sets up the scene.
 - The reference image is a scheduling/reference image, not a fixed truth anchor.
   All images, including the reference, may move within correction bounds.
+- The selected real-data hardening design makes this explicit as a balanced
+  network adjustment: a shared-frame common attitude component plus
+  image-specific differential components. Equal-confidence pair corrections
+  split the differential update halfway; covariance priors generalize that
+  split. Weak or prior-dominated common modes must be reported from Jacobian
+  observability diagnostics rather than hidden by regularization.
 - Correction bounds should be tied to image angular scale. The default hard cap
   should be less than one quarter of the full field of view, for example
   `0.25 * min(horizontalFOV, verticalFOV)`.
@@ -814,9 +827,21 @@ Implementation status:
   projection plane.
 - A second loss mode evaluates ray-to-ray closest approach between matched
   feature observations.
-- Non-planar terrain or DEM-constrained losses may be added later if ray-to-ray
-  closest approach is too noisy.
+- A planned third `epipolarCoplanarity` loss uses normalized per-observation
+  baseline/ray coplanarity and may also serve as an optional pre-solve filter.
+  It must use forward-ray validity diagnostics and handle varying pushbroom
+  origins and degenerate baselines explicitly.
+- Optimal relief-rich stereo means compatible forward rays and reduced
+  epipolar/skew error, not necessarily zero projection-plane disparity.
+- DEM/terrain-constrained losses are explicitly out of scope for the selected
+  hardening packs. They may be reconsidered later as optional absolute
+  constraints.
 - The match filtering pipeline includes a pluggable `RadialFilterFcn`.
+- A planned Shift+left common-anchor drag will move both images through a
+  two-degree-of-freedom shared boresight correction while preserving the
+  differential correction and relief-supported disparity. One anchor will not
+  adjust common kappa; final OPK corrections are serialized while manual-drag
+  history remains session-only.
 
 ### Auto Alignment Milestones
 
