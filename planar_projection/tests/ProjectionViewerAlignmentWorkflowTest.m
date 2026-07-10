@@ -49,6 +49,9 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             coplanarityDropDown = ...
                 ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentCoplanarityDropDown");
+            referenceMotionCheckBox = ...
+                ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentReferenceMotionCheckBox");
             roiButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentRoiButton");
             clearRoiButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -95,12 +98,18 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(detectorDropDown.Value), "auto");
             testCase.verifyEqual(string(lossDropDown.Value), "projectionPlane2D");
             testCase.verifyEqual(string(coplanarityDropDown.Value), "none");
+            testCase.verifyTrue(referenceMotionCheckBox.Value);
+            testCase.verifyTrue(ismember("epipolarCoplanarity", ...
+                string(lossDropDown.ItemsData)));
+            testCase.verifyTrue(ismember("robustMad", ...
+                string(coplanarityDropDown.ItemsData)));
             testCase.verifyEqual(diagnostics.Request.FilterGeometricMethod, ...
                 "similarity");
             testCase.verifyEqual( ...
                 diagnostics.Request.FilterCoplanarityMethod, "none");
             testCase.verifyEqual( ...
                 diagnostics.Request.FilterNativeDisplacementMethod, "none");
+            testCase.verifyTrue(diagnostics.Request.AllowReferenceMotion);
             testCase.verifyEqual(diagnostics.Request.KappaBoundDegrees, 15);
             testCase.verifyEqual( ...
                 diagnostics.Request.SafeMinSolverObservationsPerPair, 3);
@@ -628,7 +637,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 string(dataAfterSecondSolve.State(disabledMask)), "disabled");
         end
 
-        function testMatchLimitedSolveFailsAndDisablesActions(testCase)
+        function testLowCountSolveWarnsAndKeepsActionsEnabled(testCase)
             capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
             testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
             testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
@@ -677,13 +686,13 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             diagnosticsAfterSolve = app.alignmentDiagnostics();
             solvedData = matchTable.Data;
             testCase.verifyTrue(contains(string(statusLabel.Text), ...
-                "match-limited"));
+                "Low-confidence"));
             testCase.verifyTrue(diagnosticsAfterSolve.Stage.HasSolveResult);
             testCase.verifyEqual(diagnosticsAfterSolve.Stage.SolvedMatchCount, 3);
             testCase.verifyEqual(nnz(solvedData.Enabled), 3);
-            testCase.verifyEqual(string(previewButton.Enable), "off");
-            testCase.verifyEqual(string(applyButton.Enable), "off");
-            testCase.verifyEqual(string(revertButton.Enable), "off");
+            testCase.verifyEqual(string(previewButton.Enable), "on");
+            testCase.verifyEqual(string(applyButton.Enable), "on");
+            testCase.verifyEqual(string(revertButton.Enable), "on");
         end
 
         function testOverlayClickDeleteAndUndoCuration(testCase)
@@ -981,6 +990,47 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(matchButton.Enable), "on");
             testCase.verifyEqual(string(solveButton.Enable), "on");
             testCase.verifyEqual(string(previewButton.Enable), "on");
+        end
+
+        function testEpipolarLossRunsThroughControls(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene(true);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
+            lossDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentLossDropDown");
+            matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchButton");
+            solveButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentSolveButton");
+            matchTable = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchTable");
+            statusLabel = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentStatusLabel");
+
+            detectorDropDown.Value = "sift";
+            lossDropDown.Value = "epipolarCoplanarity";
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            ProjectionViewerAlignmentWorkflowTest.filterMatches();
+            solveButton.ButtonPushedFcn(solveButton, struct());
+            drawnow
+
+            diagnostics = app.alignmentDiagnostics();
+            testCase.verifyEqual(diagnostics.Request.LossMode, ...
+                "epipolarCoplanarity");
+            testCase.verifyTrue(all(isfinite( ...
+                matchTable.Data.ResidualAfter)));
+            testCase.verifyFalse(startsWith(string(statusLabel.Text), ...
+                "Alignment failed:"));
         end
     end
 

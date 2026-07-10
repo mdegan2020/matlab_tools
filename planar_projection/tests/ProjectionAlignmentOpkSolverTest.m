@@ -152,6 +152,16 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
                 result.SolvedCorrections(2).ViewVectorAngularOffsetsDegrees, ...
                 scene.layers(2).ViewVectorAngularOffsetsDegrees.', AbsTol=1e-7);
             testCase.verifyLessThan(result.Diagnostics.RmsAfter, 1e-8);
+            modes = result.Diagnostics.Observability.Solution.Modes;
+            names = string({modes.Name});
+            statuses = string({modes.Status});
+            commonMask = startsWith(names, "common.");
+            testCase.verifyTrue(any(commonMask));
+            testCase.verifyTrue(all(ismember(statuses(commonMask), ...
+                ["priorDominated", "partiallyObserved"])));
+            testCase.verifyEqual( ...
+                result.Diagnostics.AttitudeModel.CommonDeltaDegrees, ...
+                zeros(1, 3), AbsTol=1e-7);
         end
 
         function testApplyPreviewAndRevertCorrections(testCase)
@@ -277,6 +287,123 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(result.Residuals.After)));
         end
 
+        function testEpipolarLossReportsNormalizedDiagnostics(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makeStereoBaselineScene();
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+            options = ProjectionAlignmentOpkSolverTest.looseOptions();
+            options.LossMode = "epipolarCoplanarity";
+
+            result = ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, options);
+
+            testCase.verifyTrue(result.Convergence.Success);
+            testCase.verifyEqual(result.Residuals.LossMode, ...
+                "epipolarCoplanarity");
+            testCase.verifyEqual(result.Residuals.Unit, "normalizedAngular");
+            testCase.verifyNumElements(result.Residuals.After, ...
+                matchResult.Matches.Count);
+            testCase.verifyTrue(isfield(result.Diagnostics.Comparison, ...
+                "ForwardRay3D"));
+            coplanarity = result.Diagnostics.Comparison. ...
+                EpipolarCoplanarity;
+            testCase.verifyEqual(coplanarity.Unit, "normalizedAngular");
+            testCase.verifyNumElements(coplanarity.PerPair, 1);
+            testCase.verifyTrue(all(isfinite( ...
+                coplanarity.PerPair.RobustWeightsAfter)));
+            testCase.verifyFalse(any( ...
+                coplanarity.PerPair.DegenerateAfter));
+        end
+
+        function testEqualPriorsSplitRelativeCorrection(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
+            result = ProjectionAlignmentOpkSolver.solve(scene, ...
+                ProjectionAlignmentOpkSolverTest.makeMatchResult(), ...
+                ProjectionAlignmentOpkSolverTest.looseOptions());
+            start = reshape([result.Diagnostics.StartingCorrections. ...
+                ViewVectorAngularOffsetsDegrees], 3, []).';
+            solved = reshape([result.SolvedCorrections. ...
+                ViewVectorAngularOffsetsDegrees], 3, []).';
+            omegaDelta = solved(:, 1) - start(:, 1);
+
+            testCase.verifyEqual(abs(omegaDelta(1)), abs(omegaDelta(2)), ...
+                RelTol=0.05);
+            testCase.verifyLessThan(abs( ...
+                result.Diagnostics.AttitudeModel.CommonDeltaDegrees(1)), 1e-6);
+        end
+
+        function testUnequalPriorsMoveLessTrustedLayerFarther(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
+            scene = ProjectionLayerIdentity.ensureScene(scene);
+            options = ProjectionAlignmentOpkSolverTest.looseOptions();
+            options.Regularization.OverallWeight = 1;
+            options.PointingPriors = struct( ...
+                LayerIds=[scene.layers.LayerId], ...
+                SigmaDegrees=[10 1 1; 1 1 1]);
+
+            result = ProjectionAlignmentOpkSolver.solve(scene, ...
+                ProjectionAlignmentOpkSolverTest.makeMatchResult(), options);
+            start = reshape([result.Diagnostics.StartingCorrections. ...
+                ViewVectorAngularOffsetsDegrees], 3, []).';
+            solved = reshape([result.SolvedCorrections. ...
+                ViewVectorAngularOffsetsDegrees], 3, []).';
+            omegaDelta = abs(solved(:, 1) - start(:, 1));
+
+            testCase.verifyGreaterThan(omegaDelta(1), 20 * omegaDelta(2));
+            testCase.verifyEqual( ...
+                result.Diagnostics.AttitudeModel.PointingSigmaDegrees(:, 1), ...
+                [10; 1], AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
+        end
+
+        function testReferenceMotionAndMovableAxesAreHonored(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
+            scene.layers(1).ViewVectorAngularOffsetsDegrees(2) = 0.004;
+            scene.layers(2).ViewVectorAngularOffsetsDegrees(2) = -0.004;
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+            matchResult.Schedule = struct(LayerIndices=[1 2], ...
+                ReferenceLayerIndex=2, Strategy="twoImage");
+            options = ProjectionAlignmentOpkSolverTest.looseOptions();
+            options.MovableParameters = struct(Parameters="omega", ...
+                AllowReferenceMotion=false);
+
+            result = ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, options);
+
+            testCase.verifyEqual( ...
+                result.SolvedCorrections(2).ViewVectorAngularOffsetsDegrees, ...
+                scene.layers(2).ViewVectorAngularOffsetsDegrees.', ...
+                AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
+            testCase.verifyEqual( ...
+                result.SolvedCorrections(1).ViewVectorAngularOffsetsDegrees(2:3), ...
+                scene.layers(1).ViewVectorAngularOffsetsDegrees(2:3).', ...
+                AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
+            modeStatuses = string({result.Diagnostics.Observability. ...
+                Solution.Modes.Status});
+            testCase.verifyTrue(any(modeStatuses == "fixed"));
+        end
+
+        function testProjectionOffsetParameterIsAppliedAndOtherAxisFixed(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makeBaseTwoLayerScene();
+            scene.layers(1).ProjectionOffsetMeters = [1; 0.5];
+            scene.layers(2).ProjectionOffsetMeters = [-1; 0.5];
+            options = ProjectionAlignmentOpkSolverTest.looseOptions();
+            options.MovableParameters = struct( ...
+                Parameters="projectionOffsetX");
+            options.Bounds.ProjectionOffsetMeters = [5 5];
+
+            result = ProjectionAlignmentOpkSolver.solve(scene, ...
+                ProjectionAlignmentOpkSolverTest.makeMatchResult(), options);
+            solvedOffsets = reshape( ...
+                [result.SolvedCorrections.ProjectionOffsetMeters], 2, []).';
+
+            testCase.verifyLessThan(abs(diff(solvedOffsets(:, 1))), 5e-4);
+            testCase.verifyEqual(solvedOffsets(:, 2), [0.5; 0.5], ...
+                AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
+            applied = ProjectionAlignmentOpkSolver.applyCorrections(scene, result);
+            testCase.verifyEqual( ...
+                applied.layers(1).ProjectionOffsetMeters(:).', ...
+                solvedOffsets(1, :), AbsTol=ProjectionAlignmentOpkSolverTest.Tol);
+        end
+
         function testInsufficientMatchesError(testCase)
             scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
             matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
@@ -309,6 +436,25 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
             scene = ProjectionAlignmentOpkSolverTest.makeBaseTwoLayerScene();
             scene.layers(1).ViewVectorAngularOffsetsDegrees = [0.004; 0.003; 0];
             scene.layers(2).ViewVectorAngularOffsetsDegrees = [0.004; 0.003; 0];
+        end
+
+        function scene = makeStereoBaselineScene()
+            scene = ProjectionAlignmentOpkSolverTest.makeBaseTwoLayerScene();
+            scene.layers(1).SourceGeometry.SampleRayFcn = @(rows, columns) ...
+                ProjectionAlignmentOpkSolverTest.raysToPlaneTargets( ...
+                [-5; 0; 50], rows, columns);
+            scene.layers(2).SourceGeometry.SampleRayFcn = @(rows, columns) ...
+                ProjectionAlignmentOpkSolverTest.raysToPlaneTargets( ...
+                [5; 0; 50], rows, columns);
+            scene.layers(1).ViewVectorAngularOffsetsDegrees = [0; 0.01; 0];
+            scene.layers(2).ViewVectorAngularOffsetsDegrees = [0; -0.01; 0];
+        end
+
+        function [origins, vectors] = raysToPlaneTargets(origin, rows, columns)
+            count = numel(rows);
+            origins = repmat(origin, 1, count);
+            targets = [columns(:).'; rows(:).'; zeros(1, count)];
+            vectors = targets - origins;
         end
 
         function scene = makeMultiLayerPerturbedScene()

@@ -405,9 +405,11 @@ Core controls:
   Filter is a distinct action that applies geometric, optional coplanarity, and
   ROI filtering. Solve reuses the stored filtered matches and reports residual/OPK
   summaries in the status text, including warnings when corrections hit OPK
-  bounds. GUI solves are marked failed, with Preview/Apply/Revert disabled, if
-  they are match-limited, bound-limited, or residual-limited by the safe default
-  policy. Solver diagnostics also include max residuals, worst residual match
+  bounds. Fewer than three observations in any enabled pair is a hard failure;
+  three through nine is a visible low-confidence warning but remains
+  previewable; ten is preferred. Bound hits and insufficient forward-ray 3D
+  residual improvement are hard failures with Preview/Apply/Revert disabled.
+  Solver diagnostics also include max residuals, worst residual match
   references, per-pair residual summaries, and table-ready match records for
   follow-up review workflows. The match table can sort residuals, highlight a
   selected correspondence, and disable individual observations before solving
@@ -436,6 +438,24 @@ states and raw/filtered/solved counts. The solver also accepts a runtime-only
 cancellation callback, so the GUI Cancel action is checked during optimizer
 iterations; opaque MATLAB detector calls remain cancellable only between API
 stages.
+
+The Pack 6 solver uses an explicit common-plus-differential attitude model.
+Both images move by default; the Workbench `Move reference` toggle provides an
+intentional fixed-reference control. Equal pointing priors split relative
+correction evenly, while stable layer-ID `PointingPriors.SigmaDegrees` move a
+less trusted image farther. The result reports the common and per-layer
+differential correction, prior precision, active/fixed parameter contract,
+per-layer/offset/shared-scale bounds, and start/solution observability SVD.
+Common modes that stereo data cannot determine are labeled `priorDominated`
+rather than presented as data-observed.
+
+`epipolarCoplanarity` is available as a third solver loss in the Workbench and
+serialized requests. It uses baseline-normalized angular/Sampson ray
+residuals, with per-match degeneracy status and robust weights. Every solver
+loss also reports projection-plane 2D, forward-ray 3D, and coplanarity
+comparisons. The safe-solve percentage threshold always uses forward-ray 3D
+diagnostics so GUI and backend decisions do not change meaning with the
+selected optimizer loss.
 
 The ROI button creates a central projection-plane starting region and arms
 left-drag redraw in the viewport. ROI filtering uses the actual projection-plane
@@ -558,9 +578,10 @@ Manual auto-alignment validation loop:
 app = runSyntheticAlignmentPrototype("test_data/10.tif");
 ```
 
-In the viewer, start with the fast preset and `projectionPlane2D`, inspect the
-pair table, match overlays, and RMS summary, then switch to the quality preset
-or `rayToRay3D` when the fast solve looks plausible. Use the ROI button when
+In the viewer, open the Alignment Workbench, start with the fast preset and
+`projectionPlane2D`, then run Match and Filter separately. Inspect the pair
+table and overlays before Solve; compare `rayToRay3D` or
+`epipolarCoplanarity` when appropriate. Use the ROI button when
 background features dominate the overlap, uncheck weak pair rows before rerun,
 preview the solved OPK corrections, apply or revert them, and save the viewer
 state from the context menu. Common failure modes are too few filtered or
@@ -643,10 +664,10 @@ bilinear sampling then reads every registered band from full `layer.Image`.
 `DisplayTexture`, preview pyramids, display tiles, and alignment working images
 are never backend inputs. The former
 `"sparseIntensityScatteredInterpolant"` mode remains available only as an
-explicit backend compatibility reference. The alignment working-image renderer
-also requests its historical sparse mode explicitly so backend Pack 1 does not
-change GUI match/solve behavior; alignment working images remain alignment-only
-and never enter backend rendering. Run `backend_inverse_warp_evaluation` to
+explicit backend compatibility reference. Alignment working images use their
+separately selected full-source inverse-warp mode, remain bounded
+alignment-only products, and never enter backend rendering. Run
+`backend_inverse_warp_evaluation` to
 quantify the backend modes on a deterministic fixture.
 
 From an interactive app session:
@@ -663,8 +684,10 @@ result = ProjectionBackendProcessor.run("backend_job.json");
 ```
 
 Alignment can also run headlessly before rendering. The alignment request selects
-analysis layers and bands; solved pointing corrections are applied to the scene
-and therefore to all bands during backend rendering:
+analysis layers and bands. The reusable runner applies the same safe-solve
+policy as the GUI before mutating the scene; unsafe proposals remain in
+diagnostics, render the unchanged full-source scene, and report
+`alignmentRejected`. Safe solved pointing corrections apply to all bands:
 
 ```matlab
 job.Alignment = struct( ...

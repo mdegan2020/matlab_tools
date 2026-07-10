@@ -30,7 +30,7 @@ classdef ProjectionAlignmentSafeSolvePolicyTest < matlab.unittest.TestCase
                 ProjectionAlignmentSafeSolvePolicy.isActionable(result));
         end
 
-        function testMatchLimitedSolveFailsPolicy(testCase)
+        function testThreeToNineMatchesWarnButRemainActionable(testCase)
             result = ProjectionAlignmentSafeSolvePolicyTest.makeSolvedResult( ...
                 3, false, 10, 1);
             matchResult = ProjectionAlignmentSafeSolvePolicyTest.makeMatchResult(3);
@@ -38,16 +38,34 @@ classdef ProjectionAlignmentSafeSolvePolicyTest < matlab.unittest.TestCase
             result = ProjectionAlignmentSafeSolvePolicy.apply( ...
                 result, matchResult, ProjectionAlignmentOptions.defaults());
 
-            testCase.verifyEqual(result.Status, "failed");
-            testCase.verifyFalse(result.Convergence.Success);
+            testCase.verifyEqual(result.Status, "solved");
+            testCase.verifyTrue(result.Convergence.Success);
             testCase.verifyEqual( ...
                 result.Diagnostics.SafeSolvePolicy.MinMatchCount, 3, ...
                 AbsTol=ProjectionAlignmentSafeSolvePolicyTest.Tol);
+            testCase.verifyEqual( ...
+                result.Diagnostics.SafeSolvePolicy.Status, "warning");
             testCase.verifyTrue(any(contains(result.Warnings, ...
-                "match-limited")));
-            testCase.verifyFalse( ...
+                "Low-confidence")));
+            testCase.verifyTrue( ...
                 ProjectionAlignmentSafeSolvePolicy.isActionable(result));
             testCase.verifyNotEmpty(result.SolvedCorrections);
+        end
+
+        function testFewerThanThreeMatchesFailsPolicy(testCase)
+            result = ProjectionAlignmentSafeSolvePolicyTest.makeSolvedResult( ...
+                2, false, 10, 1);
+            matchResult = ProjectionAlignmentSafeSolvePolicyTest.makeMatchResult(2);
+
+            result = ProjectionAlignmentSafeSolvePolicy.apply( ...
+                result, matchResult, ProjectionAlignmentOptions.defaults());
+
+            testCase.verifyEqual(result.Status, "failed");
+            testCase.verifyFalse(result.Convergence.Success);
+            testCase.verifyTrue(any(contains(result.Warnings, ...
+                "hard minimum")));
+            testCase.verifyFalse( ...
+                ProjectionAlignmentSafeSolvePolicy.isActionable(result));
         end
 
         function testBoundHitFailsPolicy(testCase)
@@ -83,22 +101,22 @@ classdef ProjectionAlignmentSafeSolvePolicyTest < matlab.unittest.TestCase
                 "residual-limited")));
         end
 
-        function testRayToRayPolicyUsesSelectedLossResiduals(testCase)
+        function testPolicyUsesForwardRayDiagnosticsForEveryLoss(testCase)
             result = ProjectionAlignmentSafeSolvePolicyTest.makeSolvedResult( ...
-                12, false, 4, 3.9);
-            result.Residuals.LossMode = "rayToRay3D";
-            result.Residuals.Unit = "rayMeters";
+                12, false, 4, 0.1);
             result.Diagnostics.Comparison = struct( ...
-                ProjectionPlaneRmsBefore=4, ProjectionPlaneRmsAfter=0.1);
+                ForwardRay3D=struct(RmsBefore=4, RmsAfter=3.9));
             matchResult = ProjectionAlignmentSafeSolvePolicyTest.makeMatchResult(12);
 
             result = ProjectionAlignmentSafeSolvePolicy.apply( ...
                 result, matchResult, ProjectionAlignmentOptions.defaults());
 
             testCase.verifyEqual(result.Status, "failed");
-            testCase.verifyEqual(result.Residuals.LossMode, "rayToRay3D");
             testCase.verifyEqual(result.Diagnostics.SafeSolvePolicy.RmsAfter, ...
                 3.9, AbsTol=ProjectionAlignmentSafeSolvePolicyTest.Tol);
+            testCase.verifyEqual( ...
+                result.Diagnostics.SafeSolvePolicy.ResidualMetric, ...
+                "forwardRay3D");
             testCase.verifyTrue(any(contains(result.Warnings, ...
                 "residual-limited")));
         end

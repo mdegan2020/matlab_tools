@@ -398,13 +398,13 @@ Implementation note:
   pair, failure on OPK bound hits, and a default ten percent residual
   improvement threshold. Unsafe solves keep result diagnostics and table
   residuals visible, but are marked `failed` and leave Preview, Apply, and
-  Revert disabled. Residual policy checks use the active solver loss residuals,
-  including ray-3D residuals when `rayToRay3D` is selected.
-- The current implementation treats the preferred ten-observation threshold as
-  a failure. Reliability Pack 6 must correct that behavior so exactly three
-  through nine observations produce a low-confidence warning, not an automatic
-  failure. The selected common physical policy will also evaluate forward-ray
-  3D diagnostics across all solver loss choices.
+  Revert disabled.
+- Reliability Pack 6 corrected the first-wave policy: exactly three through
+  nine observations now produce a low-confidence warning and remain
+  actionable. Fewer than three, any configured parameter bound hit, or
+  insufficient percentage improvement in the common forward-ray 3D metric is
+  a hard failure. The active optimizer loss no longer changes the physical
+  safety decision.
 
 ## First Hardening Wave Status
 
@@ -1124,6 +1124,64 @@ Acceptance criteria:
   flag.
 - The backend cannot apply a solution that the GUI would mark unsafe.
 
+#### Pack 6 implementation result
+
+- `ProjectionAlignmentParameterModel` is the pure source of solver variables,
+  active/fixed masks, starts, exact bounds, stable layer IDs, pointing-prior
+  covariance, optional projection offsets, optional shared scale, and
+  human-readable parameter labels. The numerical optimizer retains bounded
+  per-layer coordinates, while diagnostics expose their invertible
+  precision-weighted common-plus-differential decomposition. This keeps
+  per-layer bounds exact without hiding the selected physical model.
+- Both images move by default. Equal pointing sigmas produce the expected half
+  split of a relative correction. `PointingPriors` accepts a default OPK sigma
+  and stable `LayerIds`/`SigmaDegrees` overrides; with a meaningful prior
+  weight, the less trusted image moves farther. `AllowReferenceMotion=false`
+  fixes the scheduled reference exactly as a non-default control. The
+  Workbench exposes that choice as `Move reference`; calibrated unequal
+  covariance presets remain deferred until representative data exist.
+- `MovableParameters` is no longer descriptive-only. Excluded OPK axes and the
+  fixed reference receive zero bounds, selected projection-offset axes are
+  solved/applied while unselected axes remain fixed, and shared scale keeps its
+  configured bounds and regularization. Bound diagnostics include OPK,
+  projection-offset, and shared-scale hits.
+- `epipolarCoplanarity` is now a validated request/result loss and a Workbench
+  selection. It minimizes the same baseline-unit, Sampson-normalized angular
+  ray residual used by the Pack 4 filter. Result diagnostics retain signed
+  per-match before/after residuals, validity and degeneracy status, robust
+  weights, pair identity, and `normalizedAngular` units.
+- Every solve now stacks comparison diagnostics for projection-plane 2D,
+  forward-ray 3D, and epipolar coplanarity regardless of optimizer loss. The
+  forward-ray closest-line calculation is vectorized rather than calling
+  per-match triangulation with exception handling; the existing parallel-ray
+  regression dropped from roughly `0.36 s` to `0.03 s` in the focused local
+  run.
+- A robust-data central finite-difference Jacobian is evaluated at the start
+  and solution and transformed into common/differential coordinates. SVD
+  diagnostics report rank, singular values, condition number, per-mode
+  sensitivity/observed fraction, and `dataObserved`, `partiallyObserved`,
+  `priorDominated`, `unobservable`, or `fixed` status. An active unobservable
+  mode without prior support fails instead of being silently regularized;
+  expected weak common stereo modes are explicitly reported as
+  prior-dominated.
+- Safe policy semantics are now the approved ones: fewer than three
+  observations per enabled pair fails; three through nine warns but stays
+  actionable; ten is preferred; every bound hit fails; and percentage
+  improvement always uses post-solve forward-ray 3D RMS. The Workbench status
+  and stacked diagnostics show warnings, observed rank, weak-mode count, and
+  safety status.
+- `ProjectionAlignmentRunner` applies the same policy before mutation. Unsafe
+  backend proposals retain full diagnostics and proposed corrections but leave
+  the scene unchanged; `ProjectionBackendProcessor` reports
+  `alignmentRejected` (or `stateAppliedAlignmentRejected`) rather than
+  `aligned`. Full-source backend radiometry remains untouched.
+- Focused coverage includes equal/unequal priors, shared-bias weak common modes,
+  fixed reference, active OPK axes, projection-offset application, epipolar
+  units/degeneracy/weights, GUI loss selection, low-count warning behavior,
+  forward-ray policy invariance, and an unsafe backend bound-hit rollback.
+  Pack 6 final validation passes all 376 tests after
+  `close all force; clear all; clear classes; rehash; results = runTests;`.
+
 ### Reliability Pack 7: Shift+left common anchor drag
 
 Add an explainable manual common-mode correction to the main viewer:
@@ -1220,8 +1278,8 @@ Implement and validate one small coherent sub-pack at a time:
    matching.
 5. Reliability Pack 4: truthful 2D models and coplanarity filtering.
 6. Reliability Pack 5: complete — separate staged Alignment Workbench/session.
-7. Reliability Pack 6: balanced network solver, epipolar loss, observability,
-   and unified safety.
+7. Reliability Pack 6: complete — balanced network solver, epipolar loss,
+   observability, and unified safety.
 8. Reliability Pack 7: Shift+left common anchor drag.
 9. Reliability Pack 8: full real-data validation and operator documentation.
 

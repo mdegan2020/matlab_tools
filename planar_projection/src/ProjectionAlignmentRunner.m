@@ -35,17 +35,24 @@ classdef ProjectionAlignmentRunner
             solveTimer = tic;
             result = ProjectionAlignmentOpkSolver.solve( ...
                 scene, filteredMatches, options);
+            result = ProjectionAlignmentSafeSolvePolicy.apply( ...
+                result, filteredMatches, options);
             solveSeconds = toc(solveTimer);
 
             applyTimer = tic;
-            alignedScene = ProjectionAlignmentOpkSolver.applyCorrections( ...
-                scene, result);
+            isApplied = ProjectionAlignmentSafeSolvePolicy.isActionable(result);
+            if isApplied
+                alignedScene = ProjectionAlignmentOpkSolver.applyCorrections( ...
+                    scene, result);
+            else
+                alignedScene = scene;
+            end
             applySeconds = toc(applyTimer);
 
             result = ProjectionAlignmentRunner.addDiagnostics( ...
                 result, request, workingImages, matchResult, filteredMatches, ...
                 workingSeconds, matchingSeconds, filteringSeconds, solveSeconds, ...
-                applySeconds, toc(totalTimer));
+                applySeconds, isApplied, toc(totalTimer));
         end
     end
 
@@ -64,7 +71,8 @@ classdef ProjectionAlignmentRunner
 
         function result = addDiagnostics(result, request, workingImages, ...
                 matchResult, filteredMatches, workingSeconds, matchingSeconds, ...
-                filteringSeconds, solveSeconds, applySeconds, totalSeconds)
+                filteringSeconds, solveSeconds, applySeconds, isApplied, ...
+                totalSeconds)
             result.Timing.TotalSeconds = totalSeconds;
             result.Timing.StageSeconds.WorkingImages = workingSeconds;
             result.Timing.StageSeconds.Matching = matchingSeconds;
@@ -77,6 +85,8 @@ classdef ProjectionAlignmentRunner
                 ProjectionAlignmentRunner.workingImageDiagnostics(workingImages);
             result.Diagnostics.Matching = matchResult.Diagnostics;
             result.Diagnostics.Filtering = filteredMatches.Diagnostics;
+            result.Diagnostics.ProposedSolution = true;
+            result.Diagnostics.Applied = logical(isApplied);
             result = ProjectionAlignmentResult.validate(result);
         end
 

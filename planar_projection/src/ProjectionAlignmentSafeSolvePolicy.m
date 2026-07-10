@@ -32,17 +32,24 @@ classdef ProjectionAlignmentSafeSolvePolicy
             end
 
             reasons = strings(1, 0);
+            warnings = strings(1, 0);
             if ~isempty(diagnostics.MatchCounts) && ...
                     diagnostics.MinMatchCount < ...
-                    policy.MinPreferredObservationsPerPair
+                    policy.MinSolverObservationsPerPair
                 reasons(end + 1) = sprintf( ...
-                    "Solve match-limited: each enabled pair should have at least %d solver observations.", ...
+                    "Solve has fewer than the hard minimum of %d observations in an enabled pair.", ...
+                    policy.MinSolverObservationsPerPair);
+            elseif ~isempty(diagnostics.MatchCounts) && ...
+                    diagnostics.MinMatchCount < ...
+                    policy.MinPreferredObservationsPerPair
+                warnings(end + 1) = sprintf( ...
+                    "Low-confidence solve: each enabled pair should preferably have at least %d solver observations.", ...
                     policy.MinPreferredObservationsPerPair);
             end
 
             if policy.FailOnBoundHit && diagnostics.BoundHit
                 reasons(end + 1) = ...
-                    "Solve bound-limited: one or more OPK corrections hit configured bounds.";
+                    "Solve bound-limited: one or more parameters hit configured bounds.";
             end
 
             if ~isempty(policy.MinResidualImprovementFraction) && ...
@@ -56,7 +63,13 @@ classdef ProjectionAlignmentSafeSolvePolicy
             end
 
             if isempty(reasons)
-                diagnostics.Status = "passed";
+                if isempty(warnings)
+                    diagnostics.Status = "passed";
+                else
+                    diagnostics.Status = "warning";
+                    diagnostics.Warnings = warnings;
+                    result.Warnings = [string(result.Warnings) warnings];
+                end
             else
                 diagnostics.Status = "failed";
                 diagnostics.Reasons = reasons;
@@ -96,6 +109,7 @@ classdef ProjectionAlignmentSafeSolvePolicy
             diagnostics.Enabled = policy.Enabled;
             diagnostics.Status = "notRun";
             diagnostics.Reasons = strings(1, 0);
+            diagnostics.Warnings = strings(1, 0);
             diagnostics.MinSolverObservationsPerPair = ...
                 policy.MinSolverObservationsPerPair;
             diagnostics.MinPreferredObservationsPerPair = ...
@@ -110,6 +124,8 @@ classdef ProjectionAlignmentSafeSolvePolicy
                 ProjectionAlignmentSafeSolvePolicy.boundHit(result);
             diagnostics.RmsBefore = rmsBefore;
             diagnostics.RmsAfter = rmsAfter;
+            diagnostics.ResidualMetric = ...
+                ProjectionAlignmentSafeSolvePolicy.residualMetric(result);
             diagnostics.ResidualImprovementFraction = ...
                 ProjectionAlignmentSafeSolvePolicy.improvementFraction( ...
                 rmsBefore, rmsAfter);
@@ -154,6 +170,19 @@ classdef ProjectionAlignmentSafeSolvePolicy
         end
 
         function [rmsBefore, rmsAfter] = residualRms(result)
+            if isfield(result, "Diagnostics") && ...
+                    isfield(result.Diagnostics, "Comparison") && ...
+                    isstruct(result.Diagnostics.Comparison) && ...
+                    isfield(result.Diagnostics.Comparison, "ForwardRay3D")
+                physical = result.Diagnostics.Comparison.ForwardRay3D;
+                if isstruct(physical) && ...
+                        all(isfield(physical, ["RmsBefore", "RmsAfter"])) && ...
+                        all(isfinite([physical.RmsBefore, physical.RmsAfter]))
+                    rmsBefore = double(physical.RmsBefore);
+                    rmsAfter = double(physical.RmsAfter);
+                    return
+                end
+            end
             rmsBefore = ProjectionAlignmentSafeSolvePolicy.diagnosticRms( ...
                 result, "RmsBefore");
             rmsAfter = ProjectionAlignmentSafeSolvePolicy.diagnosticRms( ...
@@ -165,6 +194,16 @@ classdef ProjectionAlignmentSafeSolvePolicy
             if isnan(rmsAfter) && isfield(result, "Residuals")
                 rmsAfter = ProjectionAlignmentSafeSolvePolicy.rmsOrNaN( ...
                     result.Residuals.After);
+            end
+        end
+
+        function metric = residualMetric(result)
+            metric = "activeLossFallback";
+            if isfield(result, "Diagnostics") && ...
+                    isfield(result.Diagnostics, "Comparison") && ...
+                    isstruct(result.Diagnostics.Comparison) && ...
+                    isfield(result.Diagnostics.Comparison, "ForwardRay3D")
+                metric = "forwardRay3D";
             end
         end
 

@@ -28,7 +28,7 @@ classdef ProjectionBackendProcessor
 
             result = struct();
             result.Status = ProjectionBackendProcessor.resultStatus( ...
-                stateApplied, alignment.Enabled);
+                stateApplied, alignment.Enabled, alignment.Applied);
             result.Format = "ProjectionBackendResult";
             result.Version = 1;
             result.Job = job;
@@ -136,6 +136,8 @@ classdef ProjectionBackendProcessor
             job.ViewerState = ProjectionViewerState.fromScene( ...
                 job.Scene, ProjectionBackendProcessor.viewerStateForGrid(job));
             alignment.Enabled = true;
+            alignment.Applied = logical( ...
+                alignment.Result.Diagnostics.Applied);
             alignment.TimingSeconds = toc(alignmentTimer);
         end
 
@@ -148,6 +150,7 @@ classdef ProjectionBackendProcessor
         function alignment = emptyAlignment(job)
             alignment = struct();
             alignment.Enabled = false;
+            alignment.Applied = false;
             alignment.Result = [];
             alignment.WriteUpdatedViewerState = false;
             alignment.WriteDiagnostics = false;
@@ -163,8 +166,15 @@ classdef ProjectionBackendProcessor
             end
         end
 
-        function status = resultStatus(stateApplied, alignmentApplied)
-            if stateApplied && alignmentApplied
+        function status = resultStatus(stateApplied, alignmentEnabled, ...
+                alignmentApplied)
+            if alignmentEnabled && ~alignmentApplied
+                if stateApplied
+                    status = "stateAppliedAlignmentRejected";
+                else
+                    status = "alignmentRejected";
+                end
+            elseif stateApplied && alignmentApplied
                 status = "stateAppliedAligned";
             elseif alignmentApplied
                 status = "aligned";

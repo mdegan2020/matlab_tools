@@ -581,7 +581,7 @@ classdef ProjectionAlignmentMatchLedger
             if lossMode == "rayToRay3D"
                 expected = "rayMeters";
             elseif lossMode == "epipolarCoplanarity"
-                expected = "radians";
+                expected = "normalizedAngular";
             end
             residualUnit = ProjectionAlignmentMatchLedger.validateChoice( ...
                 residualUnit, expected, "residualUnit");

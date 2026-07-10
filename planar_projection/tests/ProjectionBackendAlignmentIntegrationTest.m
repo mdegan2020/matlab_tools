@@ -87,6 +87,36 @@ classdef ProjectionBackendAlignmentIntegrationTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(metadata.OutputFiles.AlignedViewerState), ...
                 string(result.OutputFiles.AlignedViewerState));
         end
+
+        function testUnsafeBackendProposalDoesNotMutateScene(testCase)
+            ProjectionBackendAlignmentIntegrationTest.assumeAlignmentAvailable( ...
+                testCase);
+            scene = ProjectionBackendAlignmentIntegrationTest.makeRgbTexturedScene();
+            startingOffsets = reshape( ...
+                [scene.layers.ViewVectorAngularOffsetsDegrees], 3, []).';
+            alignment = ProjectionBackendAlignmentIntegrationTest.alignmentOptions();
+            alignment.Request.Options.Bounds = struct( ...
+                OmegaDegrees=0, PhiDegrees=0, KappaDegrees=0);
+            job = struct(Scene=scene, Alignment=alignment, ...
+                RenderOptions=struct(OutputSize=[24 24], ...
+                Interpolation="nearest"));
+
+            result = ProjectionBackendProcessor.run(job);
+            finalOffsets = reshape( ...
+                [result.Scene.layers.ViewVectorAngularOffsetsDegrees], 3, []).';
+
+            testCase.verifyEqual(result.Status, "alignmentRejected");
+            testCase.verifyTrue(result.Alignment.Enabled);
+            testCase.verifyFalse(result.Alignment.Applied);
+            testCase.verifyEqual(result.Alignment.Result.Status, "failed");
+            testCase.verifyTrue(result.Alignment.Result.Diagnostics.AnyBoundHit);
+            testCase.verifyNotEmpty( ...
+                result.Alignment.Result.SolvedCorrections);
+            testCase.verifyEqual(finalOffsets, startingOffsets, ...
+                AbsTol=ProjectionBackendAlignmentIntegrationTest.Tol);
+            testCase.verifyFalse( ...
+                result.Alignment.Result.Diagnostics.Applied);
+        end
     end
 
     methods (Static, Access = private)
