@@ -796,6 +796,30 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.verifyGreaterThan(summary.MedianSpeedup, 0);
             testCase.verifyNotEmpty(summary.Limitations);
         end
+
+        function testRasterPreviewEvaluationExercisesBothGraphicsPaths(testCase)
+            summary = viewer_raster_preview_evaluation(struct( ...
+                ImageSize=[96 128], OutputSize=[72 96], ...
+                FigureSize=[220 180], Iterations=2, ...
+                WriteArtifacts=false));
+
+            testCase.verifyEqual(summary.Format, ...
+                "ProjectionViewerRasterPreviewEvaluation");
+            testCase.verifyEqual(summary.Surface.Memory.ObjectCount, 2);
+            testCase.verifyEqual(summary.Raster.Memory.ObjectCount, 1);
+            testCase.verifyTrue(summary.Raster.CpuComplete);
+            testCase.verifyEqual(summary.Decision, "retainOptional");
+            testCase.verifyGreaterThan( ...
+                summary.Visual.CommonValidPixelCount, 0);
+            testCase.verifyGreaterThan( ...
+                summary.Surface.Timings.Alpha.MedianSeconds, 0);
+            testCase.verifyGreaterThan( ...
+                summary.Raster.Timings.Visibility.MedianSeconds, 0);
+            testCase.verifyGreaterThan( ...
+                summary.Raster.Timings.Twist.MedianSeconds, 0);
+            testCase.verifyGreaterThan( ...
+                summary.Surface.Timings.Crosshair.MedianSeconds, 0);
+        end
     end
 
     methods (Static, Access = private)

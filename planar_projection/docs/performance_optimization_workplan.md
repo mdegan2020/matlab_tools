@@ -13,7 +13,7 @@ expected `15000 x 10000` through `30000 x 20000` source and output sizes.
 
 The audit and local measurements are complete. Performance implementation is in
 progress and was explicitly prioritized on July 10, 2026. Viewer Performance
-Packs 0-7 are complete: the app now exposes bounded runtime diagnostics and
+Packs 0-8 are complete: the app now exposes bounded runtime diagnostics and
 the repeatable evaluation harness exercises alpha, crosshair, twist, pan,
 slow/fast/reversing LOD-boundary zoom, WASD, and OPK scenarios. Crosshair motion
 is demand-activated and no longer restacks overlay lines during steady pointer
@@ -28,7 +28,9 @@ and OPK/alignment refreshes are limited to affected layers. Viewer Performance
 Pack 6 adds coalesced/exact alpha rendering and global display-only surface and
 texture budgets. Alignment UI and preview level storage are now lazy, file-backed
 fine tiles can be read by region, and single-band tiled previews use scalar
-graphics data. Viewer Performance Pack 8 is next.
+graphics data. The CPU raster-preview prototype is retained as an optional
+diagnostic; the optimized surface renderer remains the production default.
+Backend Performance Pack 0 is next.
 
 Use the pack order in this document and commit and push each coherent, validated
 pack separately.
@@ -1139,6 +1141,41 @@ Viewer Performance Pack 7: Load heavy preview UI lazily
 ```
 
 ### Viewer Performance Pack 8: Raster Preview Prototype And Decision
+
+Status: complete on July 10, 2026.
+
+`ProjectionViewportGrid` now builds a pure orthographic viewport grid and
+intersects it with projection planes without consulting graphics objects.
+`ProjectionRasterPreviewRenderer` compiles viewport-sized normalized RGB layer
+rasters on the CPU, then reuses them for numeric alpha, visibility, layer-order,
+and alpha/anaglyph compositing. Hidden layers are compiled too, so visibility
+changes do not require a new inverse map. The app exposes this diagnostic path
+through `compileRasterPreview` and `renderRasterPreview`; neither method changes
+the displayed surface viewer or serialized scene state.
+
+`scripts/viewer_raster_preview_evaluation.m` compares the actual surface viewer
+against a one-opaque-image raster figure. It times alpha, visibility, twist,
+and crosshair interactions, estimates retained numeric data, captures the
+surface frame, and measures raster differences against both that capture and an
+exact readback on the same pure viewport output grid. Deterministic stride-1
+affine tests agree with exact readback to below `2e-4` maximum absolute error.
+
+On the local two-layer `480 x 640` fixture with a `300 x 400` raster, the raster
+path used one imagery object and about `4.35 MiB` of plan/composite data versus
+two transparent surfaces and about `7.09 MiB`. Median surface/raster timings
+were about `3.17/4.10 ms` for alpha, `19.64/2.16 ms` for visibility,
+`3.00/91.58 ms` for twist, and `24.75/1.76 ms` for the crosshair micro-path.
+Initial raster compilation was about `93.5 ms`. Raster/exact normalized MAE was
+about `0.0241` with p95 `0.0554`; actual-surface/raster MAE was about `0.0527`
+with p95 `0.1506` on the intentionally stride-16 evaluation mesh.
+
+Decision: retain the raster implementation as an optional diagnostic and
+architecture prototype, but keep differential tiled surfaces as the production
+default. Visibility and opaque-overlay repaint improve, but camera-dependent
+CPU inverse-map compilation is roughly thirty times slower in this fixture and
+the interpolation appearance is measurably different. The full rationale and
+reconsideration criteria are recorded in
+`docs/viewer_performance_pack_8_raster_preview_decision.md`.
 
 Deliverables:
 

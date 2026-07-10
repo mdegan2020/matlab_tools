@@ -283,6 +283,17 @@ grayscale/RGB fallback. The prepared-tile LRU caches whichever representation
 was selected. Backend export remains unchanged and contains the full source
 imagery rather than preview data or file-read tiles.
 
+An optional CPU raster-preview diagnostic is available through
+`app.compileRasterPreview(options)` and `app.renderRasterPreview(options)`.
+It uses a pure orthographic viewport grid, compiles one viewport-sized raster
+per layer, and numerically composites those layers into one opaque RGB image.
+It does not replace the production surface renderer and is never a backend
+input. Local Pack 8 measurements found fast visibility and crosshair behavior
+but much slower camera/twist recompilation, so differential tiled surfaces
+remain the default. See
+`docs/viewer_performance_pack_8_raster_preview_decision.md` and reproduce the
+comparison with `viewer_raster_preview_evaluation`.
+
 ## Projection Viewer Prototype
 
 The interactive prototype is programmatic MATLAB app code, not an `.mlapp` file. From MATLAB:

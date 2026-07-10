@@ -386,6 +386,27 @@ classdef ProjectionViewerApp < handle
             app.flushCameraReconciliation();
         end
 
+        function plan = compileRasterPreview(app, options)
+            %compileRasterPreview Build an optional CPU raster-preview plan.
+            if nargin < 2
+                options = struct();
+            end
+            options = app.rasterPreviewOptions(options);
+            plan = ProjectionRasterPreviewRenderer.compile( ...
+                app.Scene, app.exportCameraState(), options);
+        end
+
+        function result = renderRasterPreview(app, options)
+            %renderRasterPreview Render an optional diagnostic raster preview.
+            if nargin < 2
+                options = struct();
+            end
+            plan = app.compileRasterPreview(options);
+            result = ProjectionRasterPreviewRenderer.composite( ...
+                plan, app.Scene.layers);
+            result.Plan = plan;
+        end
+
         function options = configurePreviewTiling(app, overrides)
             %configurePreviewTiling Set runtime-only display tiling options.
             if nargin < 2
@@ -5312,6 +5333,21 @@ classdef ProjectionViewerApp < handle
                     "%s must be a logical scalar.", name);
             end
             value = logical(value);
+        end
+
+        function options = rasterPreviewOptions(app, options)
+            if isempty(options)
+                options = struct();
+            end
+            if ~isstruct(options) || ~isscalar(options)
+                error("ProjectionViewerApp:invalidRasterPreviewOptions", ...
+                    "Raster preview options must be a scalar struct.");
+            end
+            if ~isfield(options, "OutputSize") || isempty(options.OutputSize)
+                axesPosition = app.Axes.InnerPosition;
+                options.OutputSize = max(1, round( ...
+                    [axesPosition(4), axesPosition(3)]));
+            end
         end
 
         function resetView(app)
