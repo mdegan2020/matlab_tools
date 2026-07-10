@@ -108,6 +108,8 @@ classdef ProjectionAlignmentModelTest < matlab.unittest.TestCase
             testCase.verifyEqual(result.RequestSummary.LayerIndices, [1 2 3]);
             testCase.verifyTrue(isfield(result, "Matches"));
             testCase.verifyTrue(isfield(result, "Inliers"));
+            testCase.verifyTrue(isfield(result, "SolverObservations"));
+            testCase.verifyTrue(isfield(result, "MatchLedger"));
             testCase.verifyTrue(isfield(result, "Residuals"));
             testCase.verifyTrue(isfield(result, "SolvedCorrections"));
             testCase.verifyTrue(isfield(result, "Convergence"));
@@ -142,6 +144,10 @@ classdef ProjectionAlignmentModelTest < matlab.unittest.TestCase
             testCase.verifyEqual(decoded.Status, "solved");
             testCase.verifyEqual(decoded.Matches.Count, 2);
             testCase.verifyEqual(decoded.Inliers.Mask, [true false]);
+            testCase.verifyEqual(decoded.SolverObservations.Mask, [true false]);
+            testCase.verifyEqual(decoded.SolverObservations.Meaning, ...
+                "solverObservations");
+            testCase.verifyEqual(decoded.Residuals.Unit, "planeMeters");
             testCase.verifyEqual(decoded.Residuals.After, [0.5 0.7], ...
                 AbsTol=ProjectionAlignmentModelTest.Tol);
             testCase.verifyEqual( ...
@@ -152,6 +158,15 @@ classdef ProjectionAlignmentModelTest < matlab.unittest.TestCase
             testCase.verifyEqual(decoded.Warnings, "low match count");
             testCase.verifyEqual(decoded.Timing.TotalSeconds, 0.7, ...
                 AbsTol=ProjectionAlignmentModelTest.Tol);
+        end
+
+        function testResultRejectsResidualUnitMismatch(testCase)
+            result = ProjectionAlignmentModelTest.makeSolvedResult();
+            result.Residuals.Unit = "rayMeters";
+
+            testCase.verifyError( ...
+                @() ProjectionAlignmentResult.validate(result), ...
+                "ProjectionAlignmentResult:invalidChoice");
         end
     end
 
@@ -200,7 +215,7 @@ classdef ProjectionAlignmentModelTest < matlab.unittest.TestCase
                 Method="geometric");
             result.Residuals = struct( ...
                 LossMode="projectionPlane2D", ...
-                Unit="pixels", ...
+                Unit="planeMeters", ...
                 Before=[2 3], ...
                 After=[0.5 0.7], ...
                 PerPair=struct(Pair=[1 2], Before=[2 3], ...

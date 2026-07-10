@@ -54,6 +54,7 @@ classdef ProjectionBackendJob
             hasScene = ProjectionBackendJob.hasFieldValue(job, "Scene");
             hasScenePath = ProjectionBackendJob.hasFieldValue(job, "SceneMatPath");
             if hasScene
+                job.Scene = ProjectionLayerIdentity.ensureScene(job.Scene);
                 ProjectionBackendJob.validateScene(job.Scene);
             end
             if hasScenePath
@@ -169,6 +170,7 @@ classdef ProjectionBackendJob
             variableName = ProjectionBackendJob.validateVariableName( ...
                 variableName, "variableName");
             ProjectionBackendJob.validateScene(scene);
+            scene = ProjectionLayerIdentity.ensureScene(scene);
 
             payload = struct();
             payload.(variableName) = scene;

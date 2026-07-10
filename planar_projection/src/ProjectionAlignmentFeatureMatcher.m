@@ -3,7 +3,7 @@ classdef ProjectionAlignmentFeatureMatcher
 
     properties (Constant)
         Format = "ProjectionAlignmentFeatureMatches"
-        Version = 1
+        Version = 2
     end
 
     methods (Static)
@@ -50,6 +50,8 @@ classdef ProjectionAlignmentFeatureMatcher
             matchResult.Matcher = options.Matcher;
             matchResult.Features = features;
             matchResult.Matches = matches;
+            matchResult.MatchLedger = ...
+                ProjectionAlignmentMatchLedger.combine(matchResult);
             if isfield(workingImages, "Schedule")
                 matchResult.Schedule = workingImages.Schedule;
             end
@@ -218,12 +220,15 @@ classdef ProjectionAlignmentFeatureMatcher
         function matches = matchPairs(workingImages, features, matcher, detector)
             pairMasks = workingImages.PairOverlapMasks;
             matches = struct("Pair", {}, "Detector", {}, "Matcher", {}, ...
+                "PairLayerIds", {}, "MovingLayerId", {}, ...
+                "ReferenceLayerId", {}, "PairDirection", {}, ...
                 "MovingFeatureLocations", {}, "ReferenceFeatureLocations", {}, ...
                 "MovingPlaneCoordinates", {}, "ReferencePlaneCoordinates", {}, ...
                 "MovingSourceRows", {}, "MovingSourceColumns", {}, ...
                 "ReferenceSourceRows", {}, "ReferenceSourceColumns", {}, ...
                 "IndexPairs", {}, "MatchMetric", {}, "Scores", {}, ...
-                "FeatureCounts", {}, "Count", {}, "OverlapMask", {});
+                "FeatureCounts", {}, "Count", {}, "OverlapMask", {}, ...
+                "MatchLedger", {});
             for k = 1:numel(pairMasks)
                 pair = pairMasks(k).Pair;
                 movingFeatures = ProjectionAlignmentFeatureMatcher.featuresByLayer( ...
@@ -254,6 +259,10 @@ classdef ProjectionAlignmentFeatureMatcher
 
             pairMatch = struct();
             pairMatch.Pair = pairMask.Pair;
+            pairMatch.PairLayerIds = pairMask.PairLayerIds;
+            pairMatch.MovingLayerId = pairMask.MovingLayerId;
+            pairMatch.ReferenceLayerId = pairMask.ReferenceLayerId;
+            pairMatch.PairDirection = pairMask.PairDirection;
             pairMatch.Detector = detector.Method;
             pairMatch.Matcher = matcher.Method;
             pairMatch.MovingFeatureLocations = movingLocations;
@@ -276,6 +285,7 @@ classdef ProjectionAlignmentFeatureMatcher
             pairMatch.FeatureCounts = [movingFeatures.Count referenceFeatures.Count];
             pairMatch.Count = size(indexPairs, 1);
             pairMatch.OverlapMask = pairMask.Mask;
+            pairMatch = ProjectionAlignmentMatchLedger.ensurePair(pairMatch);
         end
 
         function [indexPairs, matchMetric] = matchDescriptors( ...

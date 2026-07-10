@@ -11,6 +11,7 @@ classdef ProjectionAlignmentRunner
                 renderOptions = struct();
             end
 
+            scene = ProjectionLayerIdentity.ensureScene(scene);
             ProjectionAlignmentRunner.validateScene(scene);
             request = ProjectionAlignmentRunner.requestWithScene(scene, request);
             options = request.Options;
@@ -82,7 +83,9 @@ classdef ProjectionAlignmentRunner
         function diagnostics = requestDiagnostics(request)
             diagnostics = struct();
             diagnostics.LayerIndices = request.LayerIndices;
+            diagnostics.LayerIds = request.LayerIds;
             diagnostics.ReferenceLayerIndex = request.ReferenceLayerIndex;
+            diagnostics.ReferenceLayerId = request.ReferenceLayerId;
             diagnostics.AnalysisBands = request.AnalysisBands;
             diagnostics.LossMode = request.Options.LossMode;
             diagnostics.SchedulingStrategy = request.Options.Scheduling.Strategy;
@@ -91,7 +94,9 @@ classdef ProjectionAlignmentRunner
         function diagnostics = workingImageDiagnostics(workingImages)
             diagnostics = struct();
             diagnostics.LayerIndices = workingImages.LayerIndices;
+            diagnostics.LayerIds = workingImages.LayerIds;
             diagnostics.ReferenceLayerIndex = workingImages.ReferenceLayerIndex;
+            diagnostics.ReferenceLayerId = workingImages.ReferenceLayerId;
             diagnostics.AnalysisBands = workingImages.AnalysisBands;
             diagnostics.OutputSize = workingImages.OutputSize;
             diagnostics.Schedule = workingImages.Schedule;

@@ -3,7 +3,7 @@ classdef ProjectionViewerState
 
     properties (Constant)
         Format = "ProjectionViewerState"
-        Version = 1
+        Version = 2
     end
 
     methods (Static)
@@ -111,8 +111,10 @@ classdef ProjectionViewerState
 
         function [scene, state] = applyToScene(scene, state)
             %applyToScene Apply viewer state to a scene without creating an app.
+            scene = ProjectionLayerIdentity.ensureScene(scene);
             ProjectionViewerState.validateScene(scene);
             state = ProjectionViewerState.validate(state, numel(scene.layers));
+            state = ProjectionViewerState.migrateLayerIds(scene, state);
             ProjectionViewerState.validateSceneCompatibility(scene, state);
 
             plane = ProjectionMeshBuilder.applyPlaneTipTilt( ...
@@ -136,6 +138,7 @@ classdef ProjectionViewerState
 
         function state = fromScene(scene, state)
             %fromScene Build or update serializable viewer state from scene layers.
+            scene = ProjectionLayerIdentity.ensureScene(scene);
             ProjectionViewerState.validateScene(scene);
             if nargin < 2 || isempty(state)
                 state = ProjectionViewerState.defaultState(scene);
@@ -172,6 +175,7 @@ classdef ProjectionViewerState
         function layerState = layerStateFromScene(layer, layerIndex)
             layerState = struct();
             layerState.Index = layerIndex;
+            layerState.LayerId = string(layer.LayerId);
             layerState.Name = string(ProjectionViewerState.fieldOrDefault( ...
                 layer, "Name", ""));
             layerState.ImagePath = string(ProjectionViewerState.fieldOrDefault( ...
@@ -219,6 +223,15 @@ classdef ProjectionViewerState
         end
 
         function validateLayerIdentity(layer, layerState, layerIndex)
+            sceneId = string(ProjectionViewerState.fieldOrDefault(layer, ...
+                "LayerId", ""));
+            stateId = string(layerState.LayerId);
+            if strlength(sceneId) > 0 && strlength(stateId) > 0 && ...
+                    sceneId ~= stateId
+                error("ProjectionViewerState:layerIdMismatch", ...
+                    "Viewer state layer %d LayerId does not match the scene layer.", ...
+                    layerIndex);
+            end
             sceneName = string(ProjectionViewerState.fieldOrDefault(layer, ...
                 "Name", ""));
             stateName = string(layerState.Name);
@@ -284,6 +297,8 @@ classdef ProjectionViewerState
                     "Layer state indices must match layer order.");
             end
 
+            layer.LayerId = ProjectionViewerState.validateOptionalLayerId( ...
+                ProjectionViewerState.fieldOrDefault(layer, "LayerId", ""));
             layer.Name = string(ProjectionViewerState.fieldOrDefault(layer, ...
                 "Name", ""));
             layer.ImagePath = string(ProjectionViewerState.fieldOrDefault(layer, ...
@@ -409,6 +424,32 @@ classdef ProjectionViewerState
                     "%s must be a finite numeric %d-vector.", name, count);
             end
             value = double(value(:).');
+        end
+
+        function state = migrateLayerIds(scene, state)
+            for layerIndex = 1:numel(scene.layers)
+                if strlength(state.Layers(layerIndex).LayerId) == 0
+                    state.Layers(layerIndex).LayerId = ...
+                        string(scene.layers(layerIndex).LayerId);
+                end
+            end
+        end
+
+        function value = validateOptionalLayerId(value)
+            if isempty(value)
+                value = "";
+                return
+            end
+            value = string(value);
+            if isscalar(value) && ismissing(value)
+                value = "";
+                return
+            end
+            if ~isscalar(value)
+                error("ProjectionViewerState:invalidLayerId", ...
+                    "LayerId must be a scalar string.");
+            end
+            value = strip(value);
         end
 
         function filePath = validateFilePath(filePath)

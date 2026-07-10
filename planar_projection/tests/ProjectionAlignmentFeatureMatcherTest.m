@@ -41,6 +41,9 @@ classdef ProjectionAlignmentFeatureMatcherTest < matlab.unittest.TestCase
 
             testCase.verifyEqual(result.Detector.Method, "sift");
             testCase.verifyEqual(pairMatch.Pair, [2 1]);
+            testCase.verifyEqual(pairMatch.PairLayerIds, ...
+                [working.LayerImages(2).LayerId, working.LayerImages(1).LayerId]);
+            testCase.verifyEqual(pairMatch.PairDirection, "movingToReference");
             testCase.verifyGreaterThan(result.Features(1).Count, 0);
             testCase.verifyGreaterThan(result.Features(2).Count, 0);
             testCase.verifyGreaterThan(pairMatch.Count, 0);
@@ -55,6 +58,8 @@ classdef ProjectionAlignmentFeatureMatcherTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(pairMatch.ReferencePlaneCoordinates), "all"));
             testCase.verifyTrue(all(isfinite(pairMatch.MovingSourceRows)));
             testCase.verifyTrue(all(isfinite(pairMatch.ReferenceSourceColumns)));
+            testCase.verifyNumElements(pairMatch.MatchLedger, pairMatch.Count);
+            testCase.verifyNumElements(result.MatchLedger, pairMatch.Count);
         end
 
         function testAutoDetectorFindsManySyntheticRedBlueFixtureMatches(testCase)

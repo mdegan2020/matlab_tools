@@ -101,7 +101,7 @@ classdef ProjectionViewerHarness
             scene.renderOrigin = basePlane.P0;
             scene.preview = preview;
             scene.renderOptions = renderOptions;
-            scene.layers = layers;
+            scene.layers = ProjectionLayerIdentity.ensureLayers(layers);
         end
 
         function options = realDataOptions(overrides)
@@ -195,7 +195,7 @@ classdef ProjectionViewerHarness
             scene.renderOrigin = projectionPlane.P0;
             scene.preview = preview;
             scene.renderOptions = renderOptions;
-            scene.layers = layers;
+            scene.layers = ProjectionLayerIdentity.ensureLayers(layers);
         end
 
         function sourceGeometry = createRealSourceGeometry(imageSize, ...

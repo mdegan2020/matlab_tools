@@ -3,7 +3,7 @@ classdef ProjectionAlignmentRequest
 
     properties (Constant)
         Format = "ProjectionAlignmentRequest"
-        Version = 1
+        Version = 2
     end
 
     methods (Static)
@@ -48,6 +48,7 @@ classdef ProjectionAlignmentRequest
             hasScenePath = ProjectionAlignmentRequest.hasFieldValue(request, ...
                 "SceneMatPath");
             if hasScene
+                request.Scene = ProjectionLayerIdentity.ensureScene(request.Scene);
                 ProjectionAlignmentRequest.validateScene(request.Scene);
             end
             if hasScenePath
@@ -63,10 +64,19 @@ classdef ProjectionAlignmentRequest
                 request.LayerIndices = 1:sceneLayerCount;
             end
 
+            request.LayerIds = ProjectionAlignmentRequest.validateLayerIds( ...
+                ProjectionAlignmentRequest.fieldOrDefault(request, ...
+                "LayerIds", strings(1, 0)), request, request.LayerIndices);
+
             request.ReferenceLayerIndex = ...
                 ProjectionAlignmentRequest.validateReferenceLayerIndex( ...
                 ProjectionAlignmentRequest.fieldOrDefault(request, ...
                 "ReferenceLayerIndex", []), request.LayerIndices);
+            request.ReferenceLayerId = ...
+                ProjectionAlignmentRequest.validateReferenceLayerId( ...
+                ProjectionAlignmentRequest.fieldOrDefault(request, ...
+                "ReferenceLayerId", ""), request.LayerIds, ...
+                request.LayerIndices, request.ReferenceLayerIndex);
             request.AnalysisBands = ProjectionAlignmentRequest.validateAnalysisBands( ...
                 ProjectionAlignmentRequest.fieldOrDefault(request, "AnalysisBands", []), ...
                 numel(request.LayerIndices));
@@ -203,6 +213,57 @@ classdef ProjectionAlignmentRequest
             if numel(bands) ~= layerCount
                 error("ProjectionAlignmentRequest:analysisBandMismatch", ...
                     "AnalysisBands must be scalar or match the number of LayerIndices.");
+            end
+        end
+
+        function layerIds = validateLayerIds(layerIds, request, layerIndices)
+            if isempty(layerIds)
+                layerIds = strings(1, 0);
+            else
+                layerIds = string(layerIds);
+                if ~isvector(layerIds) || any(ismissing(layerIds)) || ...
+                        any(strlength(strip(layerIds)) == 0) || ...
+                        numel(layerIds) ~= numel(layerIndices) || ...
+                        numel(unique(layerIds)) ~= numel(layerIds)
+                    error("ProjectionAlignmentRequest:invalidLayerIds", ...
+                        "LayerIds must uniquely identify each requested layer.");
+                end
+                layerIds = reshape(strip(layerIds), 1, []);
+            end
+
+            if ProjectionAlignmentRequest.hasFieldValue(request, "Scene") && ...
+                    ~isempty(layerIndices)
+                sceneIds = ProjectionLayerIdentity.idsForIndices( ...
+                    request.Scene, layerIndices);
+                if isempty(layerIds)
+                    layerIds = sceneIds;
+                elseif ~isequal(layerIds, sceneIds)
+                    error("ProjectionAlignmentRequest:layerIdMismatch", ...
+                        "LayerIds must match LayerIndices in the request scene.");
+                end
+            end
+        end
+
+        function referenceLayerId = validateReferenceLayerId( ...
+                referenceLayerId, layerIds, layerIndices, referenceLayerIndex)
+            referenceLayerId = string(referenceLayerId);
+            if ~isscalar(referenceLayerId) || ismissing(referenceLayerId)
+                error("ProjectionAlignmentRequest:invalidReferenceLayerId", ...
+                    "ReferenceLayerId must be a scalar string.");
+            end
+            referenceLayerId = strip(referenceLayerId);
+            if isempty(layerIds)
+                return
+            end
+
+            referencePosition = find(layerIndices == referenceLayerIndex, ...
+                1, "first");
+            expectedId = layerIds(referencePosition);
+            if strlength(referenceLayerId) == 0
+                referenceLayerId = expectedId;
+            elseif referenceLayerId ~= expectedId
+                error("ProjectionAlignmentRequest:referenceLayerIdMismatch", ...
+                    "ReferenceLayerId must match ReferenceLayerIndex.");
             end
         end
 

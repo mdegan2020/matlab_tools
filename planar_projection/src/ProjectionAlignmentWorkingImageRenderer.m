@@ -3,7 +3,7 @@ classdef ProjectionAlignmentWorkingImageRenderer
 
     properties (Constant)
         Format = "ProjectionAlignmentWorkingImages"
-        Version = 1
+        Version = 2
     end
 
     methods (Static)
@@ -16,6 +16,7 @@ classdef ProjectionAlignmentWorkingImageRenderer
                 request = struct();
             end
 
+            scene = ProjectionLayerIdentity.ensureScene(scene);
             ProjectionAlignmentWorkingImageRenderer.validateScene(scene);
             request = ProjectionAlignmentWorkingImageRenderer.validateRequest(scene, request);
             options = ProjectionAlignmentWorkingImageRenderer.mergeOptions(options);
@@ -40,7 +41,9 @@ classdef ProjectionAlignmentWorkingImageRenderer
             workingImages.Format = ProjectionAlignmentWorkingImageRenderer.Format;
             workingImages.Version = ProjectionAlignmentWorkingImageRenderer.Version;
             workingImages.LayerIndices = request.LayerIndices;
+            workingImages.LayerIds = request.LayerIds;
             workingImages.ReferenceLayerIndex = request.ReferenceLayerIndex;
+            workingImages.ReferenceLayerId = request.ReferenceLayerId;
             workingImages.AnalysisBands = request.AnalysisBands;
             workingImages.Schedule = schedule;
             workingImages.OutputSize = outputGrid.OutputSize;
@@ -86,17 +89,24 @@ classdef ProjectionAlignmentWorkingImageRenderer
 
         function request = requestForSchedule(request, schedule)
             sourceLayerIndices = request.LayerIndices;
+            sourceLayerIds = request.LayerIds;
             sourceBands = request.AnalysisBands;
             scheduledBands = ones(1, numel(schedule.LayerIndices));
+            scheduledLayerIds = strings(1, numel(schedule.LayerIndices));
             for k = 1:numel(schedule.LayerIndices)
                 sourcePosition = find(sourceLayerIndices == schedule.LayerIndices(k), ...
                     1, "first");
                 if ~isempty(sourcePosition)
                     scheduledBands(k) = sourceBands(sourcePosition);
+                    if numel(sourceLayerIds) >= sourcePosition
+                        scheduledLayerIds(k) = sourceLayerIds(sourcePosition);
+                    end
                 end
             end
             request.LayerIndices = schedule.LayerIndices;
+            request.LayerIds = scheduledLayerIds;
             request.ReferenceLayerIndex = schedule.ReferenceLayerIndex;
+            request.ReferenceLayerId = schedule.ReferenceLayerId;
             request.AnalysisBands = scheduledBands;
         end
 
@@ -194,6 +204,7 @@ classdef ProjectionAlignmentWorkingImageRenderer
                     layerReadback, samplingGrid.OutputSize, layer.CurrentProjectionPlane);
                 layerImage = struct();
                 layerImage.LayerIndex = layerReadback.LayerIndex;
+                layerImage.LayerId = string(layer.LayerId);
                 layerImage.AnalysisBand = ...
                     ProjectionAlignmentWorkingImageRenderer.analysisBandForLayer( ...
                     request, layerReadback.LayerIndex);
@@ -236,7 +247,9 @@ classdef ProjectionAlignmentWorkingImageRenderer
         end
 
         function pairMasks = pairOverlapMasks(layerImages, pairs)
-            pairMasks = struct("Pair", {}, "Mask", {}, "Count", {});
+            pairMasks = struct("Pair", {}, "PairLayerIds", {}, ...
+                "MovingLayerId", {}, "ReferenceLayerId", {}, ...
+                "PairDirection", {}, "Mask", {}, "Count", {});
             for pairIndex = 1:numel(pairs)
                 pair = pairs(pairIndex).Pair;
                 movingLayer = ProjectionAlignmentWorkingImageRenderer.layerImageByIndex( ...
@@ -245,6 +258,11 @@ classdef ProjectionAlignmentWorkingImageRenderer
                     layerImages, pair(2));
                 mask = movingLayer.ValidMask & referenceLayer.ValidMask;
                 pairMasks(pairIndex).Pair = pair;
+                pairMasks(pairIndex).PairLayerIds = [ ...
+                    movingLayer.LayerId, referenceLayer.LayerId];
+                pairMasks(pairIndex).MovingLayerId = movingLayer.LayerId;
+                pairMasks(pairIndex).ReferenceLayerId = referenceLayer.LayerId;
+                pairMasks(pairIndex).PairDirection = "movingToReference";
                 pairMasks(pairIndex).Mask = mask;
                 pairMasks(pairIndex).Count = nnz(mask);
             end

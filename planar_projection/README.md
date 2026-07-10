@@ -416,6 +416,16 @@ Core controls:
   rows as session-local deleted observations, and Undo restores curation from
   a stack.
 
+Alignment records use stable serializable layer IDs in addition to current
+display indices, so identity survives state save/load and layer-order changes.
+The filtering pipeline preserves a complete raw-match ledger with cumulative
+stage masks and rejection reasons rather than retaining only survivors. Solver
+results expose `SolverObservations` as the precise canonical term; `Inliers`
+remains a compatibility alias. Projection-plane residuals are reported in
+`planeMeters`, ray residuals in `rayMeters`, and native displacement in pixels.
+These alignment records and working products remain analysis-only and never
+replace full-source backend radiometry.
+
 Manual auto-alignment validation loop:
 
 ```matlab

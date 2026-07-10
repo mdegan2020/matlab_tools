@@ -173,6 +173,7 @@ classdef ProjectionViewerApp < handle
             if nargin >= 2 && ~isempty(projectionPlane)
                 scene = ProjectionViewerHarness.applyProjectionPlane(scene, projectionPlane);
             end
+            scene = ProjectionLayerIdentity.ensureScene(scene);
 
             app.Scene = scene;
             app.ResetScene = app.createResetScene(scene);
@@ -188,8 +189,8 @@ classdef ProjectionViewerApp < handle
             app.initializeCameraSettleTimer();
             app.PreviewTimer = tic;
             if ~isempty(viewerState)
-                viewerState = ProjectionViewerState.validate( ...
-                    viewerState, numel(app.Scene.layers));
+                [~, viewerState] = ProjectionViewerState.applyToScene( ...
+                    app.Scene, viewerState);
                 app.applyViewerStateToScene(viewerState);
                 app.resetAlphaRuntimeState();
             end
@@ -252,7 +253,7 @@ classdef ProjectionViewerApp < handle
         function importState(app, state)
             %importState Apply a validated viewer state to the app.
             app.cancelCameraReconciliation();
-            state = ProjectionViewerState.validate(state, numel(app.Scene.layers));
+            [~, state] = ProjectionViewerState.applyToScene(app.Scene, state);
             app.applyViewerStateToScene(state);
             app.resetAlphaRuntimeState();
             app.refreshProjectionSurfaces(app.DefaultMeshSampling);
@@ -2902,6 +2903,7 @@ classdef ProjectionViewerApp < handle
             layer = app.Scene.layers(layerIndex);
             layerState = struct();
             layerState.Index = layerIndex;
+            layerState.LayerId = string(layer.LayerId);
             layerState.Name = string(layer.Name);
             layerState.ImagePath = string(layer.ImagePath);
             layerState.Alpha = layer.Alpha;

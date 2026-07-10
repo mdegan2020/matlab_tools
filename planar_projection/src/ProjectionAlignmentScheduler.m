@@ -16,6 +16,7 @@ classdef ProjectionAlignmentScheduler
                 request = struct();
             end
             if ~isempty(scene) && ~isfield(request, "Scene")
+                scene = ProjectionLayerIdentity.ensureScene(scene);
                 request.Scene = scene;
             end
 
@@ -32,6 +33,8 @@ classdef ProjectionAlignmentScheduler
                 layerIndices, request, options);
             pairMatrix = ProjectionAlignmentScheduler.strategyPairs( ...
                 layerIndices, referenceIndex, options.Strategy);
+            layerIds = ProjectionAlignmentScheduler.scheduleLayerIds( ...
+                request, layerIndices);
 
             schedule = struct();
             schedule.Format = ProjectionAlignmentScheduler.Format;
@@ -40,9 +43,12 @@ classdef ProjectionAlignmentScheduler
             schedule.PairSelection = options.PairSelection;
             schedule.IncludeHiddenLayers = options.IncludeHiddenLayers;
             schedule.LayerIndices = layerIndices;
+            schedule.LayerIds = layerIds;
             schedule.ReferenceLayerIndex = referenceIndex;
+            schedule.ReferenceLayerId = layerIds(layerIndices == referenceIndex);
             schedule.Pairs = ProjectionAlignmentScheduler.pairStructs( ...
-                pairMatrix, layerIndices, referenceIndex, options.Strategy);
+                pairMatrix, layerIndices, layerIds, referenceIndex, ...
+                options.Strategy);
             schedule.PairCount = numel(schedule.Pairs);
             schedule.Diagnostics = ProjectionAlignmentScheduler.scheduleDiagnostics( ...
                 scene, request, layerIndices, schedule.Pairs);
@@ -210,10 +216,13 @@ classdef ProjectionAlignmentScheduler
             pairs = pairs(sort(keepIndices), :);
         end
 
-        function pairs = pairStructs(pairMatrix, layerIndices, referenceIndex, strategy)
+        function pairs = pairStructs(pairMatrix, layerIndices, layerIds, ...
+                referenceIndex, strategy)
             pairs = struct("Pair", {}, "Order", {}, "Strategy", {}, ...
                 "DistanceFromReference", {}, "IsAdjacent", {}, ...
-                "IncludesReference", {});
+                "IncludesReference", {}, "PairLayerIds", {}, ...
+                "MovingLayerId", {}, "ReferenceLayerId", {}, ...
+                "PairDirection", {});
             referencePosition = find(layerIndices == referenceIndex, 1, "first");
             for k = 1:size(pairMatrix, 1)
                 pair = pairMatrix(k, :);
@@ -227,6 +236,25 @@ classdef ProjectionAlignmentScheduler
                     referencePosition));
                 pairs(k).IsAdjacent = abs(diff(pairPositions)) == 1;
                 pairs(k).IncludesReference = any(pair == referenceIndex);
+                pairs(k).PairLayerIds = layerIds(pairPositions);
+                pairs(k).MovingLayerId = pairs(k).PairLayerIds(1);
+                pairs(k).ReferenceLayerId = pairs(k).PairLayerIds(2);
+                pairs(k).PairDirection = "movingToReference";
+            end
+        end
+
+        function layerIds = scheduleLayerIds(request, layerIndices)
+            layerIds = strings(1, numel(layerIndices));
+            for layerPosition = 1:numel(layerIndices)
+                requestPosition = find(request.LayerIndices == ...
+                    layerIndices(layerPosition), 1, "first");
+                if ~isempty(requestPosition) && ...
+                        numel(request.LayerIds) >= requestPosition
+                    layerIds(layerPosition) = request.LayerIds(requestPosition);
+                else
+                    layerIds(layerPosition) = string(sprintf( ...
+                        "legacy-layer-%06d", layerIndices(layerPosition)));
+                end
             end
         end
 

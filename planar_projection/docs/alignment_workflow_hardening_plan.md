@@ -588,6 +588,14 @@ The packs in this workstream are numbered independently from the completed
 historical hardening Feature Packs 1-5. Use `Alignment Reliability Pack N` in
 discussion and commit messages so the two sequences cannot be confused.
 
+Implementation status:
+
+```text
+Reliability Pack 0: complete
+Reliability Pack 1: next
+Reliability Packs 2-8: pending
+```
+
 ### Reliability Pack 0: Observable records, units, and layer identity
 
 #### 0.1 Add a complete match ledger
@@ -631,6 +639,31 @@ handles in layer, source, scene, session, request, or result structs.
 Define backward-compatible migration for saved scenes that predate stable IDs.
 Newly assigned IDs must persist on the next save and remain distinct when two
 layers share a source path or display name.
+
+Implementation note:
+
+- `ProjectionLayerIdentity` now assigns unique serializable `LayerId` values,
+  resolves IDs to current scene indices, preserves IDs through layer reorder,
+  and migrates legacy scenes/viewer states. Cloning a layer can duplicate a
+  generated ID, so duplicated generated IDs are repaired deterministically;
+  duplicate caller-supplied IDs remain validation errors.
+- Alignment requests, schedules, working images, pair masks, feature matches,
+  results, solver corrections, backend payloads, and viewer-state JSON now
+  carry stable layer IDs while retaining current numeric indices for backward
+  compatibility.
+- `ProjectionAlignmentMatchLedger` preserves one record per raw descriptor
+  match. Filtering keeps the full ledger and records cumulative masks, first
+  rejection stage, all rejection reasons, moving-to-reference identity,
+  working-pixel coordinates, plane-metre coordinates, native source pixels,
+  manual state, and explicit-unit residual slots. Filtered solver arrays retain
+  raw-record indices rather than replacing the ledger.
+- `SolverObservations` is now the canonical result field. `Inliers` remains a
+  compatibility alias with an explicit `solverObservations` meaning.
+- Solver residual units are now `planeMeters` for `projectionPlane2D` and
+  `rayMeters` for `rayToRay3D`; incompatible loss/unit combinations fail
+  validation. Ledger JSON normalizes unpopulated numeric residuals back to
+  `NaN` after JSON `null` round trips.
+- Pack 0 validation passes with 320 tests after a fresh MATLAB class reset.
 
 ### Reliability Pack 1: Geometry, ROI, and overlay correctness
 

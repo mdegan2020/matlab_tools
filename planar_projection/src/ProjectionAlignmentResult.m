@@ -3,7 +3,7 @@ classdef ProjectionAlignmentResult
 
     properties (Constant)
         Format = "ProjectionAlignmentResult"
-        Version = 1
+        Version = 2
     end
 
     methods (Static)
@@ -42,8 +42,19 @@ classdef ProjectionAlignmentResult
                 "RequestSummary", struct()));
             result.Matches = ProjectionAlignmentResult.validateMatches( ...
                 ProjectionAlignmentResult.fieldOrDefault(result, "Matches", []));
-            result.Inliers = ProjectionAlignmentResult.validateInliers( ...
-                ProjectionAlignmentResult.fieldOrDefault(result, "Inliers", []));
+            rawInliers = ProjectionAlignmentResult.fieldOrDefault( ...
+                result, "Inliers", []);
+            rawSolverObservations = ProjectionAlignmentResult.fieldOrDefault( ...
+                result, "SolverObservations", []);
+            if isempty(rawSolverObservations)
+                rawSolverObservations = rawInliers;
+            end
+            result.SolverObservations = ProjectionAlignmentResult.validateInliers( ...
+                rawSolverObservations);
+            result.Inliers = result.SolverObservations;
+            result.MatchLedger = ProjectionAlignmentMatchLedger.validate( ...
+                ProjectionAlignmentResult.fieldOrDefault(result, ...
+                "MatchLedger", ProjectionAlignmentMatchLedger.emptyRecords()));
             result.Residuals = ProjectionAlignmentResult.validateResiduals( ...
                 ProjectionAlignmentResult.fieldOrDefault(result, "Residuals", struct()));
             result.SolvedCorrections = ProjectionAlignmentResult.validateCorrections( ...
@@ -93,7 +104,9 @@ classdef ProjectionAlignmentResult
             request = ProjectionAlignmentRequest.validate(request);
             summary = struct();
             summary.LayerIndices = request.LayerIndices;
+            summary.LayerIds = request.LayerIds;
             summary.ReferenceLayerIndex = request.ReferenceLayerIndex;
+            summary.ReferenceLayerId = request.ReferenceLayerId;
             summary.AnalysisBands = request.AnalysisBands;
             summary.LossMode = request.Options.LossMode;
             summary.SchedulingStrategy = request.Options.Scheduling.Strategy;
@@ -126,10 +139,22 @@ classdef ProjectionAlignmentResult
             end
             validatedMatches = ProjectionAlignmentResult.emptyMatches();
             for k = 1:numel(matches)
+                hasPairLayerIds = isfield(matches(k), "PairLayerIds") && ...
+                    ~isempty(matches(k).PairLayerIds);
                 match = ProjectionAlignmentResult.mergeStruct( ...
                     ProjectionAlignmentResult.defaultMatch(), matches(k), "Matches");
                 match.Pair = ProjectionAlignmentResult.validateIntegerVector( ...
                     match.Pair, 2, "Matches.Pair");
+                if ~hasPairLayerIds
+                    match.PairLayerIds = strings(1, 0);
+                end
+                match.PairLayerIds = ProjectionAlignmentResult.validatePairLayerIds( ...
+                    match.PairLayerIds, match.Pair, "Matches.PairLayerIds");
+                match.MovingLayerId = match.PairLayerIds(1);
+                match.ReferenceLayerId = match.PairLayerIds(2);
+                match.PairDirection = ProjectionAlignmentResult.validateChoice( ...
+                    match.PairDirection, "movingToReference", ...
+                    "Matches.PairDirection");
                 match.MovingPoints = ProjectionAlignmentResult.validatePointMatrix( ...
                     match.MovingPoints, "Matches.MovingPoints");
                 match.ReferencePoints = ProjectionAlignmentResult.validatePointMatrix( ...
@@ -169,16 +194,26 @@ classdef ProjectionAlignmentResult
             end
             validatedInliers = ProjectionAlignmentResult.emptyInliers();
             for k = 1:numel(inliers)
+                hasPairLayerIds = isfield(inliers(k), "PairLayerIds") && ...
+                    ~isempty(inliers(k).PairLayerIds);
                 inlier = ProjectionAlignmentResult.mergeStruct( ...
                     ProjectionAlignmentResult.defaultInlier(), inliers(k), "Inliers");
                 inlier.Pair = ProjectionAlignmentResult.validateIntegerVector( ...
                     inlier.Pair, 2, "Inliers.Pair");
+                if ~hasPairLayerIds
+                    inlier.PairLayerIds = strings(1, 0);
+                end
+                inlier.PairLayerIds = ...
+                    ProjectionAlignmentResult.validatePairLayerIds( ...
+                    inlier.PairLayerIds, inlier.Pair, "Inliers.PairLayerIds");
                 inlier.Mask = ProjectionAlignmentResult.validateLogicalVector( ...
                     inlier.Mask, "Inliers.Mask");
                 inlier.Count = ProjectionAlignmentResult.validateNonnegativeInteger( ...
                     inlier.Count, "Inliers.Count");
                 inlier.Method = ProjectionAlignmentResult.validateScalarString( ...
                     inlier.Method, "Inliers.Method");
+                inlier.Meaning = ProjectionAlignmentResult.validateChoice( ...
+                    inlier.Meaning, "solverObservations", "Inliers.Meaning");
                 if k == 1
                     validatedInliers = inlier;
                 else
@@ -189,9 +224,11 @@ classdef ProjectionAlignmentResult
         end
 
         function residuals = validateResiduals(residuals)
+            hasUnit = isstruct(residuals) && isscalar(residuals) && ...
+                isfield(residuals, "Unit") && ~isempty(residuals.Unit);
             defaults = struct();
             defaults.LossMode = "projectionPlane2D";
-            defaults.Unit = "pixels";
+            defaults.Unit = "planeMeters";
             defaults.Before = [];
             defaults.After = [];
             defaults.PerPair = ProjectionAlignmentResult.emptyResidualPairs();
@@ -200,8 +237,14 @@ classdef ProjectionAlignmentResult
             residuals.LossMode = ProjectionAlignmentResult.validateChoice( ...
                 residuals.LossMode, ["projectionPlane2D", "rayToRay3D"], ...
                 "Residuals.LossMode");
+            if ~hasUnit
+                residuals.Unit = ProjectionAlignmentResult.defaultResidualUnit( ...
+                    residuals.LossMode);
+            end
             residuals.Unit = ProjectionAlignmentResult.validateScalarString( ...
                 residuals.Unit, "Residuals.Unit");
+            residuals.Unit = ProjectionAlignmentResult.validateResidualUnit( ...
+                residuals.LossMode, residuals.Unit);
             residuals.Before = ProjectionAlignmentResult.validateNumericVector( ...
                 residuals.Before, "Residuals.Before");
             residuals.After = ProjectionAlignmentResult.validateNumericVector( ...
@@ -257,6 +300,8 @@ classdef ProjectionAlignmentResult
                     "SolvedCorrections");
                 correction.LayerIndex = ProjectionAlignmentResult.validatePositiveInteger( ...
                     correction.LayerIndex, "SolvedCorrections.LayerIndex");
+                correction.LayerId = ProjectionAlignmentResult.validateScalarString( ...
+                    correction.LayerId, "SolvedCorrections.LayerId");
                 correction.ViewVectorAngularOffsetsDegrees = ...
                     ProjectionAlignmentResult.validateFiniteVector( ...
                     correction.ViewVectorAngularOffsetsDegrees, 3, ...
@@ -342,7 +387,9 @@ classdef ProjectionAlignmentResult
         end
 
         function matches = emptyMatches()
-            matches = struct("Pair", {}, "MovingPoints", {}, ...
+            matches = struct("Pair", {}, "PairLayerIds", {}, ...
+                "MovingLayerId", {}, "ReferenceLayerId", {}, ...
+                "PairDirection", {}, "MovingPoints", {}, ...
                 "ReferencePoints", {}, "MovingProjectionPoints", {}, ...
                 "ReferenceProjectionPoints", {}, "Scores", {}, ...
                 "DescriptorIndices", {}, "Count", {});
@@ -351,6 +398,11 @@ classdef ProjectionAlignmentResult
         function match = defaultMatch()
             match = struct();
             match.Pair = [1 2];
+            match.PairLayerIds = ["legacy-layer-000001", ...
+                "legacy-layer-000002"];
+            match.MovingLayerId = match.PairLayerIds(1);
+            match.ReferenceLayerId = match.PairLayerIds(2);
+            match.PairDirection = "movingToReference";
             match.MovingPoints = zeros(0, 2);
             match.ReferencePoints = zeros(0, 2);
             match.MovingProjectionPoints = zeros(0, 2);
@@ -361,15 +413,19 @@ classdef ProjectionAlignmentResult
         end
 
         function inliers = emptyInliers()
-            inliers = struct("Pair", {}, "Mask", {}, "Count", {}, "Method", {});
+            inliers = struct("Pair", {}, "PairLayerIds", {}, "Mask", {}, ...
+                "Count", {}, "Method", {}, "Meaning", {});
         end
 
         function inlier = defaultInlier()
             inlier = struct();
             inlier.Pair = [1 2];
+            inlier.PairLayerIds = ["legacy-layer-000001", ...
+                "legacy-layer-000002"];
             inlier.Mask = false(1, 0);
             inlier.Count = 0;
             inlier.Method = "none";
+            inlier.Meaning = "solverObservations";
         end
 
         function pairs = emptyResidualPairs()
@@ -385,7 +441,7 @@ classdef ProjectionAlignmentResult
         end
 
         function corrections = emptyCorrections()
-            corrections = struct("LayerIndex", {}, ...
+            corrections = struct("LayerIndex", {}, "LayerId", {}, ...
                 "ViewVectorAngularOffsetsDegrees", {}, ...
                 "ProjectionOffsetMeters", {}, "SharedScale", {});
         end
@@ -393,6 +449,7 @@ classdef ProjectionAlignmentResult
         function correction = defaultCorrection()
             correction = struct();
             correction.LayerIndex = 1;
+            correction.LayerId = "";
             correction.ViewVectorAngularOffsetsDegrees = [0 0 0];
             correction.ProjectionOffsetMeters = [0 0];
             correction.SharedScale = 1;
@@ -406,6 +463,37 @@ classdef ProjectionAlignmentResult
                     "%s must be one of: %s.", name, strjoin(allowed, ", "));
             end
             value = allowed(find(matches, 1, "first"));
+        end
+
+        function unit = validateResidualUnit(lossMode, unit)
+            expected = ProjectionAlignmentResult.defaultResidualUnit(lossMode);
+            unit = ProjectionAlignmentResult.validateChoice( ...
+                unit, expected, "Residuals.Unit");
+        end
+
+        function unit = defaultResidualUnit(lossMode)
+            if lossMode == "rayToRay3D"
+                unit = "rayMeters";
+            else
+                unit = "planeMeters";
+            end
+        end
+
+        function layerIds = validatePairLayerIds(layerIds, pair, name)
+            if isempty(layerIds)
+                layerIds = [ ...
+                    string(sprintf("legacy-layer-%06d", pair(1))), ...
+                    string(sprintf("legacy-layer-%06d", pair(2)))];
+            else
+                layerIds = string(layerIds);
+            end
+            if numel(layerIds) ~= 2 || any(ismissing(layerIds)) || ...
+                    any(strlength(strip(layerIds)) == 0) || ...
+                    layerIds(1) == layerIds(2)
+                error("ProjectionAlignmentResult:invalidLayerIds", ...
+                    "%s must contain two distinct nonempty layer IDs.", name);
+            end
+            layerIds = reshape(strip(layerIds), 1, []);
         end
 
         function value = validateScalarString(value, name)

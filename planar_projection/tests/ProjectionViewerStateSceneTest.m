@@ -84,6 +84,28 @@ classdef ProjectionViewerStateSceneTest < matlab.unittest.TestCase
                 "ProjectionViewerState:layerOrderMismatch");
         end
 
+        function testApplyToSceneMigratesLegacyLayerIds(testCase)
+            scene = ProjectionViewerStateSceneTest.makeTwoImageScene();
+            state = ProjectionViewerStateSceneTest.makeViewerState(scene);
+
+            [appliedScene, migratedState] = ProjectionViewerState.applyToScene( ...
+                scene, state);
+
+            testCase.verifyEqual([migratedState.Layers.LayerId], ...
+                [appliedScene.layers.LayerId]);
+            testCase.verifyTrue(all(strlength([migratedState.Layers.LayerId]) > 0));
+        end
+
+        function testApplyToSceneRejectsLayerIdMismatch(testCase)
+            scene = ProjectionViewerStateSceneTest.makeTwoImageScene();
+            state = ProjectionViewerStateSceneTest.makeViewerState(scene);
+            state.Layers(1).LayerId = "not-the-scene-layer";
+
+            testCase.verifyError( ...
+                @() ProjectionViewerState.applyToScene(scene, state), ...
+                "ProjectionViewerState:layerIdMismatch");
+        end
+
         function testApplyToSceneRejectsImagePathMismatch(testCase)
             scene = ProjectionViewerStateSceneTest.makeTwoImageScene();
             state = ProjectionViewerStateSceneTest.makeViewerState(scene);

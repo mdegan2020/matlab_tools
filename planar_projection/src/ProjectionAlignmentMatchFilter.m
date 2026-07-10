@@ -3,7 +3,7 @@ classdef ProjectionAlignmentMatchFilter
 
     properties (Constant)
         Format = "ProjectionAlignmentFilteredMatches"
-        Version = 1
+        Version = 2
     end
 
     methods (Static)
@@ -18,24 +18,37 @@ classdef ProjectionAlignmentMatchFilter
             filtered = matchResult;
             filtered.Format = ProjectionAlignmentMatchFilter.Format;
             filtered.Version = ProjectionAlignmentMatchFilter.Version;
+            for k = 1:numel(filtered.Matches)
+                pairMatch = ProjectionAlignmentMatchLedger.ensurePair( ...
+                    filtered.Matches(k));
+                if k == 1
+                    ensuredMatches = pairMatch;
+                else
+                    ensuredMatches(k) = pairMatch;
+                end
+            end
+            filtered.Matches = ensuredMatches;
             matchRecordIndices = cell(1, numel(filtered.Matches));
             for k = 1:numel(filtered.Matches)
                 matchRecordIndices{k} = (1:filtered.Matches(k).Count).';
             end
             [filtered.Matches.MatchRecordIndices] = matchRecordIndices{:};
+            pairDiagnostics = cell(1, numel(filtered.Matches));
             for k = 1:numel(matchResult.Matches)
-                [filtered.Matches(k), pairDiagnostics(k)] = ... %#ok<AGROW>
+                [filtered.Matches(k), pairDiagnostics{k}] = ...
                     ProjectionAlignmentMatchFilter.filterPair( ...
-                    matchResult.Matches(k), options);
+                    filtered.Matches(k), options);
             end
+            filtered.MatchLedger = ProjectionAlignmentMatchLedger.combine(filtered);
             filtered.FilterOptions = options.FilterPipeline;
-            filtered.Diagnostics.FilterPipeline = pairDiagnostics;
+            filtered.Diagnostics.FilterPipeline = [pairDiagnostics{:}];
         end
     end
 
     methods (Static, Access = private)
         function [pairMatch, diagnostics] = filterPair(pairMatch, options)
             pipeline = options.FilterPipeline;
+            pairMatch = ProjectionAlignmentMatchLedger.ensurePair(pairMatch);
             pairMatch = ProjectionAlignmentMatchFilter.ensureMatchRecordIndices( ...
                 pairMatch);
             keepMask = true(pairMatch.Count, 1);
@@ -73,6 +86,8 @@ classdef ProjectionAlignmentMatchFilter
                             pairMatch, pipeline, keepMask);
                         diagnostics.StageCounts.Radial = nnz(keepMask);
                 end
+                pairMatch.MatchLedger = ProjectionAlignmentMatchLedger.applyStage( ...
+                    pairMatch.MatchLedger, stage, keepMask);
             end
 
             pairMatch = ProjectionAlignmentMatchFilter.subsetPair(pairMatch, keepMask);
@@ -83,6 +98,8 @@ classdef ProjectionAlignmentMatchFilter
         function diagnostics = initialDiagnostics(pairMatch)
             diagnostics = struct();
             diagnostics.Pair = pairMatch.Pair;
+            diagnostics.PairLayerIds = pairMatch.PairLayerIds;
+            diagnostics.PairDirection = pairMatch.PairDirection;
             diagnostics.InitialCount = pairMatch.Count;
             diagnostics.FinalCount = pairMatch.Count;
             diagnostics.RejectedCount = 0;
@@ -135,8 +152,7 @@ classdef ProjectionAlignmentMatchFilter
             displacement = reference - moving;
             medianDisplacement = median(displacement, 1);
             residuals = sqrt(sum((displacement - medianDisplacement).^2, 2));
-            currentIndices = find(currentMask);
-            mask(currentIndices) = residuals <= pipeline.GeometricMaxDistancePixels;
+            mask(currentMask) = residuals <= pipeline.GeometricMaxDistancePixels;
         end
 
         function mask = nativeDisplacementMask(pairMatch, pipeline, currentMask)

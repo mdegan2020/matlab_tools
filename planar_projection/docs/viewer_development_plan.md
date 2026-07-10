@@ -783,6 +783,12 @@ Implementation status:
   coplanarity filtering, an approved separate Alignment Workbench, balanced
   common/differential network solving, an `epipolarCoplanarity` loss,
   Shift+left common-anchor drag, and representative real-data validation.
+- Real-Data Reliability Pack 0 is complete. Stable layer IDs now flow through
+  viewer state, alignment requests/schedules/working images, match pairs,
+  solver corrections, and backend payloads. A non-destructive raw-match ledger
+  records explicit stage masks/reasons and coordinate/residual units;
+  `SolverObservations` is canonical while `Inliers` is a compatibility alias.
+  Reliability Pack 1 is next.
 
 ### Auto Alignment Design Decisions
 
