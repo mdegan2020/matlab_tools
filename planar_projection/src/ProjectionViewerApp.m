@@ -23,6 +23,7 @@ classdef ProjectionViewerApp < handle
         LastPointerLocation double = [NaN NaN]
         NeedsDragFinalize logical = false
         PreviewTimer
+        PerformanceMonitor
         MinPreviewInterval double = 1 / 30
         MinCameraViewAngle double = 0.05
         MaxCameraViewAngle double = 60
@@ -138,6 +139,7 @@ classdef ProjectionViewerApp < handle
 
             app.Scene = scene;
             app.ResetScene = app.createResetScene(scene);
+            app.PerformanceMonitor = ProjectionViewerPerformanceMonitor();
             app.SelectedLayerIndex = numel(app.Scene.layers);
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
@@ -307,6 +309,27 @@ classdef ProjectionViewerApp < handle
                     all([diagnostics.Layers.HasSampleRayFcn]);
                 diagnostics.Warning = string(ME.message);
             end
+        end
+
+        function diagnostics = performanceDiagnostics(app)
+            %performanceDiagnostics Return runtime-only viewer work metrics.
+            monitorSnapshot = app.PerformanceMonitor.snapshot();
+            diagnostics = struct();
+            diagnostics.Format = "ProjectionViewerPerformanceDiagnostics";
+            diagnostics.Version = 1;
+            diagnostics.Environment = struct( ...
+                MATLABVersion=string(version), ...
+                Computer=string(computer));
+            diagnostics.Counters = monitorSnapshot.Counters;
+            diagnostics.Timings = monitorSnapshot.Timings;
+            diagnostics.ElapsedSeconds = monitorSnapshot.ElapsedSeconds;
+            diagnostics.MaxTimingSamples = monitorSnapshot.MaxTimingSamples;
+            diagnostics.Viewer = app.viewerPerformanceRuntimeState();
+        end
+
+        function resetPerformanceDiagnostics(app)
+            %resetPerformanceDiagnostics Clear viewer work metrics only.
+            app.PerformanceMonitor.reset();
         end
     end
 
@@ -1683,8 +1706,7 @@ classdef ProjectionViewerApp < handle
                 layer = app.Scene.layers(layerIndex);
                 layer.CurrentProjectionPlane = plane;
                 layer.MeshSampling = app.DefaultMeshSampling(layerIndex);
-                mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                    layer, plane, app.Scene.renderOrigin);
+                mesh = app.buildInstrumentedLayerMesh(layer, plane);
                 coordinates = PlanarProjection.worldToPlane( ...
                     reshape(mesh.WorldPoints, 3, []), plane);
                 layerBounds = [min(coordinates(1, :)), max(coordinates(1, :)), ...
@@ -2144,8 +2166,7 @@ classdef ProjectionViewerApp < handle
             layer = app.Scene.layers(layerIndex);
             layer.CurrentProjectionPlane = plane;
             layer.MeshSampling = app.DefaultMeshSampling(layerIndex);
-            mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                layer, plane, app.Scene.renderOrigin);
+            mesh = app.buildInstrumentedLayerMesh(layer, plane);
 
             worldPoints = nan(3, numel(rows));
             for componentIndex = 1:3
@@ -2772,8 +2793,8 @@ classdef ProjectionViewerApp < handle
                     continue
                 end
 
-                mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                    layer, layer.CurrentProjectionPlane, app.Scene.renderOrigin);
+                mesh = app.buildInstrumentedLayerMesh( ...
+                    layer, layer.CurrentProjectionPlane);
                 app.Surfaces{layerIndex} = app.createPreviewSurface( ...
                     layerIndex, mesh, mesh.Texture, ...
                     "ProjectionViewerLayerSurface");
@@ -2823,13 +2844,20 @@ classdef ProjectionViewerApp < handle
 
         function surfaceHandle = createPreviewSurface(app, layerIndex, ...
                 mesh, texture, tag)
+            surfaceTimer = tic;
             [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
+            displayTexture = app.previewTextureForLayer(texture, layerIndex);
             surfaceHandle = surface(app.Axes, X, Y, Z, ...
-                app.previewTextureForLayer(texture, layerIndex), ...
+                displayTexture, ...
                 FaceColor="texturemap", EdgeColor="none", LineStyle="none", ...
                 FaceAlpha=app.previewFaceAlphaForLayer(mesh.Alpha, layerIndex), ...
                 Visible=app.onOff(mesh.Visible), ...
                 ContextMenu=app.ImageContextMenu, Tag=tag);
+            app.PerformanceMonitor.increment("SurfaceCreations");
+            app.PerformanceMonitor.increment( ...
+                "TextureUploadBytes", app.arrayBytes(displayTexture));
+            app.PerformanceMonitor.recordTiming( ...
+                "SurfaceCreateSeconds", toc(surfaceTimer));
         end
 
         function surfaceHandles = createTiledLayerSurfaces(app, layerIndex, tiles)
@@ -2840,9 +2868,8 @@ classdef ProjectionViewerApp < handle
             surfaceHandles = gobjects(1, numel(tiles));
             for tileIndex = 1:numel(tiles)
                 tileLayer = app.tilePreviewLayer(layerIndex, tiles(tileIndex));
-                mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                    tileLayer, tileLayer.CurrentProjectionPlane, ...
-                    app.Scene.renderOrigin);
+                mesh = app.buildInstrumentedLayerMesh( ...
+                    tileLayer, tileLayer.CurrentProjectionPlane);
                 surfaceHandles(tileIndex) = app.createPreviewSurface( ...
                     layerIndex, mesh, tileLayer.DisplayTexture, ...
                     "ProjectionViewerPreviewTileSurface");
@@ -2861,9 +2888,16 @@ classdef ProjectionViewerApp < handle
             pyramid = app.PreviewPyramids{layerIndex};
             tileLayer = app.Scene.layers(layerIndex);
             if includeTexture
+                textureTimer = tic;
                 tileImage = ProjectionPreviewPyramid.tileTexture(pyramid, tile);
                 tileLayer.DisplayTexture = ...
                     ProjectionViewerHarness.prepareDisplayTexture(tileImage);
+                app.PerformanceMonitor.increment("TileCacheMisses");
+                app.PerformanceMonitor.increment("TexturePreparations");
+                app.PerformanceMonitor.increment("PreparedTextureBytes", ...
+                    app.arrayBytes(tileLayer.DisplayTexture));
+                app.PerformanceMonitor.recordTiming( ...
+                    "TexturePrepareSeconds", toc(textureTimer));
             end
             tileLayer.MeshSampling = ProjectionPreviewPyramid.tileMeshSampling( ...
                 pyramid, tile, maxMeshVertices);
@@ -2876,6 +2910,7 @@ classdef ProjectionViewerApp < handle
                 tiles = ProjectionPreviewPyramid.tileBounds( ...
                     pyramid, coarsestLevelIndex, ...
                     app.PreviewTilingOptions.TileSize);
+                app.PerformanceMonitor.increment("TileCandidates", numel(tiles));
                 return
             end
 
@@ -2886,6 +2921,8 @@ classdef ProjectionViewerApp < handle
             for levelIndex = startLevelIndex:numel(pyramid.Levels)
                 levelTiles = ProjectionPreviewPyramid.tileBounds( ...
                     pyramid, levelIndex, app.PreviewTilingOptions.TileSize);
+                app.PerformanceMonitor.increment( ...
+                    "TileCandidates", numel(levelTiles));
                 tiles = app.visiblePreviewTiles(layerIndex, levelTiles);
                 if numel(tiles) <= maxVisibleTiles
                     return
@@ -2907,8 +2944,8 @@ classdef ProjectionViewerApp < handle
         function desiredDownsample = previewDesiredDownsampleForLayer(app, layerIndex)
             layer = app.Scene.layers(layerIndex);
             layer.MeshSampling = app.DefaultMeshSampling(layerIndex);
-            mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                layer, layer.CurrentProjectionPlane, app.Scene.renderOrigin);
+            mesh = app.buildInstrumentedLayerMesh( ...
+                layer, layer.CurrentProjectionPlane);
             [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
             points = [X(:).'; Y(:).'; Z(:).'];
 
@@ -2946,8 +2983,8 @@ classdef ProjectionViewerApp < handle
             pyramid = app.PreviewPyramids{layerIndex};
             layer = app.Scene.layers(layerIndex);
             layer.MeshSampling = ProjectionPreviewPyramid.tileMeshSampling(pyramid, tile, 2);
-            mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                layer, layer.CurrentProjectionPlane, app.Scene.renderOrigin);
+            mesh = app.buildInstrumentedLayerMesh( ...
+                layer, layer.CurrentProjectionPlane);
             [X, Y, Z] = app.previewSurfaceCoordinates(mesh, layerIndex);
             points = [X(:).'; Y(:).'; Z(:).'];
 
@@ -2963,7 +3000,11 @@ classdef ProjectionViewerApp < handle
         end
 
         function refreshTiledProjectionSurfaces(app)
+            refreshTimer = tic;
+            app.PerformanceMonitor.increment("TileRefreshes");
             if isempty(app.Surfaces) || isempty(app.PreviewTiledLayerMask)
+                app.PerformanceMonitor.recordTiming( ...
+                    "TileRefreshSeconds", toc(refreshTimer));
                 return
             end
 
@@ -2972,6 +3013,8 @@ classdef ProjectionViewerApp < handle
                 app.refreshTiledLayerSurfaces(layerIndex);
             end
             app.raiseCrosshairOverlay();
+            app.PerformanceMonitor.recordTiming( ...
+                "TileRefreshSeconds", toc(refreshTimer));
         end
 
         function refreshTiledLayerSurfaces(app, layerIndex)
@@ -3049,9 +3092,8 @@ classdef ProjectionViewerApp < handle
             for tileIndex = 1:numel(tiles)
                 tileLayer = app.tilePreviewLayer( ...
                     layerIndex, tiles(tileIndex), updateTexture, maxMeshVertices);
-                mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                    tileLayer, tileLayer.CurrentProjectionPlane, ...
-                    app.Scene.renderOrigin);
+                mesh = app.buildInstrumentedLayerMesh( ...
+                    tileLayer, tileLayer.CurrentProjectionPlane);
                 app.updatePreviewSurfaceHandle( ...
                     surfaceHandles(tileIndex), layerIndex, mesh, updateTexture);
             end
@@ -3084,6 +3126,8 @@ classdef ProjectionViewerApp < handle
         function deleteLayerSurfaces(app, layerIndex)
             surfaceHandles = app.validLayerSurfaces(layerIndex);
             if ~isempty(surfaceHandles)
+                app.PerformanceMonitor.increment( ...
+                    "SurfaceDeletions", numel(surfaceHandles));
                 delete(surfaceHandles);
             end
             if ~isempty(app.Surfaces) && layerIndex <= numel(app.Surfaces)
@@ -3113,9 +3157,11 @@ classdef ProjectionViewerApp < handle
 
         function raiseCrosshairOverlay(app)
             if ~isempty(app.CrosshairHorizontal) && isvalid(app.CrosshairHorizontal)
+                app.PerformanceMonitor.increment("OverlayRestacks");
                 uistack(app.CrosshairHorizontal, "top");
             end
             if ~isempty(app.CrosshairVertical) && isvalid(app.CrosshairVertical)
+                app.PerformanceMonitor.increment("OverlayRestacks");
                 uistack(app.CrosshairVertical, "top");
             end
         end
@@ -3158,6 +3204,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function updateViewTwist(app, twistDegrees)
+            frameTimer = app.beginPerformanceFrame();
             app.ViewTwistDegrees = twistDegrees;
             app.applyViewTwist();
             app.refreshTiledProjectionSurfaces();
@@ -3167,6 +3214,7 @@ classdef ProjectionViewerApp < handle
                 app.ProjectionTiltDegrees, ...
                 app.ViewTwistDegrees, layer.Alpha);
             drawnow limitrate
+            app.finishPerformanceFrame(frameTimer, "TwistSeconds");
         end
 
         function applyViewTwist(app)
@@ -3558,12 +3606,14 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
+            frameTimer = app.beginPerformanceFrame();
             zoomFactor = 1.12 ^ event.VerticalScrollCount;
             newAngle = app.Axes.CameraViewAngle * zoomFactor;
             newAngle = min(max(newAngle, app.MinCameraViewAngle), app.MaxCameraViewAngle);
             app.Axes.CameraViewAngle = newAngle;
             app.refreshTiledProjectionSurfaces();
             drawnow limitrate
+            app.finishPerformanceFrame(frameTimer, "ZoomSeconds");
         end
 
         function beginPan(app, event)
@@ -3632,11 +3682,13 @@ classdef ProjectionViewerApp < handle
         end
 
         function panCameraByPixelDelta(app, pixelDelta)
+            frameTimer = app.beginPerformanceFrame();
             panOffset = app.pixelDeltaToWorldPan(pixelDelta);
             campos(app.Axes, campos(app.Axes) + panOffset.');
             camtarget(app.Axes, camtarget(app.Axes) + panOffset.');
             app.refreshTiledProjectionSurfaces();
             drawnow limitrate
+            app.finishPerformanceFrame(frameTimer, "PanSeconds");
         end
 
         function translateSelectedLayerByPixelDelta(app, pixelDelta)
@@ -3755,8 +3807,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function center = layerMeshCenter(app, layer, plane)
-            mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                layer, plane, app.Scene.renderOrigin);
+            mesh = app.buildInstrumentedLayerMesh(layer, plane);
             center = [mean(mesh.X, "all"); ...
                 mean(mesh.Y, "all"); mean(mesh.Z, "all")];
         end
@@ -3924,6 +3975,7 @@ classdef ProjectionViewerApp < handle
             if layer.Alpha == alpha
                 return
             end
+            frameTimer = app.beginPerformanceFrame();
             layer.Alpha = alpha;
             app.Scene.layers(layerIndex) = layer;
             app.setLayerSurfaceAlpha(layerIndex, alpha);
@@ -3933,9 +3985,11 @@ classdef ProjectionViewerApp < handle
             app.updateLabels(app.ProjectionTipDegrees, ...
                 app.ProjectionTiltDegrees, app.ViewTwistDegrees, alpha);
             drawnow limitrate
+            app.finishPerformanceFrame(frameTimer, "AlphaSeconds");
         end
 
         function updateProjection(app, tipDegrees, tiltDegrees, alpha, meshSamplings)
+            frameTimer = app.beginPerformanceFrame();
             selectedLayerIndex = app.SelectedLayerIndex;
             if nargin < 5
                 meshSamplings = app.DefaultMeshSampling;
@@ -3966,8 +4020,7 @@ classdef ProjectionViewerApp < handle
                     continue
                 end
 
-                mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                    layer, plane, app.Scene.renderOrigin);
+                mesh = app.buildInstrumentedLayerMesh(layer, plane);
                 app.updateSurfaceFromMesh(layerIndex, mesh);
                 if layerIndex == selectedLayerIndex
                     app.CurrentMesh = mesh;
@@ -3980,6 +4033,7 @@ classdef ProjectionViewerApp < handle
                 app.refreshAlignmentOverlays();
             end
             drawnow limitrate
+            app.finishPerformanceFrame(frameTimer, "ProjectionSeconds");
         end
 
         function refreshProjectionSurfaces(app, meshSamplings)
@@ -4003,8 +4057,7 @@ classdef ProjectionViewerApp < handle
                     continue
                 end
 
-                mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                    layer, plane, app.Scene.renderOrigin);
+                mesh = app.buildInstrumentedLayerMesh(layer, plane);
                 app.updateSurfaceFromMesh(layerIndex, mesh);
                 if layerIndex == app.SelectedLayerIndex
                     app.CurrentMesh = mesh;
@@ -4207,8 +4260,7 @@ classdef ProjectionViewerApp < handle
                         layer.CurrentProjectionPlane = plane;
                         layer.MeshSampling = app.DefaultMeshSampling(layerIndex);
                         try
-                            mesh = ProjectionMeshBuilder.buildLayerMesh( ...
-                                layer, plane, app.Scene.renderOrigin);
+                            mesh = app.buildInstrumentedLayerMesh(layer, plane);
                         catch ME
                             if app.isPreviewBoundsIntersectionError(ME)
                                 continue
@@ -4467,6 +4519,111 @@ classdef ProjectionViewerApp < handle
             modes = string([app.Scene.layers(visibleMask).BlendMode]);
         end
 
+        function runtime = viewerPerformanceRuntimeState(app)
+            layerCount = numel(app.Scene.layers);
+            imageSizes = zeros(layerCount, 3);
+            currentLevelIndices = zeros(1, layerCount);
+            currentDownsamples = ones(1, layerCount);
+            currentTileCounts = zeros(1, layerCount);
+            fullLevelCandidateCounts = zeros(1, layerCount);
+            visibleSurfaceCount = 0;
+            visibleTileSurfaceCount = 0;
+            visibleTexturePixels = 0;
+            visibleTextureBytes = 0;
+
+            for layerIndex = 1:layerCount
+                imageData = app.Scene.layers(layerIndex).Image;
+                imageSizes(layerIndex, :) = [size(imageData, 1), ...
+                    size(imageData, 2), size(imageData, 3)];
+                tiles = app.currentPreviewTilesForLayer(layerIndex);
+                currentTileCounts(layerIndex) = numel(tiles);
+                if ~isempty(tiles)
+                    currentLevelIndices(layerIndex) = tiles(1).LevelIndex;
+                    currentDownsamples(layerIndex) = tiles(1).Downsample;
+                    levelSize = app.PreviewPyramids{layerIndex}.Levels( ...
+                        tiles(1).LevelIndex).ImageSize;
+                    tileSize = app.PreviewTilingOptions.TileSize;
+                    fullLevelCandidateCounts(layerIndex) = ...
+                        prod(ceil(double(levelSize) / tileSize));
+                elseif ~app.usesTiledPreview(layerIndex)
+                    currentLevelIndices(layerIndex) = 1;
+                    fullLevelCandidateCounts(layerIndex) = 1;
+                end
+
+                surfaceHandles = app.validLayerSurfaces(layerIndex);
+                for surfaceIndex = 1:numel(surfaceHandles)
+                    surfaceHandle = surfaceHandles(surfaceIndex);
+                    if string(surfaceHandle.Visible) ~= "on"
+                        continue
+                    end
+                    visibleSurfaceCount = visibleSurfaceCount + 1;
+                    if string(surfaceHandle.Tag) == ...
+                            "ProjectionViewerPreviewTileSurface"
+                        visibleTileSurfaceCount = visibleTileSurfaceCount + 1;
+                    end
+                    texture = surfaceHandle.CData;
+                    visibleTexturePixels = visibleTexturePixels + ...
+                        size(texture, 1) * size(texture, 2);
+                    visibleTextureBytes = visibleTextureBytes + ...
+                        app.arrayBytes(texture);
+                end
+            end
+
+            runtime = struct();
+            runtime.LayerCount = layerCount;
+            runtime.ImageSizes = imageSizes;
+            runtime.VisibleLayerCount = nnz([app.Scene.layers.Visible]);
+            runtime.CameraViewAngleDegrees = app.Axes.CameraViewAngle;
+            runtime.DisplayTileSize = app.PreviewTilingOptions.TileSize;
+            runtime.CurrentLevelIndices = currentLevelIndices;
+            runtime.CurrentDownsamples = currentDownsamples;
+            runtime.CurrentTileCounts = currentTileCounts;
+            runtime.FullLevelCandidateCounts = fullLevelCandidateCounts;
+            runtime.VisibleSurfaceCount = visibleSurfaceCount;
+            runtime.VisibleTileSurfaceCount = visibleTileSurfaceCount;
+            runtime.VisibleTexturePixels = visibleTexturePixels;
+            runtime.VisibleTextureBytes = visibleTextureBytes;
+        end
+
+        function bytes = arrayBytes(~, value)
+            switch class(value)
+                case {"logical", "uint8", "int8"}
+                    bytesPerElement = 1;
+                case {"uint16", "int16"}
+                    bytesPerElement = 2;
+                case {"uint32", "int32", "single"}
+                    bytesPerElement = 4;
+                case {"uint64", "int64", "double"}
+                    bytesPerElement = 8;
+                otherwise
+                    info = whos("value");
+                    bytes = double(info.bytes);
+                    return
+            end
+            bytes = double(numel(value)) * bytesPerElement;
+        end
+
+        function frameTimer = beginPerformanceFrame(app)
+            app.PerformanceMonitor.increment("FrameRequests");
+            frameTimer = tic;
+        end
+
+        function finishPerformanceFrame(app, frameTimer, timingName)
+            durationSeconds = toc(frameTimer);
+            app.PerformanceMonitor.increment("RenderedFrames");
+            app.PerformanceMonitor.recordTiming("FrameSeconds", durationSeconds);
+            app.PerformanceMonitor.recordTiming(timingName, durationSeconds);
+        end
+
+        function mesh = buildInstrumentedLayerMesh(app, layer, plane)
+            meshTimer = tic;
+            app.PerformanceMonitor.increment("MeshBuilds");
+            mesh = ProjectionMeshBuilder.buildLayerMesh( ...
+                layer, plane, app.Scene.renderOrigin);
+            app.PerformanceMonitor.recordTiming( ...
+                "MeshBuildSeconds", toc(meshTimer));
+        end
+
         function toggleCrosshair(app)
             app.setCrosshairEnabled(~app.IsCrosshairEnabled);
         end
@@ -4478,15 +4635,21 @@ classdef ProjectionViewerApp < handle
         end
 
         function updateCrosshair(app)
+            crosshairTimer = tic;
+            app.PerformanceMonitor.increment("CrosshairUpdates");
             if isempty(app.CrosshairHorizontal) || ...
                     ~isvalid(app.CrosshairHorizontal) || ...
                     isempty(app.CrosshairVertical) || ...
                     ~isvalid(app.CrosshairVertical)
+                app.PerformanceMonitor.recordTiming( ...
+                    "CrosshairSeconds", toc(crosshairTimer));
                 return
             end
 
             if ~app.IsCrosshairEnabled || ~app.isPointerInAxes()
                 app.hideCrosshair();
+                app.PerformanceMonitor.recordTiming( ...
+                    "CrosshairSeconds", toc(crosshairTimer));
                 return
             end
 
@@ -4520,6 +4683,8 @@ classdef ProjectionViewerApp < handle
             app.CrosshairHorizontal.Visible = "on";
             app.CrosshairVertical.Visible = "on";
             app.raiseCrosshairOverlay();
+            app.PerformanceMonitor.recordTiming( ...
+                "CrosshairSeconds", toc(crosshairTimer));
         end
 
         function hideCrosshair(app)

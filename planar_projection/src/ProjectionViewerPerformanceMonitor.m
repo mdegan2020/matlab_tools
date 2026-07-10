@@ -1,0 +1,166 @@
+classdef ProjectionViewerPerformanceMonitor < handle
+    %ProjectionViewerPerformanceMonitor Bounded runtime-only viewer metrics.
+
+    properties (SetAccess = private)
+        Counters struct
+        TimingSamples struct
+        TimingCounts struct
+        TimingTotals struct
+        TimingMaximums struct
+        ResetTimer
+    end
+
+    properties (SetAccess = immutable)
+        MaxTimingSamples double
+    end
+
+    methods
+        function monitor = ProjectionViewerPerformanceMonitor(maxTimingSamples)
+            if nargin < 1
+                maxTimingSamples = 2048;
+            end
+            monitor.MaxTimingSamples = ...
+                ProjectionViewerPerformanceMonitor.validateSampleLimit( ...
+                maxTimingSamples);
+            monitor.reset();
+        end
+
+        function reset(monitor)
+            %reset Clear all recorded counters and timing samples.
+            monitor.Counters = ProjectionViewerPerformanceMonitor.emptyCounters();
+            monitor.TimingSamples = struct();
+            monitor.TimingCounts = struct();
+            monitor.TimingTotals = struct();
+            monitor.TimingMaximums = struct();
+            monitor.ResetTimer = tic;
+        end
+
+        function increment(monitor, name, amount)
+            %increment Add a nonnegative amount to a named counter.
+            if nargin < 3
+                amount = 1;
+            end
+            name = ProjectionViewerPerformanceMonitor.validateMetricName(name);
+            amount = ProjectionViewerPerformanceMonitor.validateAmount(amount);
+            if ~isfield(monitor.Counters, name)
+                monitor.Counters.(name) = 0;
+            end
+            monitor.Counters.(name) = monitor.Counters.(name) + amount;
+        end
+
+        function recordTiming(monitor, name, durationSeconds)
+            %recordTiming Record one bounded timing observation.
+            name = ProjectionViewerPerformanceMonitor.validateMetricName(name);
+            durationSeconds = ...
+                ProjectionViewerPerformanceMonitor.validateDuration( ...
+                durationSeconds);
+            if ~isfield(monitor.TimingSamples, name)
+                monitor.TimingSamples.(name) = zeros(1, 0);
+                monitor.TimingCounts.(name) = 0;
+                monitor.TimingTotals.(name) = 0;
+                monitor.TimingMaximums.(name) = 0;
+            end
+
+            samples = monitor.TimingSamples.(name);
+            samples(end + 1) = durationSeconds;
+            if numel(samples) > monitor.MaxTimingSamples
+                samples = samples(end - monitor.MaxTimingSamples + 1:end);
+            end
+            monitor.TimingSamples.(name) = samples;
+            monitor.TimingCounts.(name) = monitor.TimingCounts.(name) + 1;
+            monitor.TimingTotals.(name) = ...
+                monitor.TimingTotals.(name) + durationSeconds;
+            monitor.TimingMaximums.(name) = max( ...
+                monitor.TimingMaximums.(name), durationSeconds);
+        end
+
+        function snapshot = snapshot(monitor)
+            %snapshot Return compact counter and timing summaries.
+            snapshot = struct();
+            snapshot.Counters = monitor.Counters;
+            snapshot.Timings = monitor.summarizeTimings();
+            snapshot.ElapsedSeconds = toc(monitor.ResetTimer);
+            snapshot.MaxTimingSamples = monitor.MaxTimingSamples;
+        end
+    end
+
+    methods (Access = private)
+        function summaries = summarizeTimings(monitor)
+            summaries = struct();
+            names = fieldnames(monitor.TimingSamples);
+            for k = 1:numel(names)
+                name = names{k};
+                samples = sort(monitor.TimingSamples.(name));
+                sampleCount = numel(samples);
+                medianIndex = max(1, ceil(0.5 * sampleCount));
+                p95Index = max(1, ceil(0.95 * sampleCount));
+                summaries.(name) = struct( ...
+                    Count=monitor.TimingCounts.(name), ...
+                    RetainedSampleCount=sampleCount, ...
+                    TotalSeconds=monitor.TimingTotals.(name), ...
+                    MedianSeconds=samples(medianIndex), ...
+                    P95Seconds=samples(p95Index), ...
+                    MaximumSeconds=monitor.TimingMaximums.(name));
+            end
+        end
+    end
+
+    methods (Static, Access = private)
+        function counters = emptyCounters()
+            counters = struct( ...
+                FrameRequests=0, ...
+                RenderedFrames=0, ...
+                DroppedRequests=0, ...
+                CoalescedRequests=0, ...
+                TileRefreshes=0, ...
+                LodTransitions=0, ...
+                SuppressedLodTransitions=0, ...
+                TileCandidates=0, ...
+                TileCacheHits=0, ...
+                TileCacheMisses=0, ...
+                TexturePreparations=0, ...
+                PreparedTextureBytes=0, ...
+                TextureUploadBytes=0, ...
+                MeshBuilds=0, ...
+                SurfaceCreations=0, ...
+                SurfaceDeletions=0, ...
+                CrosshairUpdates=0, ...
+                OverlayRestacks=0);
+        end
+
+        function name = validateMetricName(name)
+            name = char(string(name));
+            if ~isvarname(name)
+                error("ProjectionViewerPerformanceMonitor:invalidMetricName", ...
+                    "Metric names must be valid MATLAB field names.");
+            end
+        end
+
+        function amount = validateAmount(amount)
+            if ~isnumeric(amount) || ~isscalar(amount) || ...
+                    ~isfinite(amount) || amount < 0
+                error("ProjectionViewerPerformanceMonitor:invalidAmount", ...
+                    "Counter amounts must be nonnegative finite scalars.");
+            end
+            amount = double(amount);
+        end
+
+        function durationSeconds = validateDuration(durationSeconds)
+            if ~isnumeric(durationSeconds) || ~isscalar(durationSeconds) || ...
+                    ~isfinite(durationSeconds) || durationSeconds < 0
+                error("ProjectionViewerPerformanceMonitor:invalidDuration", ...
+                    "Timing durations must be nonnegative finite scalars.");
+            end
+            durationSeconds = double(durationSeconds);
+        end
+
+        function limit = validateSampleLimit(limit)
+            if ~isnumeric(limit) || ~isscalar(limit) || ~isfinite(limit) || ...
+                    limit < 1 || fix(limit) ~= limit
+                error("ProjectionViewerPerformanceMonitor:invalidSampleLimit", ...
+                    "The timing sample limit must be a positive integer.");
+            end
+            limit = double(limit);
+        end
+    end
+end

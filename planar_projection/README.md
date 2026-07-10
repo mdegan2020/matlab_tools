@@ -20,6 +20,7 @@ src/ProjectionMeshBuilder.m     Pure sampled projection mesh builder
 src/ProjectionPreviewPyramid.m  Display-only viewer preview pyramid/tile helper
 src/ProjectionReadbackRenderer.m Headless frame-camera readback prototype
 src/ProjectionViewerApp.m       Programmatic interactive preview app
+src/ProjectionViewerPerformanceMonitor.m Bounded runtime viewer work metrics
 src/ProjectionViewerState.m     JSON-serializable viewer state and scene-apply helpers
 src/ProjectionAlignment*.m      Feature-based alignment models, matching, solving, and runner
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
@@ -36,8 +37,11 @@ runProjectionViewerPrototype.m  Launcher for the local prototype TIFF
 runSyntheticAlignmentPrototype.m Launcher for red/blue synthetic alignment scenes
 validateProjectionBackendJob.m  Validate backend jobs without rendering
 scripts/backend_interactive_evaluation.m Sectioned backend evaluation script
+scripts/viewer_performance_evaluation.m Repeatable viewer interaction benchmark
 docs/alignment_workflow_hardening_plan.md Real-data GUI alignment hardening plan
+docs/performance_optimization_workplan.md Viewer/backend optimization packs
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
+artifacts/viewer_performance/ Ignored viewer benchmark output directory
 runTests.m                      Simple test runner
 buildfile.m                     MATLAB buildtool tasks
 ```
@@ -153,6 +157,31 @@ buildtool coverage
 ```
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise the public API with deterministic numeric examples.
+
+## Viewer Performance Evaluation
+
+The viewer exposes bounded, runtime-only work diagnostics without adding
+graphics handles or caches to serializable scene/layer/source state:
+
+```matlab
+diagnostics = app.performanceDiagnostics();
+app.resetPerformanceDiagnostics();
+```
+
+Run the repeatable alpha, crosshair, twist, pan, LOD-boundary zoom, WASD, and
+OPK scenarios with:
+
+```matlab
+summary = viewer_performance_evaluation;
+```
+
+The evaluation uses local prototype TIFFs when available and otherwise creates
+a deterministic single-channel fixture. Pass `UseSynthetic=true` to force the
+synthetic path. Slow, fast, and reversing LOD-boundary scenarios default to the
+`15.0`/`14.5` degree audit boundary and can be configured with
+`LodBoundaryAngles`. Machine-specific MAT/JSON/CSV output is written beneath
+the ignored `artifacts/viewer_performance` directory. Timing values are reports,
+not pass/fail thresholds; automated tests assert structural work counts.
 
 ## Projection Viewer Prototype
 

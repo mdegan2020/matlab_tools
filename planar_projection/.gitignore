@@ -10,6 +10,8 @@ artifacts/backend_evaluation/*
 !artifacts/backend_evaluation/.gitkeep
 artifacts/viewer_big_data_profile/*
 !artifacts/viewer_big_data_profile/.gitkeep
+artifacts/viewer_performance/*
+!artifacts/viewer_performance/.gitkeep
 
 # Local development notes
 tracked_issues.md

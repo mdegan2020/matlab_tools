@@ -1,8 +1,8 @@
 # Viewer And Backend Performance Optimization Workplan
 
 This document captures the July 2026 performance and scalability audit of the
-MATLAB planar projection viewer and backend. It is a design and implementation
-workplan, not a record of completed optimization work.
+MATLAB planar projection viewer and backend and tracks the resulting
+implementation packs.
 
 The immediate motivation was unexpectedly chunky interaction when changing
 layer alpha, adjusting camera twist, or enabling and moving the crosshair. The
@@ -11,13 +11,15 @@ expected `15000 x 10000` through `30000 x 20000` source and output sizes.
 
 ## Status
 
-The audit and local measurements are complete. No performance changes described
-here have been implemented yet.
+The audit and local measurements are complete. Performance implementation is in
+progress and was explicitly prioritized on July 10, 2026. Viewer Performance
+Pack 0 is complete: the app now exposes bounded runtime diagnostics and the
+repeatable evaluation harness exercises alpha, crosshair, twist, pan,
+slow/fast/reversing LOD-boundary zoom, WASD, and OPK scenarios. Viewer
+Performance Pack 1 is next.
 
-The current selected feature tree remains Alignment Workflow Hardening until the
-user explicitly reprioritizes work. If performance work is selected first, use
-the milestone order in this document and commit each coherent, validated pack
-separately.
+Use the pack order in this document and commit and push each coherent, validated
+pack separately.
 
 ## Non-Negotiable Contracts
 
@@ -694,6 +696,14 @@ identifiers established when the source is loaded.
 ## Proposed Viewer Performance Packs
 
 ### Viewer Performance Pack 0: Measurement Harness
+
+Status: complete on July 10, 2026.
+
+Implemented by `ProjectionViewerPerformanceMonitor`, the public
+`performanceDiagnostics`/`resetPerformanceDiagnostics` app methods, and
+`scripts/viewer_performance_evaluation.m`. Timing samples are bounded, counters
+remain runtime-only, and automated tests use structural work assertions rather
+than machine-specific elapsed-time limits.
 
 Deliverables:
 
