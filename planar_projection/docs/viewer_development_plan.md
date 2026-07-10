@@ -782,6 +782,12 @@ Implementation status:
   coplanarity filtering, an approved separate Alignment Workbench, balanced
   common/differential network solving, an `epipolarCoplanarity` loss,
   Shift+left common-anchor drag, and representative real-data validation.
+- Dense Surface Pack 1 is complete. From a previewed or applied selected-pair
+  alignment, the Workbench can run CPU semi-global matching on fresh bounded
+  alignment working images, map dense correspondences back to full-source
+  observations, and triangulate corrected ray pairs into an analysis-only
+  metric height surface. The first-pass contract and limitations are recorded
+  in `docs/dense_surface_feature_pack.md`.
 - Real-Data Reliability Packs 0-1 are complete. Stable layer IDs now flow through
   viewer state, alignment requests/schedules/working images, match pairs,
   solver corrections, and backend payloads. A non-destructive raw-match ledger

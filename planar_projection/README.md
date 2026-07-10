@@ -25,6 +25,7 @@ src/ProjectionViewerLruCache.m  Byte-bounded runtime prepared-tile cache
 src/ProjectionViewerPerformanceMonitor.m Bounded runtime viewer work metrics
 src/ProjectionViewerState.m     JSON-serializable viewer state and scene-apply helpers
 src/ProjectionAlignment*.m      Feature-based alignment models, matching, solving, and runner
+src/ProjectionDenseSurface*.m   Analysis-only SGM extraction and result viewers
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionBackendGpuSupport.m Backend optional gpuArray capability checks
 src/ProjectionBackendCustomGpuKernelPlan.m Backend custom GPU kernel assessment
@@ -44,6 +45,7 @@ scripts/alignment_reliability_validation.m Consolidated synthetic alignment matr
 docs/alignment_workflow_hardening_plan.md Real-data GUI alignment hardening plan
 docs/alignment_operator_guide.md Staged workflow and failure-recovery guide
 docs/alignment_reliability_validation_report.md Pack 8 reference results and remaining gate
+docs/dense_surface_feature_pack.md Dense stereo surface scope, workflow, and limitations
 docs/performance_optimization_workplan.md Viewer/backend optimization packs
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
 artifacts/viewer_performance/ Ignored viewer benchmark output directory
@@ -426,6 +428,14 @@ Core controls:
   revert updates. Alignment-panel overlay toggles show accepted lines and
   feature points by default, with optional faint rejected matches and post-solve
   worst-residual highlights.
+  After Preview or Apply, the selected pair's `Dense surface` action renders
+  fresh bounded alignment working images, estimates dense correspondences with
+  CPU `disparitySGM`, and triangulates the corresponding corrected source rays.
+  It opens a masked intensity image and a metric 3-D surface whose Z coordinate
+  is height above the current projection plane. The result and its graphics are
+  runtime analysis products only; they are not stored in scene/viewer state and
+  never enter backend rendering. See `docs/dense_surface_feature_pack.md` for
+  the initial rectification assumptions and quality limitations.
   Overlay clicks select the nearest match-table row; Delete marks selected
   rows as session-local deleted observations, and Undo restores the latest
   curation or common-anchor adjustment from a session-local stack. A committed

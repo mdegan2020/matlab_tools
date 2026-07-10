@@ -70,6 +70,8 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentDeleteMatchButton");
             undoCurationButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentUndoCurationButton");
+            denseSurfaceButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDenseSurfaceButton");
             matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentMatchButton");
             filterButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -128,6 +130,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyTrue(featureOverlayCheckBox.Value);
             testCase.verifyEqual(string(deleteMatchButton.Enable), "on");
             testCase.verifyEqual(string(undoCurationButton.Enable), "on");
+            testCase.verifyEqual(string(denseSurfaceButton.Enable), "off");
             testCase.verifyEqual(string(matchButton.Enable), "on");
             testCase.verifyEqual(string(filterButton.Enable), "off");
             testCase.verifyEqual(string(solveButton.Enable), "off");
@@ -310,6 +313,8 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentApplyButton");
             revertButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentRevertButton");
+            denseSurfaceButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDenseSurfaceButton");
             clearOverlaysButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentClearOverlaysButton");
             clearOverlaysMenuItem = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -332,6 +337,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(previewButton.Enable), "off");
             testCase.verifyEqual(string(applyButton.Enable), "off");
             testCase.verifyEqual(string(revertButton.Enable), "off");
+            testCase.verifyEqual(string(denseSurfaceButton.Enable), "off");
             testCase.verifyTrue(contains(string(statusLabel.Text), ...
                 "Ready to solve"));
             testCase.verifyTrue(diagnosticsAfterMatch.Stage.HasRequest);
@@ -369,6 +375,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(previewButton.Enable), "on");
             testCase.verifyEqual(string(applyButton.Enable), "on");
             testCase.verifyEqual(string(revertButton.Enable), "on");
+            testCase.verifyEqual(string(denseSurfaceButton.Enable), "off");
             testCase.verifyTrue(contains(string(statusLabel.Text), "RMS"));
             testCase.verifyTrue(diagnosticsAfterSolve.Stage.HasSolveResult);
             testCase.verifyEqual( ...
@@ -423,6 +430,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyLessThan(changedLayerCount, statePreview.LayerCount);
             testCase.verifyEqual( ...
                 previewPerformance.Counters.SampleFcnCalls, 0);
+            testCase.verifyEqual(string(denseSurfaceButton.Enable), "on");
 
             clearOverlaysButton.ButtonPushedFcn(clearOverlaysButton, struct());
             drawnow
@@ -443,6 +451,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets(stateApplied), ...
                 ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets(statePreview), ...
                 AbsTol=ProjectionViewerAlignmentWorkflowTest.Tol);
+            testCase.verifyEqual(string(denseSurfaceButton.Enable), "on");
 
             revertButton.ButtonPushedFcn(revertButton, struct());
             drawnow
@@ -451,6 +460,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets(stateReverted), ...
                 ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets(stateBefore), ...
                 AbsTol=ProjectionViewerAlignmentWorkflowTest.Tol);
+            testCase.verifyEqual(string(denseSurfaceButton.Enable), "off");
         end
 
         function testSolveReusesStoredMatchesAfterPairDisable(testCase)

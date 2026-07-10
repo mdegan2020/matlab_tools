@@ -145,6 +145,7 @@ classdef ProjectionViewerApp < handle
         AlignmentFeatureOverlayCheckBox matlab.ui.control.StateButton
         AlignmentDeleteMatchButton matlab.ui.control.Button
         AlignmentUndoCurationButton matlab.ui.control.Button
+        AlignmentDenseSurfaceButton matlab.ui.control.Button
         AlignmentStatusLabel matlab.ui.control.Label
         AlignmentPairTable matlab.ui.control.Table
         AlignmentMatchTable matlab.ui.control.Table
@@ -157,6 +158,9 @@ classdef ProjectionViewerApp < handle
         AlignmentRoiStartPoint double = [NaN NaN]
         AlignmentAnchorDragState struct = struct()
         AlignmentAnchorDragCancelled logical = false
+        DenseSurfaceHandles struct = struct()
+        DenseSurfaceDiagnostics struct = struct()
+        DenseSurfaceRunning logical = false
     end
 
     properties (Access = private, Dependent)
@@ -240,6 +244,7 @@ classdef ProjectionViewerApp < handle
             app.clearPreviewSampledGeometryCache();
             app.clearAlignmentOverlays();
             app.clearAlignmentRoi(false);
+            app.closeDenseSurfaceWindows();
             if ~isempty(app.AlignmentWorkbenchFigure) && ...
                     isvalid(app.AlignmentWorkbenchFigure)
                 delete(app.AlignmentWorkbenchFigure);
@@ -1055,7 +1060,7 @@ classdef ProjectionViewerApp < handle
                 Tag="ProjectionViewerAlignmentClearOverlaysButton", ...
                 ButtonPushedFcn=@(~, ~) app.clearAlignmentOverlaysFromControls());
             app.AlignmentClearOverlaysButton.Layout.Row = 4;
-            app.AlignmentClearOverlaysButton.Layout.Column = [14 15];
+            app.AlignmentClearOverlaysButton.Layout.Column = 16;
 
             app.AlignmentAcceptedOverlayCheckBox = uibutton( ...
                 app.AlignmentGrid, "state", Text="Accepted", Value=true, ...
@@ -1098,6 +1103,15 @@ classdef ProjectionViewerApp < handle
                 ButtonPushedFcn=@(~, ~) app.undoAlignmentCuration());
             app.AlignmentUndoCurationButton.Layout.Row = 4;
             app.AlignmentUndoCurationButton.Layout.Column = 13;
+
+            app.AlignmentDenseSurfaceButton = uibutton(app.AlignmentGrid, ...
+                Text="Dense surface", Enable="off", ...
+                Tooltip="Run CPU semi-global matching on the current aligned pair", ...
+                Tag="ProjectionViewerAlignmentDenseSurfaceButton", ...
+                ButtonPushedFcn=@(~, ~) ...
+                app.extractDenseSurfaceFromAlignment());
+            app.AlignmentDenseSurfaceButton.Layout.Row = 4;
+            app.AlignmentDenseSurfaceButton.Layout.Column = [14 15];
 
             app.AlignmentStatusLabel = uilabel(app.AlignmentGrid, ...
                 Text="Alignment not run", ...
@@ -1441,6 +1455,137 @@ classdef ProjectionViewerApp < handle
             app.setAlignmentStatus("Reverted alignment preview.");
         end
 
+        function extractDenseSurfaceFromAlignment(app)
+            if ~app.hasDenseSurfaceInput()
+                app.setAlignmentStatus( ...
+                    "Preview or apply an aligned pair with at least three accepted matches first.");
+                return
+            end
+            app.DenseSurfaceRunning = true;
+            app.AlignmentDenseSurfaceButton.Enable = "off";
+            cleanup = onCleanup(@() app.finishDenseSurfaceRun());
+            app.setAlignmentStatus("Rendering the current aligned stereo pair...");
+            drawnow limitrate
+            try
+                [pairMatch, pair] = app.currentDenseSurfacePairMatch();
+                options = app.currentAlignmentOptions();
+                options.Scheduling.Strategy = "twoImage";
+                options.Scheduling.ReferenceLayerIndex = pair(2);
+                request = ProjectionAlignmentRequest.validate(struct( ...
+                    Scene=app.Scene, LayerIndices=pair, ...
+                    ReferenceLayerIndex=pair(2), AnalysisBands=[1 1], ...
+                    Options=options));
+                workingImages = app.renderAlignmentWorkingImages( ...
+                    request, app.alignmentRenderOptions());
+                pairWorking = workingImages.PairWorkingImages(1);
+                app.setAlignmentStatus("Running CPU semi-global matching...");
+                drawnow limitrate
+                result = ProjectionDenseSurfaceExtractor.extract( ...
+                    app.Scene, pairWorking, pairMatch);
+                app.closeDenseSurfaceWindows();
+                app.DenseSurfaceHandles = ...
+                    ProjectionDenseSurfaceViewer.show(result);
+                app.DenseSurfaceDiagnostics = result.Diagnostics;
+                app.DenseSurfaceDiagnostics.Status = result.Status;
+                app.setAlignmentStatus(sprintf( ...
+                    "Dense surface: %d points, median height %.4g m, %.3g s.", ...
+                    result.Diagnostics.SurfacePointCount, ...
+                    result.Diagnostics.HeightMedianMeters, ...
+                    result.Diagnostics.TotalSeconds));
+            catch ME
+                app.DenseSurfaceDiagnostics = struct(Status="failed", ...
+                    Identifier=string(ME.identifier), ...
+                    Message=string(ME.message));
+                app.setAlignmentStatus( ...
+                    "Dense surface failed: " + string(ME.message));
+            end
+            clear cleanup
+        end
+
+        function [pairMatch, pair] = currentDenseSurfacePairMatch(app)
+            movingIndex = app.validAlignmentLayerValue( ...
+                app.AlignmentMovingDropDown.Value, numel(app.Scene.layers));
+            referenceIndex = app.validAlignmentLayerValue( ...
+                app.AlignmentReferenceDropDown.Value, 1);
+            pair = [movingIndex referenceIndex];
+            matches = app.alignmentAcceptedSolveMatches();
+            pairMatch = struct();
+            for k = 1:numel(matches.Matches)
+                candidatePair = ProjectionAlignmentLayerResolver.pairIndices( ...
+                    app.Scene, matches.Matches(k));
+                if isequal(candidatePair, pair)
+                    pairMatch = matches.Matches(k);
+                    break
+                end
+            end
+            if isempty(fieldnames(pairMatch))
+                error("ProjectionViewerApp:missingDenseSurfacePair", ...
+                    "The selected moving-to-reference pair has no accepted matches.");
+            end
+        end
+
+        function tf = hasDenseSurfaceInput(app)
+            tf = false;
+            capabilities = ProjectionDenseSurfaceExtractor.capabilities();
+            if ~capabilities.HasDisparitySgm || ...
+                    isempty(app.AlignmentMatchTable) || ...
+                    ~isvalid(app.AlignmentMatchTable) || ...
+                    ~app.hasFilteredAlignmentMatches()
+                return
+            end
+            state = app.AlignmentSession.diagnostics();
+            hasAlignedScene = any(state.Stage == ["previewed", "applied"]) || ...
+                state.ManualAdjustmentUndoCount > 0;
+            if ~hasAlignedScene
+                return
+            end
+            try
+                pairMatch = app.currentDenseSurfacePairMatch();
+                tf = pairMatch.Count >= 3;
+            catch
+                tf = false;
+            end
+        end
+
+        function refreshDenseSurfaceButton(app, state)
+            if isempty(app.AlignmentDenseSurfaceButton) || ...
+                    ~isvalid(app.AlignmentDenseSurfaceButton)
+                return
+            end
+            if nargin < 2
+                state = app.AlignmentSession.diagnostics();
+            end
+            capabilities = ProjectionDenseSurfaceExtractor.capabilities();
+            hasAlignedScene = any(state.Stage == ["previewed", "applied"]) || ...
+                state.ManualAdjustmentUndoCount > 0;
+            enabled = ~app.DenseSurfaceRunning && ...
+                capabilities.HasDisparitySgm && hasAlignedScene && ...
+                app.hasDenseSurfaceInput();
+            app.AlignmentDenseSurfaceButton.Enable = app.onOff(enabled);
+        end
+
+        function finishDenseSurfaceRun(app)
+            app.DenseSurfaceRunning = false;
+            app.refreshDenseSurfaceButton();
+        end
+
+        function closeDenseSurfaceWindows(app)
+            handles = app.DenseSurfaceHandles;
+            app.DenseSurfaceHandles = struct();
+            if ~isstruct(handles)
+                return
+            end
+            names = ["IntensityViewer", "SurfaceFigure"];
+            for name = names
+                if isfield(handles, name)
+                    graphicsHandle = handles.(name);
+                    if ~isempty(graphicsHandle) && isvalid(graphicsHandle)
+                        delete(graphicsHandle);
+                    end
+                end
+            end
+        end
+
         function layerIndices = changedProjectionLayerIndices(app, ...
                 previousScene, currentScene)
             changedMask = false(1, numel(currentScene.layers));
@@ -1670,6 +1815,7 @@ classdef ProjectionViewerApp < handle
                 numel(app.AlignmentSession.ManualAdjustmentHistory);
             stageDiagnostics.ManualAdjustmentUndoCount = ...
                 numel(app.AlignmentSession.ManualAdjustmentUndoStack);
+            stageDiagnostics.DenseSurface = app.DenseSurfaceDiagnostics;
             stageDiagnostics.LastManualAdjustment = struct();
             if ~isempty(app.AlignmentSession.ManualAdjustmentHistory)
                 stageDiagnostics.LastManualAdjustment = ...
@@ -2599,6 +2745,9 @@ classdef ProjectionViewerApp < handle
 
         function clearAlignmentComputationState(app)
             app.AlignmentSession.clearComputation();
+            app.DenseSurfaceDiagnostics = struct();
+            app.DenseSurfaceRunning = false;
+            app.closeDenseSurfaceWindows();
             app.updateAlignmentMatchTable([], []);
             app.clearSelectedAlignmentMatchOverlay();
             app.refreshAlignmentSessionIndicators();
@@ -2637,6 +2786,7 @@ classdef ProjectionViewerApp < handle
 
         function refreshAlignmentSessionIndicators(app)
             state = app.AlignmentSession.diagnostics();
+            app.refreshDenseSurfaceButton(state);
             if ~isempty(app.AlignmentStageLabel) && ...
                     isvalid(app.AlignmentStageLabel)
                 app.AlignmentStageLabel.Text = char("Stage: " + state.Stage);
