@@ -82,7 +82,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest fresh-class repository validation passes all 529 tests;
+- the latest fresh-class repository validation passes all 539 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -205,7 +205,44 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 506 passing tests with no failures or incomplete tests.
+baseline is 539 passing tests with no failures or incomplete tests.
+
+## Correction-Result SDK
+
+`ProjectionCorrectionSet` is the immutable, versioned network-level value for
+one correction generation. Records are keyed by stable `ViewId`/`PassId`, use
+authoritative radians and radians-squared, retain explicit OPK order/frame/sign/
+composition semantics, and distinguish parent-relative rotation increments from
+effective correction relative to base geometry. Exact lineage is stored as
+proper rotation matrices (`increment * parent = effective`); degree and
+degree-squared accessors are explicit conveniences.
+
+The legacy degree-based solver remains compatible. Headless callers can request
+the new value directly:
+
+```matlab
+correctionSet = ProjectionAlignmentOpkSolver.solveCorrectionSet( ...
+    scene, matchResult, alignmentOptions, ...
+    struct(GenerationId="adjustment-001"));
+
+omegaPhiKappaDegrees = correctionSet.attitudeDegrees("effective");
+compatibility = correctionSet.compatibility(scene);
+correctionSet.assertCompatible(scene); % rejects missing/pass-mismatched/stale views
+
+correctionSet.write("adjustment-001.json"); % portable, shape-preserving JSON
+correctionSet.write("adjustment-001.mat");
+restored = ProjectionCorrectionSet.read("adjustment-001.json");
+legacy = ProjectionCorrectionOpkAdapter.toLegacySolvedCorrections(restored);
+```
+
+`ProjectionGeometryFingerprint` hashes stable identity, source geometry,
+projection planes, and effective geometry corrections with canonical SHA-256;
+visibility, alpha, display imagery, and other presentation state are excluded.
+The OPK adapter retains solver/match/gauge/precision/configuration provenance,
+bounds, conditioning, priors, observability, failure reasons, typed future
+blocks, and an explicit unavailable-covariance reason when the legacy solver
+does not produce covariance. S1 is read/query/persistence-only; explicit
+accept/apply/revert/history transitions and callbacks remain the ordered S2 pack.
 
 ## Dense-Surface Synthetic Fixture
 

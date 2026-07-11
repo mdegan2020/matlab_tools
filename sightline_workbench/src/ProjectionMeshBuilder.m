@@ -34,6 +34,19 @@ classdef ProjectionMeshBuilder
                 SampledVectors=V);
         end
 
+        function [rotationMatrix, offsetsRadians] = ...
+                viewVectorRotation(layer, plane)
+            %viewVectorRotation Return the exact stored OPK active rotation.
+            if nargin < 2 || isempty(plane)
+                plane = ProjectionMeshBuilder.currentPlaneFromLayer(layer);
+            end
+            ProjectionMeshBuilder.validateLayer(layer);
+            PlanarProjection.validatePlane(plane);
+            [rotationMatrix, offsetsDegrees] = ...
+                ProjectionMeshBuilder.layerViewVectorRotation(layer, plane);
+            offsetsRadians = deg2rad(offsetsDegrees(:).');
+        end
+
         function mesh = buildLayerMeshFromSamples(layer, plane, ...
                 renderOrigin, sampledGeometry, options)
             %buildLayerMeshFromSamples Project caller-supplied source samples.

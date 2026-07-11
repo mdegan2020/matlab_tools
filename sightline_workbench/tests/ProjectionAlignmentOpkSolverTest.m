@@ -42,6 +42,29 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
                 abs(scene.layers(2).ViewVectorAngularOffsetsDegrees(1)));
         end
 
+        function testHeadlessSolveReturnsImmutableCorrectionSet(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
+            scene.layers(1).ViewId = "headless-view-1";
+            scene.layers(2).ViewId = "headless-view-2";
+            scene = ProjectionViewMetadata.ensureScene(scene);
+            correctionOptions = struct(GenerationId="headless-generation", ...
+                CreatedAt="2026-07-11T12:00:00.000Z");
+
+            correctionSet = ProjectionAlignmentOpkSolver.solveCorrectionSet( ...
+                scene, ProjectionAlignmentOpkSolverTest.makeMatchResult(), ...
+                ProjectionAlignmentOpkSolverTest.looseOptions(), ...
+                correctionOptions);
+
+            testCase.verifyClass(correctionSet, "ProjectionCorrectionSet");
+            testCase.verifyEqual( ...
+                correctionSet.GenerationId, "headless-generation");
+            testCase.verifyTrue(correctionSet.Failure.Valid);
+            testCase.verifyTrue(correctionSet.compatibility(scene).Compatible);
+            testCase.verifyEqual( ...
+                string({correctionSet.Views.ViewId}), ...
+                ProjectionViewMetadata.ids(scene));
+        end
+
         function testProjectionLossUsesObservationRaySamplerWithoutMesh(testCase)
             scene = ProjectionAlignmentOpkSolverTest.makePerturbedScene();
             scene = ProjectionAlignmentOpkSolverTest.invalidateMeshSampling(scene);

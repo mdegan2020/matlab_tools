@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 529/529 tests with zero
+- The latest fresh-class repository suite passes 539/539 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -60,6 +60,7 @@ As of July 11, 2026:
 | Multi-Image A3a-1 focus-aware keyboard mapping | Complete |
 | Multi-Image A3a-2 manual motion imagery | Complete |
 | Multi-Image A3b measured motion playback | Complete |
+| MATLAB SDK S1 immutable CorrectionSet | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -140,6 +141,18 @@ and visible texture memory are exposed through bounded performance diagnostics.
 An interaction sample retained one lookahead, built no meshes/tiles/surfaces,
 and held caches to 8,553 bytes while recording 30 pointer callbacks.
 
+MATLAB SDK S1 adds immutable `ProjectionCorrectionSet` generation values keyed
+by stable view/pass identity, complete legacy OPK convention metadata,
+authoritative radian/radian-squared fields with degree accessors, exact rotation
+composition lineage, typed extension blocks, provenance/diagnostics/failure
+data, and SHA-256 parent/corrected geometry fingerprints. Compatibility queries
+reject missing views, pass changes, and stale parent geometry before any future
+mutation. `ProjectionCorrectionOpkAdapter` bridges existing degree solver
+results in both directions; `solveCorrectionSet` is the new graphics-independent
+headless entry point. MAT and shape-preserving portable JSON round-trip exactly.
+Lifecycle mutation, history ownership, application/revert, and callbacks remain
+S2 and were intentionally not folded into this value-contract pack.
+
 ## Current Implementation Queue
 
 The completed read-only MATLAB SDK entry-point inventory, proposed reuse points,
@@ -147,8 +160,9 @@ and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The
 approved consolidated implementation queue is now
 `docs/multi_image_surface_reconstruction_workplan.md`. MI-0 through MI-3, A2
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
-A3b motion playback, and the SDK audit are complete; the next ordered pack is
-S1 immutable CorrectionSet. Correction SDK, global multi-image solving,
+A3b motion playback, S1 immutable CorrectionSet, and the SDK audit are complete;
+the next ordered pack is S2 correction application and notification. Correction
+SDK, global multi-image solving,
 precision validation,
 dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow
 in the explicit dependency order recorded there.

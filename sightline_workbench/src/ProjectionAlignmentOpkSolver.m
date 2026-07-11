@@ -69,6 +69,25 @@ classdef ProjectionAlignmentOpkSolver
             result = ProjectionAlignmentResult.validate(result);
         end
 
+        function correctionSet = solveCorrectionSet( ...
+                scene, matchResult, options, correctionOptions, runtimeControl)
+            %solveCorrectionSet Solve headlessly and return immutable SDK data.
+            if nargin < 3
+                options = struct();
+            end
+            if nargin < 4
+                correctionOptions = struct();
+            end
+            if nargin < 5
+                runtimeControl = struct();
+            end
+            result = ProjectionAlignmentOpkSolver.solve( ...
+                scene, matchResult, options, runtimeControl);
+            correctionSet = ...
+                ProjectionCorrectionOpkAdapter.fromAlignmentResult( ...
+                scene, result, correctionOptions);
+        end
+
         function alignedScene = applyCorrections(scene, result)
             %applyCorrections Return a scene with solved corrections applied.
             alignedScene = ProjectionAlignmentOpkSolver.setCorrections( ...

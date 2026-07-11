@@ -3,8 +3,9 @@
 Status: approved consolidated workplan. Backend Performance Packs 0-5, the
 dense-surface synthetic expansion, Multi-Image Foundation MI-0 through MI-3,
 A2 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion
-imagery, and A3b measured motion playback are complete. The read-only MATLAB SDK audit is also complete. The
-current fresh-class repository suite passes 529/529 tests. This
+imagery, A3b measured motion playback, and S1 immutable CorrectionSet are
+complete. The read-only MATLAB SDK audit is also complete. The current
+fresh-class repository suite passes 539/539 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1378,9 +1379,10 @@ These trees are coordinated but should remain separately reviewable.
    launch, solve, apply, export, and dense entry points were inventoried with
    versioning, headless behavior, conventions, and compatibility risks while
    preserving existing public API names.
-2. **S1 — Correction-result contract.** Add stable per-view/pass result values,
-   correction generations, OPK convention metadata, provenance, covariance and
-   diagnostics, plus query and portable round-trip APIs.
+2. **S1 — Correction-result contract — complete.** Stable per-view/pass
+   generation values include exact rotation lineage, complete OPK convention
+   metadata, geometry fingerprints/stale checks, provenance, covariance status,
+   diagnostics, MAT/portable JSON, legacy adapters, and a headless solve API.
 3. **S2 — Correction application and notification.** Validate and explicitly
    apply compatible result generations; distinguish proposed, accepted, and
    applied state; add optional embedding callbacks/events.
@@ -1435,7 +1437,7 @@ complete. The ordered implementation queue is:
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
 5. A3b motion playback and performance evidence — complete.
-6. S1 immutable `CorrectionSet`, MAT/JSON, stale protection, OPK adapter.
+6. S1 immutable `CorrectionSet`, MAT/JSON, stale protection, OPK adapter — complete.
 7. S2 callbacks and explicit apply/revert/generation lineage.
 8. A4 multi-view tracks and cycle diagnostics.
 9. A4 explainable pair graph and quality/max/all-pair controls.
