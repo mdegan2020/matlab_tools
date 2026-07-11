@@ -143,9 +143,13 @@ classdef ProjectionViewerApp < handle
         AlignmentPairStatusLabel matlab.ui.control.Label
         AlignmentPairEnabledCheckBox matlab.ui.control.StateButton
         AlignmentSoloPairCheckBox matlab.ui.control.StateButton
+        AlignmentPairViewButton matlab.ui.control.Button
+        AlignmentRestoreViewButton matlab.ui.control.Button
+        AlignmentFollowPairCheckBox matlab.ui.control.StateButton
         AlignmentSwapEyesButton matlab.ui.control.Button
         AlignmentResetEyesButton matlab.ui.control.Button
         AlignmentStereoEyeStatusLabel matlab.ui.control.Label
+        AlignmentPairViewStatusLabel matlab.ui.control.Label
         AlignmentPresetDropDown matlab.ui.control.DropDown
         AlignmentScopeDropDown matlab.ui.control.DropDown
         AlignmentDetectorDropDown matlab.ui.control.DropDown
@@ -176,6 +180,7 @@ classdef ProjectionViewerApp < handle
         AlignmentPairController
         StereoEyeController
         AlignmentSoloState struct = struct()
+        PairViewpointRuntime struct = struct()
         AlignmentOverlayLines = gobjects(0)
         AlignmentSelectedMatchOverlay = gobjects(0)
         AlignmentRoiHandle = []
@@ -250,6 +255,7 @@ classdef ProjectionViewerApp < handle
                 app.AlignmentPairController.selectViews( ...
                     viewIds(referenceIndex), viewIds(movingIndex));
             end
+            app.PairViewpointRuntime = app.defaultPairViewpointRuntime();
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
             app.initializePreviewPyramids();
@@ -329,6 +335,7 @@ classdef ProjectionViewerApp < handle
             app.cancelCameraReconciliation();
             [~, state] = ProjectionViewerState.applyToScene(app.Scene, state);
             app.applyViewerStateToScene(state);
+            app.PairViewpointRuntime = app.defaultPairViewpointRuntime();
             app.resetAlphaRuntimeState();
             app.refreshProjectionSurfaces(app.DefaultMeshSampling);
             app.configureFrameCamera();
@@ -397,6 +404,7 @@ classdef ProjectionViewerApp < handle
             diagnostics.EffectiveLayerVisibility = ...
                 app.effectiveLayerVisibilityMask();
             diagnostics.StereoEyes = app.activeStereoEyeAssignment();
+            diagnostics.PairViewpoint = app.pairViewpointDiagnostics();
 
             try
                 request = app.currentAlignmentRequest();
@@ -1233,10 +1241,10 @@ classdef ProjectionViewerApp < handle
                 Tag="ProjectionViewerAlignmentActivePairPanel");
             activePairPanel.Layout.Row = 2;
             activePairPanel.Layout.Column = [1 2];
-            activePairGrid = uigridlayout(activePairPanel, [2 10]);
+            activePairGrid = uigridlayout(activePairPanel, [2 14]);
             activePairGrid.RowHeight = {"fit", "fit"};
-            activePairGrid.ColumnWidth = {65, "1x", "1x", 60, 60, ...
-                90, 80, 80, 80, "1.3x"};
+            activePairGrid.ColumnWidth = {65, "1x", "1x", 55, 55, ...
+                85, 75, 90, 100, 105, 75, 75, "1.1x", "1.1x"};
             activePairGrid.Padding = [8 4 8 6];
             activePairGrid.ColumnSpacing = 8;
             app.AlignmentPreviousPairButton = uibutton(activePairGrid, ...
@@ -1279,30 +1287,54 @@ classdef ProjectionViewerApp < handle
                 ValueChangedFcn=@(~, ~) app.alignmentSoloPairChanged());
             app.AlignmentSoloPairCheckBox.Layout.Row = 2;
             app.AlignmentSoloPairCheckBox.Layout.Column = 7;
+            app.AlignmentPairViewButton = uibutton(activePairGrid, ...
+                Text="Pair viewpoint", ...
+                Tag="ProjectionViewerAlignmentPairViewButton", ...
+                ButtonPushedFcn=@(~, ~) app.applyActivePairViewpoint(true));
+            app.AlignmentPairViewButton.Layout.Row = 2;
+            app.AlignmentPairViewButton.Layout.Column = 8;
+            app.AlignmentRestoreViewButton = uibutton(activePairGrid, ...
+                Text="Restore viewpoint", ...
+                Tag="ProjectionViewerAlignmentRestoreViewButton", ...
+                ButtonPushedFcn=@(~, ~) app.restorePairViewpoint());
+            app.AlignmentRestoreViewButton.Layout.Row = 2;
+            app.AlignmentRestoreViewButton.Layout.Column = 9;
+            app.AlignmentFollowPairCheckBox = uibutton( ...
+                activePairGrid, "state", Text="Follow active pair", ...
+                Value=false, ...
+                Tag="ProjectionViewerAlignmentFollowPairCheckBox", ...
+                ValueChangedFcn=@(~, ~) app.followActivePairChanged());
+            app.AlignmentFollowPairCheckBox.Layout.Row = 2;
+            app.AlignmentFollowPairCheckBox.Layout.Column = 10;
             app.AlignmentSwapEyesButton = uibutton(activePairGrid, ...
                 Text="Swap eyes", ...
                 Tooltip="Manually swap left/right eyes for this pair", ...
                 Tag="ProjectionViewerAlignmentSwapEyesButton", ...
                 ButtonPushedFcn=@(~, ~) app.swapAlignmentStereoEyes());
             app.AlignmentSwapEyesButton.Layout.Row = 2;
-            app.AlignmentSwapEyesButton.Layout.Column = 8;
+            app.AlignmentSwapEyesButton.Layout.Column = 11;
             app.AlignmentResetEyesButton = uibutton(activePairGrid, ...
                 Text="Reset eyes", ...
                 Tooltip="Restore automatic geometric eye assignment", ...
                 Tag="ProjectionViewerAlignmentResetEyesButton", ...
                 ButtonPushedFcn=@(~, ~) app.resetAlignmentStereoEyes());
             app.AlignmentResetEyesButton.Layout.Row = 2;
-            app.AlignmentResetEyesButton.Layout.Column = 9;
+            app.AlignmentResetEyesButton.Layout.Column = 12;
             app.AlignmentPairStatusLabel = uilabel(activePairGrid, ...
                 Text="No active pair", ...
                 Tag="ProjectionViewerAlignmentPairStatusLabel");
             app.AlignmentPairStatusLabel.Layout.Row = 1;
-            app.AlignmentPairStatusLabel.Layout.Column = 10;
+            app.AlignmentPairStatusLabel.Layout.Column = 13;
             app.AlignmentStereoEyeStatusLabel = uilabel(activePairGrid, ...
                 Text="Eyes unavailable", ...
                 Tag="ProjectionViewerAlignmentStereoEyeStatusLabel");
             app.AlignmentStereoEyeStatusLabel.Layout.Row = 2;
-            app.AlignmentStereoEyeStatusLabel.Layout.Column = 10;
+            app.AlignmentStereoEyeStatusLabel.Layout.Column = 13;
+            app.AlignmentPairViewStatusLabel = uilabel(activePairGrid, ...
+                Text="Pair viewpoint unavailable", WordWrap="on", ...
+                Tag="ProjectionViewerAlignmentPairViewStatusLabel");
+            app.AlignmentPairViewStatusLabel.Layout.Row = [1 2];
+            app.AlignmentPairViewStatusLabel.Layout.Column = 14;
 
             setupPanel = uipanel(app.AlignmentGrid, ...
                 Title="1. Setup and matching inputs", ...
@@ -1552,6 +1584,7 @@ classdef ProjectionViewerApp < handle
                 app.applyAnaglyphPresentationOffsetDelta( ...
                     oldPresentationOffsets);
             end
+            app.followPairViewpointAfterNavigation();
             app.refreshAlignmentActivePairControls();
             app.refreshAlignmentOverlays(true);
             app.clearSelectedAlignmentMatchOverlay();
@@ -1569,6 +1602,7 @@ classdef ProjectionViewerApp < handle
                 app.AlignmentSoloPairCheckBox.Enable = "off";
                 app.AlignmentSwapEyesButton.Enable = "off";
                 app.AlignmentResetEyesButton.Enable = "off";
+                app.refreshAlignmentPairViewpointControls();
                 return
             end
             if pair.ViewsAvailable
@@ -1587,7 +1621,215 @@ classdef ProjectionViewerApp < handle
                 any(find(enabled) < pairIndex));
             app.AlignmentNextPairButton.Enable = app.onOff( ...
                 any(find(enabled) > pairIndex));
+            app.refreshAlignmentPairViewpointControls();
             app.refreshAlignmentStereoEyeStatus();
+        end
+
+        function followActivePairChanged(app)
+            runtime = app.PairViewpointRuntime;
+            runtime.FollowEnabled = ...
+                logical(app.AlignmentFollowPairCheckBox.Value);
+            runtime.SuspendedPairId = "";
+            app.PairViewpointRuntime = runtime;
+            app.refreshAlignmentPairViewpointStatus();
+        end
+
+        function followPairViewpointAfterNavigation(app)
+            runtime = app.PairViewpointRuntime;
+            pair = app.AlignmentPairController.currentPair();
+            if ~isfield(pair, "PairId")
+                return
+            end
+            pairId = string(pair.PairId);
+            pairChanged = pairId ~= runtime.LastSelectionPairId;
+            runtime.LastSelectionPairId = pairId;
+            if pairChanged
+                runtime.SuspendedPairId = "";
+            end
+            app.PairViewpointRuntime = runtime;
+            if pairChanged && runtime.FollowEnabled
+                app.applyActivePairViewpoint(false);
+            end
+        end
+
+        function applyActivePairViewpoint(app, captureRestore)
+            if nargin < 2
+                captureRestore = true;
+            end
+            plan = app.activePairViewpointPlan();
+            runtime = app.PairViewpointRuntime;
+            runtime.LastPlan = plan;
+            if ~plan.Available
+                app.PairViewpointRuntime = runtime;
+                app.refreshAlignmentPairViewpointControls(false);
+                app.setAlignmentStatus(plan.Explanation);
+                return
+            end
+            if (captureRestore || runtime.FollowEnabled) && ...
+                    isempty(fieldnames(runtime.RestoreCamera))
+                runtime.RestoreCamera = app.exportCameraState();
+            end
+            app.cancelCameraReconciliation();
+            cameraState = struct( ...
+                Position=(plan.Camera.PositionWorld - ...
+                app.Scene.renderOrigin).', ...
+                Target=(plan.Camera.TargetWorld - app.Scene.renderOrigin).', ...
+                UpVector=plan.Camera.UpVector.', ...
+                ViewAngle=plan.Camera.ViewAngle, Projection="orthographic");
+            app.applyCameraState(cameraState);
+            runtime.LastAppliedPairId = plan.PairId;
+            runtime.SuspendedPairId = "";
+            runtime.LastSelectionPairId = plan.PairId;
+            app.PairViewpointRuntime = runtime;
+            drawnow limitrate
+            app.scheduleCameraReconciliation();
+            app.refreshAlignmentPairViewpointControls(false);
+        end
+
+        function restorePairViewpoint(app)
+            runtime = app.PairViewpointRuntime;
+            if isempty(fieldnames(runtime.RestoreCamera))
+                app.refreshAlignmentPairViewpointStatus();
+                return
+            end
+            app.cancelCameraReconciliation();
+            app.applyCameraState(runtime.RestoreCamera);
+            runtime.RestoreCamera = struct();
+            runtime.LastAppliedPairId = "";
+            if runtime.FollowEnabled
+                pair = app.AlignmentPairController.currentPair();
+                runtime.SuspendedPairId = string(pair.PairId);
+            end
+            app.PairViewpointRuntime = runtime;
+            drawnow limitrate
+            app.scheduleCameraReconciliation();
+            app.refreshAlignmentPairViewpointControls(false);
+        end
+
+        function plan = activePairViewpointPlan(app)
+            axesPosition = app.Axes.InnerPosition;
+            aspectRatio = max(axesPosition(3), 1) / ...
+                max(axesPosition(4), 1);
+            plan = ProjectionPairViewpoint.compute(app.Scene, ...
+                app.AlignmentPairController.currentPair(), ...
+                struct(AspectRatio=aspectRatio, FillFraction=0.8, ...
+                MinimumViewAngleDegrees=app.MinCameraViewAngle, ...
+                MaximumViewAngleDegrees=app.MaxCameraViewAngle));
+        end
+
+        function refreshAlignmentPairViewpointControls(app, recompute)
+            if nargin < 2
+                recompute = true;
+            end
+            if isempty(app.AlignmentPairViewButton) || ...
+                    ~isvalid(app.AlignmentPairViewButton)
+                return
+            end
+            runtime = app.PairViewpointRuntime;
+            if recompute
+                runtime.LastPlan = app.activePairViewpointPlan();
+            end
+            pair = app.AlignmentPairController.currentPair();
+            if strlength(runtime.LastSelectionPairId) == 0 && ...
+                    isfield(pair, "PairId")
+                runtime.LastSelectionPairId = string(pair.PairId);
+            end
+            app.PairViewpointRuntime = runtime;
+            plan = runtime.LastPlan;
+            available = isstruct(plan) && isfield(plan, "Available") && ...
+                logical(plan.Available);
+            if available
+                explanation = "View from the active pair midpoint.";
+            elseif isstruct(plan) && isfield(plan, "Explanation")
+                explanation = string(plan.Explanation);
+            else
+                explanation = "Pair viewpoint is unavailable.";
+            end
+            app.AlignmentPairViewButton.Enable = app.onOff(available);
+            app.AlignmentPairViewButton.Tooltip = char(explanation);
+            app.AlignmentFollowPairCheckBox.Enable = app.onOff(available);
+            app.AlignmentFollowPairCheckBox.Tooltip = char(explanation);
+            app.AlignmentFollowPairCheckBox.Value = runtime.FollowEnabled;
+            app.AlignmentRestoreViewButton.Enable = app.onOff( ...
+                ~isempty(fieldnames(runtime.RestoreCamera)));
+            app.AlignmentRestoreViewButton.Tooltip = ...
+                "Restore the camera captured before Pair viewpoint.";
+            app.refreshAlignmentPairViewpointStatus();
+        end
+
+        function refreshAlignmentPairViewpointStatus(app)
+            if isempty(app.AlignmentPairViewStatusLabel) || ...
+                    ~isvalid(app.AlignmentPairViewStatusLabel)
+                return
+            end
+            runtime = app.PairViewpointRuntime;
+            pair = app.AlignmentPairController.currentPair();
+            pairId = "";
+            if isfield(pair, "PairId")
+                pairId = string(pair.PairId);
+            end
+            if isstruct(runtime.LastPlan) && ...
+                    isfield(runtime.LastPlan, "Available") && ...
+                    ~runtime.LastPlan.Available
+                text = string(runtime.LastPlan.Explanation);
+            elseif runtime.FollowEnabled && ...
+                    runtime.SuspendedPairId == pairId
+                text = "Follow suspended for this pair; navigation resumes it.";
+            elseif runtime.FollowEnabled
+                text = "Follow active pair is on.";
+            elseif runtime.LastAppliedPairId == pairId && strlength(pairId) > 0
+                text = "Pair viewpoint applied; Restore is available.";
+            else
+                text = "Pair viewpoint is available.";
+            end
+            app.AlignmentPairViewStatusLabel.Text = char(text);
+            app.AlignmentPairViewStatusLabel.Tooltip = char(text);
+        end
+
+        function noteManualCameraMotion(app)
+            runtime = app.PairViewpointRuntime;
+            if ~runtime.FollowEnabled
+                return
+            end
+            pair = app.AlignmentPairController.currentPair();
+            if isfield(pair, "PairId")
+                runtime.SuspendedPairId = string(pair.PairId);
+                app.PairViewpointRuntime = runtime;
+                app.refreshAlignmentPairViewpointStatus();
+            end
+        end
+
+        function diagnostics = pairViewpointDiagnostics(app)
+            runtime = app.PairViewpointRuntime;
+            pair = app.AlignmentPairController.currentPair();
+            pairId = "";
+            if isfield(pair, "PairId")
+                pairId = string(pair.PairId);
+            end
+            plan = runtime.LastPlan;
+            if ~isstruct(plan) || ~isfield(plan, "Available")
+                plan = app.activePairViewpointPlan();
+            end
+            diagnostics = struct(Available=logical(plan.Available), ...
+                Explanation=string(plan.Explanation), ...
+                FollowEnabled=runtime.FollowEnabled, ...
+                SuspendedForCurrentPair= ...
+                runtime.FollowEnabled && runtime.SuspendedPairId == pairId, ...
+                RestoreAvailable= ...
+                ~isempty(fieldnames(runtime.RestoreCamera)), ...
+                LastAppliedPairId=runtime.LastAppliedPairId, ...
+                Plan=plan);
+        end
+
+        function runtime = defaultPairViewpointRuntime(app)
+            pair = app.AlignmentPairController.currentPair();
+            pairId = "";
+            if isfield(pair, "PairId")
+                pairId = string(pair.PairId);
+            end
+            runtime = struct(FollowEnabled=false, SuspendedPairId="", ...
+                RestoreCamera=struct(), LastAppliedPairId="", ...
+                LastSelectionPairId=pairId, LastPlan=struct());
         end
 
         function refreshAlignmentStereoEyeStatus(app)
@@ -5512,6 +5754,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function updateViewTwist(app, twistDegrees)
+            app.noteManualCameraMotion();
             frameTimer = app.beginPerformanceFrame();
             app.suspendCameraReconciliationTimer();
             oldPresentationOffsets = app.anaglyphPresentationOffsets();
@@ -5939,6 +6182,7 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
+            app.noteManualCameraMotion();
             frameTimer = app.beginPerformanceFrame();
             app.suspendCameraReconciliationTimer();
             zoomFactor = 1.12 ^ event.VerticalScrollCount;
@@ -6321,6 +6565,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function panCameraByPixelDelta(app, pixelDelta)
+            app.noteManualCameraMotion();
             frameTimer = app.beginPerformanceFrame();
             app.suspendCameraReconciliationTimer();
             panOffset = app.pixelDeltaToWorldPan(pixelDelta);
@@ -7393,6 +7638,7 @@ classdef ProjectionViewerApp < handle
             app.Scene = app.ResetScene;
             app.AlignmentPairController.regenerate(app.Scene);
             app.StereoEyeController = ProjectionStereoEyeController();
+            app.PairViewpointRuntime = app.defaultPairViewpointRuntime();
             app.SelectedLayerIndex = numel(app.Scene.layers);
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();

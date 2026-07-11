@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 496/496 tests with zero
+- The latest fresh-class repository suite passes 503/503 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -56,6 +56,7 @@ As of July 11, 2026:
 | Multi-Image Foundation MI-1 | Complete |
 | Multi-Image Foundation MI-2 | Complete |
 | Multi-Image Foundation MI-3 | Complete |
+| Multi-Image A2 pair viewpoint | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -94,13 +95,22 @@ camera horizontal, keeps red on the physical left, retains prior identity near
 head-on degeneracy, and stores pair-specific manual overrides only in a
 graphics-free runtime controller.
 
+Multi-image A2 adds one-shot Pair viewpoint and Restore viewpoint commands plus
+runtime-only Follow active pair. The camera uses representative origins over
+shared overlap when continuous source mapping is available, otherwise the MI-3
+center-column `ReferenceOrigin`; it aims from their midpoint to the common
+footprint centroid, uses plane-derived up, and fits the overlap with padding.
+Manual pan, zoom, or twist suspends follow for the current pair. The feature
+changes only camera presentation and reports unavailable overlap/geometry
+without mutating scene or scientific state.
+
 ## Current Implementation Queue
 
 The completed read-only MATLAB SDK entry-point inventory, proposed reuse points,
 and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The
 approved consolidated implementation queue is now
-`docs/multi_image_surface_reconstruction_workplan.md`. MI-0 through MI-3 and
-the SDK audit are complete; the next ordered packs are pair viewpoint,
+`docs/multi_image_surface_reconstruction_workplan.md`. MI-0 through MI-3, A2
+pair viewpoint, and the SDK audit are complete; the next ordered packs are
 focus-aware keyboard remapping, manual motion imagery, and measured motion
 playback. Correction SDK, global multi-image solving, precision validation,
 dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow

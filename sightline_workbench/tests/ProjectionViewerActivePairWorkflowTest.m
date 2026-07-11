@@ -44,6 +44,12 @@ classdef ProjectionViewerActivePairWorkflowTest < matlab.uitest.TestCase
                 ProjectionViewerActivePairWorkflowTest.findTagged( ...
                 workbench, "ProjectionViewerAlignmentSoloPairCheckBox"), ...
                 ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentPairViewButton"), ...
+                ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentRestoreViewButton"), ...
+                ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentFollowPairCheckBox"), ...
+                ProjectionViewerActivePairWorkflowTest.findTagged( ...
                 workbench, "ProjectionViewerAlignmentSwapEyesButton"), ...
                 ProjectionViewerActivePairWorkflowTest.findTagged( ...
                 workbench, "ProjectionViewerAlignmentResetEyesButton")];
@@ -166,6 +172,105 @@ classdef ProjectionViewerActivePairWorkflowTest < matlab.uitest.TestCase
             testCase.verifyEqual([app.exportState().Layers.Visible], ...
                 visibleBefore);
         end
+
+        function testPairViewpointAppliesAndRestoresCameraOnly(testCase)
+            [app, workbench] = ...
+                ProjectionViewerActivePairWorkflowTest.openWorkbench();
+            testCase.addTeardown(@() delete(app));
+            pairView = ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentPairViewButton");
+            restore = ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentRestoreViewButton");
+            follow = ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentFollowPairCheckBox");
+            before = app.exportState();
+
+            testCase.verifyFalse(logical(follow.Value));
+            testCase.press(pairView);
+            drawnow
+
+            after = app.exportState();
+            diagnostics = app.alignmentDiagnostics().PairViewpoint;
+            testCase.verifyTrue(diagnostics.Available);
+            testCase.verifyTrue(diagnostics.RestoreAvailable);
+            testCase.verifyNotEqual(after.Camera.Position, ...
+                before.Camera.Position);
+            testCase.verifyEqual(after.Camera.Position - after.Camera.Target, ...
+                (diagnostics.Plan.Camera.PositionWorld - ...
+                diagnostics.Plan.Camera.TargetWorld).', AbsTol=1e-8);
+            testCase.verifyEqual(after.Camera.UpVector, ...
+                diagnostics.Plan.Camera.UpVector.', AbsTol=1e-10);
+            testCase.verifyEqual(after.Camera.ViewAngle, ...
+                diagnostics.Plan.Camera.ViewAngle, AbsTol=1e-10);
+            testCase.verifyEqual(after.Projection, before.Projection);
+            testCase.verifyEqual(after.View, before.View);
+            testCase.verifyEqual(after.Layers, before.Layers);
+
+            testCase.press(restore);
+            drawnow
+
+            restored = app.exportState();
+            testCase.verifyEqual(restored.Camera, before.Camera, AbsTol=1e-10);
+            testCase.verifyFalse( ...
+                app.alignmentDiagnostics().PairViewpoint.RestoreAvailable);
+        end
+
+        function testFollowSuspendsOnManualCameraAndResumesOnNavigation(testCase)
+            [app, workbench] = ...
+                ProjectionViewerActivePairWorkflowTest.openWorkbench();
+            testCase.addTeardown(@() delete(app));
+            follow = ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentFollowPairCheckBox");
+            next = ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentNextPairButton");
+            previous = ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentPreviousPairButton");
+            viewer = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+            twist = ProjectionViewerActivePairWorkflowTest.twistSlider( ...
+                viewer(1));
+
+            testCase.press(follow);
+            testCase.press(next);
+            firstFollow = app.alignmentDiagnostics().PairViewpoint;
+            testCase.verifyTrue(firstFollow.FollowEnabled);
+            testCase.verifyFalse(firstFollow.SuspendedForCurrentPair);
+            testCase.verifyTrue(firstFollow.RestoreAvailable);
+            testCase.verifyEqual(firstFollow.LastAppliedPairId, ...
+                app.alignmentDiagnostics().ActivePair.PairId);
+
+            testCase.choose(twist, 10);
+            drawnow
+
+            suspended = app.alignmentDiagnostics().PairViewpoint;
+            testCase.verifyTrue(suspended.SuspendedForCurrentPair);
+
+            testCase.press(previous);
+            resumed = app.alignmentDiagnostics().PairViewpoint;
+            testCase.verifyFalse(resumed.SuspendedForCurrentPair);
+            testCase.verifyEqual(resumed.LastAppliedPairId, ...
+                app.alignmentDiagnostics().ActivePair.PairId);
+        end
+
+        function testUnavailablePairViewpointIsDisabledWithExplanation(testCase)
+            scene = ProjectionViewerActivePairWorkflowTest.makeScene();
+            scene.layers(4).ProjectionOffsetMeters = [1e6; 0];
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            workbench = ProjectionViewerActivePairWorkflowTest.showWorkbench();
+            pairView = ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentPairViewButton");
+            follow = ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentFollowPairCheckBox");
+
+            testCase.verifyEqual(pairView.Enable, ...
+                matlab.lang.OnOffSwitchState.off);
+            testCase.verifyEqual(follow.Enable, ...
+                matlab.lang.OnOffSwitchState.off);
+            testCase.verifyNotEmpty(pairView.Tooltip);
+            testCase.verifySubstring(string(pairView.Tooltip), ...
+                "no usable shared");
+        end
     end
 
     methods (Static, Access = private)
@@ -195,6 +300,15 @@ classdef ProjectionViewerActivePairWorkflowTest < matlab.uitest.TestCase
         function component = findTagged(parent, tag)
             component = findall(parent, "Tag", tag);
             component = component(1);
+        end
+
+        function slider = twistSlider(viewer)
+            sliders = findall(viewer, "Type", "uislider");
+            isTwist = false(size(sliders));
+            for index = 1:numel(sliders)
+                isTwist(index) = isequal(sliders(index).Layout.Column, 4);
+            end
+            slider = sliders(find(isTwist, 1, "first"));
         end
 
         function scene = makeScene()

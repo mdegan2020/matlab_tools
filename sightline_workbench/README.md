@@ -82,7 +82,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest fresh-class repository validation passes all 496 tests;
+- the latest fresh-class repository validation passes all 503 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -205,7 +205,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 496 passing tests with no failures or incomplete tests.
+baseline is 503 passing tests with no failures or incomplete tests.
 
 ## Dense-Surface Synthetic Fixture
 
@@ -827,6 +827,17 @@ applying corrections, or rebuilding projection geometry. Solo mode is keyed by
 stable view IDs, follows pair changes, leaves serialized visibility untouched,
 and restores every surviving layer's prior visibility when disabled or when the
 workbench/viewer closes.
+
+`Pair viewpoint` places the presentation camera at the midpoint of
+representative sensor origins over the active pair's shared footprint, aims at
+the overlap centroid, derives a stable up direction from the current plane, and
+fits the overlap with padding. `Restore viewpoint` returns to the camera saved
+before the first pair view. Runtime-only `Follow active pair` is off by default;
+pair navigation reapplies the view when enabled, while manual pan, zoom, or
+twist suspends it for the current pair and the next pair navigation resumes it.
+Unavailable overlap or geometry disables the commands with an explanation.
+These controls change camera presentation only and never mutate the plane,
+source geometry, rays, output grids, radiometry, or serialized scientific state.
 
 Stereo-eye assignment is independent of moving/reference roles and layer order.
 For each rendered stereo pair, the viewer projects the existing center-column

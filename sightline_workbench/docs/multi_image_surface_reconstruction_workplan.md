@@ -1,9 +1,10 @@
 # Sightline Workbench Multi-Image And Surface Reconstruction Workplan
 
 Status: approved consolidated workplan. Backend Performance Packs 0-5, the
-dense-surface synthetic expansion, and Multi-Image Foundation MI-0 through MI-3
-are complete. The read-only MATLAB SDK audit is also complete. The current
-fresh-class repository suite passes 496/496 tests. This `/private/tmp` file is
+dense-surface synthetic expansion, Multi-Image Foundation MI-0 through MI-3,
+and A2 pair viewpoint are complete. The read-only MATLAB SDK audit is also
+complete. The current fresh-class repository suite passes 503/503 tests. This
+`/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
 work, and hardware/evidence gates remain explicit.
@@ -1295,8 +1296,9 @@ These trees are coordinated but should remain separately reviewable.
    pair identity, optional timing, deterministic runtime pair schedule.
 2. **A1 — Active pair and stereo presentation — complete as MI-2/MI-3.**
    Selection, swap, stepping, Solo/restore, physical eye invariants/override.
-3. **A2 — Pair viewpoint.** Add midpoint camera, fit/restore, optional follow,
-   and presentation-only active-pair orientation without plane mutation.
+3. **A2 — Pair viewpoint — complete.** Midpoint camera, fit/restore, optional
+   follow, manual-motion suspension, explicit unavailable reasons, and
+   presentation-only active-pair orientation without plane mutation.
 4. **A3a — Keyboard and manual motion imagery.** Add focus-aware remapping,
    explicit sequence/order, stepping, edge controls, labels, Loop, and restore.
 5. **A3b — Motion playback.** Add measured 0.5-10 fps playback, Space/Escape,
@@ -1403,7 +1405,7 @@ The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
 1. Review the completed MI-0 through MI-3 baseline and preserve 496/496.
-2. A2 pair viewpoint/follow and presentation-only orientation.
+2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping.
 4. A3a manual motion imagery.
 5. A3b motion playback and performance evidence.
