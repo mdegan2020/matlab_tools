@@ -36,9 +36,17 @@ classdef ProjectionBackendOutputWriter
                     outputDirectory, formats);
             end
 
+            outputFiles = ProjectionBackendOutputWriter.complete( ...
+                result, outputFiles);
+        end
+
+        function outputFiles = complete(result, outputFiles)
+            %complete Write ancillary alignment products and metadata.
+            outputDirectory = ...
+                ProjectionBackendOutputWriter.prepareOutputDirectory( ...
+                result.Output.Directory);
             outputFiles = ProjectionBackendOutputWriter.writeAlignmentOutputs( ...
                 result, outputFiles, outputDirectory);
-
             outputFiles.Metadata = string(fullfile(outputDirectory, "metadata.json"));
             ProjectionBackendOutputWriter.writeMetadata( ...
                 result, outputFiles, outputFiles.Metadata);

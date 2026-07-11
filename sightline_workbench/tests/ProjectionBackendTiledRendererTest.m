@@ -117,6 +117,31 @@ classdef ProjectionBackendTiledRendererTest < matlab.unittest.TestCase
             testCase.verifyEmpty(readback.Mesh);
         end
 
+        function testQueryCoordinatesCanBeOmitted(testCase)
+            scene = ProjectionBackendTiledRendererTest.makeTwoLayerScene();
+            outputGrid = ProjectionBackendTiledRendererTest.makeOutputGrid(scene);
+            options = struct(OutputGrid=outputGrid, TileSize=[2 3], ...
+                IncludeQueryCoordinates=false);
+
+            readback = ProjectionBackendTiledRenderer.renderScene(scene, options);
+
+            testCase.verifyNumElements(readback.LayerReadbacks, 2);
+            testCase.verifyEmpty(readback.QueryPlaneCoordinates);
+            testCase.verifyEmpty( ...
+                readback.LayerReadbacks(1).QueryPlaneCoordinates);
+            testCase.verifyEmpty( ...
+                readback.LayerReadbacks(2).QueryPlaneCoordinates);
+        end
+
+        function testTileAssemblyHasNoOutputSizedIndexImage(testCase)
+            projectRoot = fileparts(fileparts(mfilename("fullpath")));
+            sourceText = fileread(fullfile(projectRoot, "src", ...
+                "ProjectionBackendTiledRenderer.m"));
+
+            testCase.verifyFalse(contains(sourceText, ...
+                "1:prod(outputSize)"));
+        end
+
         function testInvalidTileSizeErrors(testCase)
             scene = ProjectionBackendTiledRendererTest.makeTwoLayerScene();
 

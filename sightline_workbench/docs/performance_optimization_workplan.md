@@ -47,8 +47,9 @@ sparse path as an explicit comparison mode. The Viewer Orientation and
 Anaglyph Presentation Pack is also complete. The Cross-System Acceleration Pass
 retains CPU viewer/alignment execution, keeps new backend threading dependent
 on bounded serial streaming, and adds optional capability-checked GPU SGM with
-CPU fallback. Backend Performance Pack 2 is now the active pack. The current
-fresh-class repository baseline is 395/395 passing tests. See
+CPU fallback. Backend Performance Pack 2 now provides bounded serial tiled-TIFF
+output; Pack 3 is active. The current fresh-class repository baseline is
+403/403 passing tests. See
 `docs/project_status.md` for the concise cross-workstream status.
 
 Use the selected project queue and the backend dependency order in this
@@ -1351,8 +1352,28 @@ Backend Performance Pack 1: Render full-source inverse warps
 
 ### Backend Performance Pack 2: Bounded Serial Streaming
 
-Status: not started; this is the next backend implementation pack and follows
-the three higher-priority project-queue items.
+Status: complete on July 11, 2026.
+
+Implementation:
+
+- `Output.InMemoryPolicy` supports `auto`, `always`, and `never`; the default
+  `Output.MaximumInMemoryPixels=16000000` is an explicit full-result ceiling.
+- Serial writing jobs that resolve to no in-memory return consume renderer
+  tiles immediately and write composite, per-layer, and mask TIFF products
+  through `ProjectionBackendTiffTileWriter`.
+- TIFF products remain temporary (`.partial`) until every tile succeeds.
+  Failure closes all `Tiff` handles and removes temporary or partially
+  committed products.
+- Streamed readbacks retain output-grid, render-plan, GPU, tile timing, tile
+  memory, and tile-write diagnostics but leave image, mask, per-layer, and
+  query-coordinate arrays empty.
+- Tiled in-memory coordinate assembly no longer constructs
+  `reshape(1:prod(outputSize), outputSize)` for each tile. Optional
+  `RenderOptions.IncludeQueryCoordinates=false` omits output-wide coordinate
+  diagnostics entirely.
+- The bounded path is deliberately serial and TIFF-only until Packs 3-4.
+  TIFF tile dimensions must be multiples of 16. Normalized `[0,1]` radiometry
+  is required so Pack 2 does not silently invent the policy assigned to Pack 4.
 
 Deliverables:
 
@@ -1379,7 +1400,8 @@ Backend Performance Pack 2: Stream serial tiled outputs
 
 ### Backend Performance Pack 3: Bounded Thread Pipeline
 
-Status: not started; follows Pack 2.
+Status: not started; this is the active backend pack and follows completed
+Pack 2.
 
 Deliverables:
 
@@ -1647,14 +1669,14 @@ The completed viewer sequence was:
 8. Viewer Performance Pack 7: lazy UI and preview storage.
 9. Viewer Performance Pack 8: raster preview prototype and decision.
 
-Viewer Packs 0-8, Backend Packs 0-1, the Viewer Orientation and Anaglyph
+Viewer Packs 0-8, Backend Packs 0-2, the Viewer Orientation and Anaglyph
 Presentation Pack, and the Alignment Workbench Usability and Offset-Semantics
 Pack, and the Cross-System Acceleration Pass are complete. The remaining
-implementation queue is, in order: Backend Performance Packs 2-5; then
+implementation queue is, in order: Backend Performance Packs 3-5; then
 dense-surface synthetic expansion after the user supplies the requested
 fixture inputs. Keep backend
-work dependency-aware: bounded serial streaming comes before bounded thread
-submission, and optional GPU work remains capability-checked with CPU
+work dependency-aware: bounded serial streaming is complete and bounded thread
+submission is next; optional GPU work remains capability-checked with CPU
 equivalence. The representative 100-150 MP Windows viewer/tile-size matrix
 remains an external validation gate rather than an additional viewer pack.
 

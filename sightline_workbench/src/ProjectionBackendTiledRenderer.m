@@ -69,16 +69,21 @@ classdef ProjectionBackendTiledRenderer
                     if isempty(layerReadbacks)
                         layerReadbacks = ...
                             ProjectionBackendTiledRenderer.initializeLayerReadbacks( ...
-                            tileReadback.LayerReadbacks, outputSize);
+                            tileReadback.LayerReadbacks, outputSize, ...
+                            options.IncludeQueryCoordinates);
                     end
                     layerReadbacks = ProjectionBackendTiledRenderer.assignLayerTiles( ...
-                        layerReadbacks, tileReadback.LayerReadbacks, outputSize, ...
-                        tile.RowRange, tile.ColumnRange);
+                        layerReadbacks, tileReadback.LayerReadbacks, ...
+                        tile.RowRange, tile.ColumnRange, ...
+                        options.IncludeQueryCoordinates);
                 end
 
                 tileReportIndex = tileReportIndex + 1;
                 tileReports(tileReportIndex) = report;
             end
+            layerReadbacks = ...
+                ProjectionBackendTiledRenderer.flattenQueryCoordinates( ...
+                layerReadbacks);
 
             readback = struct();
             readback.Image = compositeImage;
@@ -102,6 +107,81 @@ classdef ProjectionBackendTiledRenderer
             readback.TileSize = options.TileSize;
             readback.TileCount = numel(tileReports);
             readback.TileReports = tileReports;
+            readback.ReturnedInMemory = true;
+            readback.Streaming = false;
+            readback.StreamWriteSeconds = 0;
+            readback.RenderPlan = ProjectionBackendRenderPlan.summary(renderPlan);
+        end
+
+        function readback = streamScene( ...
+                scene, options, execution, renderPlan, tileConsumer)
+            %streamScene Render serial tiles and release each after consumption.
+            if nargin < 3
+                execution = struct();
+            end
+            if nargin < 4
+                renderPlan = [];
+            end
+            if nargin < 5 || ~isa(tileConsumer, "function_handle")
+                error("ProjectionBackendTiledRenderer:invalidConsumer", ...
+                    "A tile-consumer function handle is required.");
+            end
+            [options, preparedLayers] = ...
+                ProjectionBackendTiledRenderer.mergeOptions( ...
+                scene, options, execution);
+            if options.ExecutionMode ~= "serial"
+                error("ProjectionBackendTiledRenderer:streamingRequiresSerial", ...
+                    "Bounded streaming requires serial execution until Backend Performance Pack 3.");
+            end
+            if isempty(renderPlan)
+                renderPlan = ProjectionBackendRenderPlan.compile( ...
+                    scene, options, preparedLayers);
+            else
+                renderPlan = ProjectionBackendRenderPlan.validate(renderPlan);
+                ProjectionBackendTiledRenderer.validatePlanOptions( ...
+                    renderPlan, options);
+            end
+
+            outputGrid = options.OutputGrid;
+            tiles = ProjectionBackendTiledRenderer.tileRanges( ...
+                outputGrid.OutputSize, options.TileSize);
+            tileReports = ProjectionBackendTiledRenderer.emptyTileReports();
+            streamWriteSeconds = 0;
+            for tileIndex = 1:numel(tiles)
+                tile = tiles(tileIndex);
+                [tileReadback, report] = ...
+                    ProjectionBackendTiledRenderer.renderTile( ...
+                    renderPlan, options, outputGrid, tile);
+                writeTimer = tic;
+                tileConsumer(tile, tileReadback);
+                report.WriteSeconds = toc(writeTimer);
+                streamWriteSeconds = streamWriteSeconds + report.WriteSeconds;
+                tileReports(tileIndex) = report;
+            end
+
+            readback = struct();
+            readback.Image = [];
+            readback.ValidMask = [];
+            readback.OutputSize = outputGrid.OutputSize;
+            readback.Interpolation = lower(string(options.Interpolation));
+            readback.LayerIndex = renderPlan.LayerIndices(1);
+            readback.LayerIndices = renderPlan.LayerIndices;
+            readback.CameraGrid = ...
+                ProjectionBackendTiledRenderer.cameraGridSummary(outputGrid);
+            readback.QueryPlaneCoordinates = [];
+            readback.Mesh = [];
+            readback.LayerReadbacks = struct([]);
+            readback.OutputGrid = outputGrid;
+            readback.Tiled = true;
+            readback.ExecutionMode = "serial";
+            readback.UseGPU = renderPlan.UseGPU;
+            readback.GpuInfo = renderPlan.GpuInfo;
+            readback.TileSize = options.TileSize;
+            readback.TileCount = numel(tileReports);
+            readback.TileReports = tileReports;
+            readback.ReturnedInMemory = false;
+            readback.Streaming = true;
+            readback.StreamWriteSeconds = streamWriteSeconds;
             readback.RenderPlan = ProjectionBackendRenderPlan.summary(renderPlan);
         end
     end
@@ -122,6 +202,7 @@ classdef ProjectionBackendTiledRenderer
             defaults.TileSize = [256 256];
             defaults.Interpolation = "bilinear";
             defaults.IncludeLayerReadbacks = true;
+            defaults.IncludeQueryCoordinates = true;
             defaults.ExecutionMode = "serial";
             defaults.NumericalMode = "fullSourceInverseWarp";
 
@@ -152,6 +233,9 @@ classdef ProjectionBackendTiledRenderer
             defaults.IncludeLayerReadbacks = ...
                 ProjectionBackendTiledRenderer.validateLogicalScalar( ...
                 defaults.IncludeLayerReadbacks, "IncludeLayerReadbacks");
+            defaults.IncludeQueryCoordinates = ...
+                ProjectionBackendTiledRenderer.validateLogicalScalar( ...
+                defaults.IncludeQueryCoordinates, "IncludeQueryCoordinates");
             defaults.Interpolation = lower(string(defaults.Interpolation));
             if ~isscalar(defaults.Interpolation) || ...
                     ~ismember(defaults.Interpolation, ["bilinear", "nearest"])
@@ -264,7 +348,7 @@ classdef ProjectionBackendTiledRenderer
         end
 
         function layerReadbacks = initializeLayerReadbacks( ...
-                tileLayerReadbacks, outputSize)
+                tileLayerReadbacks, outputSize, includeQueryCoordinates)
             template = struct(Image=[], ValidMask=[], LayerIndex=[], ...
                 QueryPlaneCoordinates=[], Mesh=[]);
             layerReadbacks = repmat(template, 1, numel(tileLayerReadbacks));
@@ -274,16 +358,17 @@ classdef ProjectionBackendTiledRenderer
                     outputSize, tileLayerReadbacks(k).Image);
                 layerReadbacks(k).ValidMask = false(outputSize);
                 layerReadbacks(k).LayerIndex = tileLayerReadbacks(k).LayerIndex;
-                layerReadbacks(k).QueryPlaneCoordinates = ...
-                    zeros(2, prod(outputSize));
+                if includeQueryCoordinates
+                    layerReadbacks(k).QueryPlaneCoordinates = ...
+                        zeros([2 outputSize]);
+                end
                 layerReadbacks(k).Mesh = tileLayerReadbacks(k).Mesh;
             end
         end
 
         function layerReadbacks = assignLayerTiles(layerReadbacks, ...
-                tileLayerReadbacks, outputSize, rowRange, columnRange)
-            tileIndices = ProjectionBackendTiledRenderer.tileLinearIndices( ...
-                outputSize, rowRange, columnRange);
+                tileLayerReadbacks, rowRange, columnRange, ...
+                includeQueryCoordinates)
             for k = 1:numel(layerReadbacks)
                 layerReadbacks(k).Image = ...
                     ProjectionBackendTiledRenderer.assignImageTile( ...
@@ -291,20 +376,28 @@ classdef ProjectionBackendTiledRenderer
                     tileLayerReadbacks(k).Image);
                 layerReadbacks(k).ValidMask(rowRange, columnRange) = ...
                     tileLayerReadbacks(k).ValidMask;
-                layerReadbacks(k).QueryPlaneCoordinates(:, tileIndices) = ...
-                    tileLayerReadbacks(k).QueryPlaneCoordinates;
+                if includeQueryCoordinates
+                    layerReadbacks(k).QueryPlaneCoordinates( ...
+                        :, rowRange, columnRange) = reshape( ...
+                        tileLayerReadbacks(k).QueryPlaneCoordinates, ...
+                        [2 numel(rowRange) numel(columnRange)]);
+                end
             end
         end
 
-        function tileIndices = tileLinearIndices(outputSize, rowRange, columnRange)
-            linearIndices = reshape(1:prod(outputSize), outputSize);
-            tileIndices = linearIndices(rowRange, columnRange);
-            tileIndices = tileIndices(:).';
+        function layerReadbacks = flattenQueryCoordinates(layerReadbacks)
+            for k = 1:numel(layerReadbacks)
+                if ~isempty(layerReadbacks(k).QueryPlaneCoordinates)
+                    layerReadbacks(k).QueryPlaneCoordinates = reshape( ...
+                        layerReadbacks(k).QueryPlaneCoordinates, 2, []);
+                end
+            end
         end
 
         function reports = emptyTileReports()
             reports = struct(RowRange={}, ColumnRange={}, OutputSize={}, ...
-                PixelCount={}, RenderSeconds={}, EstimatedMemoryBytes={});
+                PixelCount={}, RenderSeconds={}, WriteSeconds={}, ...
+                EstimatedMemoryBytes={});
         end
 
         function report = tileReport(tile, tileReadback, renderSeconds)
@@ -315,6 +408,7 @@ classdef ProjectionBackendTiledRenderer
             report.OutputSize = tileReadback.OutputSize;
             report.PixelCount = prod(tileReadback.OutputSize);
             report.RenderSeconds = renderSeconds;
+            report.WriteSeconds = 0;
             report.EstimatedMemoryBytes = double(tileInfo.bytes);
         end
 
@@ -404,7 +498,9 @@ classdef ProjectionBackendTiledRenderer
                     lower(string(renderPlan.NumericalMode)) ~= ...
                     lower(string(options.NumericalMode)) || ...
                     renderPlan.IncludeLayerReadbacks ~= ...
-                    logical(options.IncludeLayerReadbacks)
+                    logical(options.IncludeLayerReadbacks) || ...
+                    renderPlan.IncludeQueryCoordinates ~= ...
+                    logical(options.IncludeQueryCoordinates)
                 error("ProjectionBackendTiledRenderer:planMismatch", ...
                     "Render plan does not match tiled output or interpolation options.");
             end

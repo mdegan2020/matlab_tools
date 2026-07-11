@@ -539,7 +539,7 @@ buildtool test
 
 The current suite exercises pure geometry, scene construction, sparse geometry,
 mesh building, readback, layer workflows, state serialization, and app
-interactions. The current fresh-class baseline is 395/395 passing tests with no
+interactions. The current fresh-class baseline is 403/403 passing tests with no
 failures or incomplete tests.
 
 ## Backend Processor Work Plan
@@ -647,13 +647,11 @@ Implementation status:
 - The Auto Alignment Feature Tree milestones 1-13 are complete, validated, and
   committed; the milestone list below is retained as implementation history and
   design reference.
-- Backend Performance Packs 0-1 subsequently added one reusable runtime render
-  plan per job and selected full-source inverse-warp radiometry. Backend
-  Performance Packs 2-5 remain the ordered backend subqueue for bounded
-  streaming, bounded thread submission, radiometric/precision policy, and
-  file-backed source regions. They follow the viewer, alignment-usability, and
-  cross-system acceleration items in the active project queue. The current
-  tiled renderer is not bounded-memory end to end for very large file outputs.
+- Backend Performance Packs 0-2 subsequently added one reusable runtime render
+  plan per job, selected full-source inverse-warp radiometry, and bounded serial
+  tiled-TIFF output with explicit in-memory limits. Backend Performance Packs
+  3-5 remain the ordered backend subqueue for bounded thread submission,
+  radiometric/precision policy, and file-backed source regions.
 
 #### Backend Milestone 1: Job Contract And Serialization
 
@@ -739,6 +737,9 @@ Feedback checkpoint:
 This historical milestone established tiled computation and numerical
 equivalence, but it did not make the complete output/write lifecycle
 bounded-memory. That follow-up is Backend Performance Pack 2.
+
+Backend Performance Pack 2 completed that historical follow-up with serial
+tiled-TIFF streaming, explicit in-memory limits, and partial-file cleanup.
 
 Deliverables:
 
@@ -1170,8 +1171,8 @@ Presentation Pack, and Alignment Workbench Usability and Offset-Semantics Pack
 are implemented. The Cross-System Acceleration Pass is also complete. The
 remaining queue is:
 
-1. Backend Performance Packs 2-5: bounded serial streaming, bounded threaded
-   execution, radiometric/precision policy, and file-backed source regions.
+1. Backend Performance Packs 3-5: bounded threaded execution,
+   radiometric/precision policy, and file-backed source regions.
 2. Dense-surface synthetic data expansion after the user supplies desired
    image dimensions and rough sensor azimuth/elevation/range.
 
@@ -1216,9 +1217,9 @@ app-facing display pyramid and visible tile selection path. Follow-up work may
 still consider `blockedImage` and profiling on representative 100-150 MP
 Windows scenes. The current viewer already has lazy/file-backed preview levels,
 settle-aware LOD hysteresis, cached visibility, and differential tile reuse.
-Backend Performance Packs 2-5 separately address genuinely bounded output
-streaming and file-backed source regions. Preview pyramids remain outside
-backend input.
+Backend Performance Pack 2 now provides bounded serial TIFF output. Packs 3-5
+separately address bounded threaded streaming, radiometric policy, and
+file-backed source regions. Preview pyramids remain outside backend input.
 
 ### Optional GPU Path
 

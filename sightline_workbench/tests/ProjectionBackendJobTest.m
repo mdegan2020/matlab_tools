@@ -27,9 +27,13 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
             testCase.verifyEqual(job.RenderOptions.NumericalMode, ...
                 "fullSourceInverseWarp");
             testCase.verifyFalse(job.RenderOptions.UseGPU);
+            testCase.verifyTrue(job.RenderOptions.IncludeLayerReadbacks);
+            testCase.verifyTrue(job.RenderOptions.IncludeQueryCoordinates);
             testCase.verifyEqual(job.RenderOptions.InvalidIntersectionPolicy, "error");
             testCase.verifyEqual(job.Output.Formats, ["tiff", "png"]);
             testCase.verifyFalse(job.Output.WriteFiles);
+            testCase.verifyEqual(job.Output.InMemoryPolicy, "auto");
+            testCase.verifyEqual(job.Output.MaximumInMemoryPixels, 16000000);
             testCase.verifyEqual(job.Execution.Mode, "serial");
             testCase.verifyFalse(job.Execution.UseGPU);
             testCase.verifyFalse(job.Execution.UseCustomGpuKernels);
@@ -88,6 +92,16 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
 
             testCase.verifyEqual(job.RenderOptions.NumericalMode, ...
                 "sparseIntensityScatteredInterpolant");
+        end
+
+        function testValidationRejectsNeverPolicyWithoutFiles(testCase)
+            scene = ProjectionBackendJobTest.makeScene();
+            job = struct(Scene=scene, ...
+                Output=struct(InMemoryPolicy="never"));
+
+            testCase.verifyError( ...
+                @() ProjectionBackendJob.validate(job), ...
+                "ProjectionBackendJob:invalidOutput");
         end
 
         function testLiveJobInvocationReturnsValidatedContract(testCase)

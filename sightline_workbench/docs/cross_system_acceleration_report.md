@@ -21,9 +21,9 @@ claims remain an external Windows/NVIDIA validation gate.
   `gpuArray` inputs. Pair-level parallel work is not introduced without a
   representative multi-image workload and bounded-memory evidence.
 - **Backend:** retain the existing serial reference, optional thread-pool mode,
-  and optional GPU compositing. New thread submission remains blocked on
-  Backend Performance Pack 2; Pack 3 will add bounded `parfeval` only after
-  serial output streaming is genuinely bounded.
+  and optional GPU compositing. Backend Performance Pack 2 subsequently made
+  serial TIFF output genuinely bounded; Pack 3 now owns bounded `parfeval`
+  submission and incremental consumption.
 - **Dense surface:** add optional capability-checked GPU execution for the SGM
   kernel. MathWorks documents full `gpuArray` support for `disparitySGM` in
   R2026a. Inputs move to the GPU only when `UseGPU=true` and a supported device

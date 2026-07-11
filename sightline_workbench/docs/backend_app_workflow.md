@@ -107,14 +107,30 @@ jobOptions.RenderOptions.UseGPU = true;
 
 ## Large-output status
 
-Backend Performance Packs 0-1 are complete: one runtime render plan is compiled
-per job and backend radiometry defaults to full-source inverse warp. The current
-tiled renderer is not yet bounded-memory end to end because file output still
-assembles complete composite/per-layer arrays and thread mode can retain
-completed tile results before assembly.
+Backend Performance Packs 0-2 are complete: one runtime render plan is compiled
+per job, backend radiometry defaults to full-source inverse warp, and serial
+TIFF products can be streamed without retaining output-wide image, mask, or
+query-coordinate arrays.
 
-Do not assume that setting `TileSize` alone makes a 100-600 MP output safe for
-bounded-memory production. Backend Performance Packs 2-5 remain in order:
-bounded serial streaming, bounded thread submission, explicit
-radiometric/precision policy, and file-backed source regions. See
+Use the bounded path explicitly for large output:
+
+```matlab
+jobOptions.RenderOptions.TileSize = [256 256];
+jobOptions.RenderOptions.IncludeQueryCoordinates = false;
+jobOptions.Execution = struct(Mode="serial");
+jobOptions.Output = struct( ...
+    Directory="backend_output", ...
+    WriteFiles=true, ...
+    Formats="tiff", ...
+    InMemoryPolicy="never", ...
+    MaximumInMemoryPixels=16000000);
+```
+
+`InMemoryPolicy="auto"` streams writing jobs above
+`MaximumInMemoryPixels`; `"always"` requires the planned output to fit that
+ceiling, and `"never"` requires file output. Streaming currently accepts only
+serial execution, TIFF-only formats, tile dimensions that are multiples of 16,
+and normalized `[0,1]` radiometry. Streamed masks use TIFF. PNG remains
+in-memory, Pack 3 owns bounded thread submission, Pack 4 owns the broader
+radiometric/precision contract, and Pack 5 owns file-backed source regions. See
 `docs/project_status.md` and `docs/performance_optimization_workplan.md`.

@@ -19,11 +19,24 @@ classdef ProjectionBackendProcessor
                 job.RenderOptions, outputGrid);
             renderOptions = ProjectionBackendProcessor.renderOptionsWithExecution( ...
                 renderOptions, job.Execution);
+            [renderOptions, returnInMemory] = ...
+                ProjectionBackendProcessor.configureOutputExecution( ...
+                renderOptions, job.Output, job.Execution, outputGrid);
             renderPlan = ProjectionBackendRenderPlan.compile( ...
                 job.Scene, renderOptions, preparedLayers);
             renderTimer = tic;
-            readback = ProjectionBackendProcessor.renderScene( ...
-                job.Scene, renderOptions, job.Execution, renderPlan);
+            preliminaryOutputFiles = [];
+            if returnInMemory
+                readback = ProjectionBackendProcessor.renderScene( ...
+                    job.Scene, renderOptions, job.Execution, renderPlan);
+                readback.ReturnedInMemory = true;
+                readback.Streaming = false;
+                readback.StreamWriteSeconds = 0;
+            else
+                [readback, preliminaryOutputFiles] = ...
+                    ProjectionBackendProcessor.streamScene( ...
+                    job, renderOptions, renderPlan);
+            end
             renderSeconds = toc(renderTimer);
 
             result = struct();
@@ -41,10 +54,10 @@ classdef ProjectionBackendProcessor
             result.RenderPlan = ProjectionBackendRenderPlan.summary(renderPlan);
             result.Readback = readback;
             result.GpuInfo = readback.GpuInfo;
-            result.OutputFiles = [];
+            result.OutputFiles = preliminaryOutputFiles;
             result.Timing = struct(RenderSeconds=renderSeconds, ...
                 AlignmentSeconds=alignment.TimingSeconds, ...
-                WriteSeconds=0, TotalSeconds=0);
+                WriteSeconds=readback.StreamWriteSeconds, TotalSeconds=0);
             result.Message = "Backend job rendered successfully.";
 
             if isfield(job, "ViewerState")
@@ -55,8 +68,14 @@ classdef ProjectionBackendProcessor
 
             if result.Output.WriteFiles
                 writeTimer = tic;
-                result.OutputFiles = ProjectionBackendOutputWriter.write(result);
-                result.Timing.WriteSeconds = toc(writeTimer);
+                if result.Readback.Streaming
+                    result.OutputFiles = ProjectionBackendOutputWriter.complete( ...
+                        result, result.OutputFiles);
+                else
+                    result.OutputFiles = ProjectionBackendOutputWriter.write(result);
+                end
+                result.Timing.WriteSeconds = result.Timing.WriteSeconds + ...
+                    toc(writeTimer);
             end
             result.Timing.TotalSeconds = toc(totalTimer);
         end
@@ -77,6 +96,9 @@ classdef ProjectionBackendProcessor
                 job.RenderOptions, outputGrid);
             renderOptions = ProjectionBackendProcessor.renderOptionsWithExecution( ...
                 renderOptions, job.Execution);
+            [renderOptions, ~] = ...
+                ProjectionBackendProcessor.configureOutputExecution( ...
+                renderOptions, job.Output, job.Execution, outputGrid);
             renderPlan = ProjectionBackendRenderPlan.compile( ...
                 job.Scene, renderOptions, preparedLayers);
 
@@ -121,6 +143,64 @@ classdef ProjectionBackendProcessor
             else
                 readback = ProjectionReadbackRenderer.renderPlan(renderPlan);
             end
+        end
+
+        function [renderOptions, returnInMemory] = configureOutputExecution( ...
+                renderOptions, output, execution, outputGrid)
+            pixelCount = double(outputGrid.PixelCount);
+            maximumPixels = double(output.MaximumInMemoryPixels);
+            policy = lower(string(output.InMemoryPolicy));
+            if policy == "always" && pixelCount > maximumPixels
+                error("ProjectionBackendProcessor:inMemoryLimitExceeded", ...
+                    "Output has %g pixels, above Output.MaximumInMemoryPixels=%g.", ...
+                    pixelCount, maximumPixels);
+            end
+            if ~output.WriteFiles
+                if pixelCount > maximumPixels
+                    error("ProjectionBackendProcessor:inMemoryLimitExceeded", ...
+                        "A non-writing job must return its %g pixels in memory, above Output.MaximumInMemoryPixels=%g.", ...
+                        pixelCount, maximumPixels);
+                end
+                returnInMemory = true;
+                return
+            end
+            returnInMemory = policy == "always" || ...
+                (policy == "auto" && pixelCount <= maximumPixels);
+            if returnInMemory
+                return
+            end
+            if lower(string(execution.Mode)) ~= "serial"
+                error("ProjectionBackendProcessor:streamingRequiresSerial", ...
+                    "Bounded output streaming requires Execution.Mode=""serial"" until Backend Performance Pack 3.");
+            end
+            formats = reshape(lower(string(output.Formats)), 1, []);
+            if ~isequal(formats, "tiff")
+                error("ProjectionBackendProcessor:streamingRequiresTiff", ...
+                    "Bounded output streaming currently requires Output.Formats=""tiff""; PNG remains an in-memory format.");
+            end
+            if isempty(renderOptions.TileSize)
+                renderOptions.TileSize = [256 256];
+            end
+            if any(mod(renderOptions.TileSize, 16) ~= 0)
+                error("ProjectionBackendProcessor:invalidStreamingTileSize", ...
+                    "Streaming TIFF TileSize dimensions must be multiples of 16.");
+            end
+            renderOptions.IncludeLayerReadbacks = output.IncludeLayers;
+            renderOptions.IncludeQueryCoordinates = false;
+        end
+
+        function [readback, outputFiles] = streamScene( ...
+                job, renderOptions, renderPlan)
+            writer = ProjectionBackendTiffTileWriter( ...
+                job.Output, job.Scene.layers, renderPlan.LayerIndices, ...
+                renderPlan.OutputSize, renderOptions.TileSize);
+            cleanup = onCleanup(@() writer.abort());
+            consumer = @(tile, tileReadback) ...
+                writer.writeTile(tile, tileReadback);
+            readback = ProjectionBackendTiledRenderer.streamScene( ...
+                job.Scene, renderOptions, job.Execution, renderPlan, consumer);
+            outputFiles = writer.finalize();
+            clear cleanup
         end
 
         function [job, alignment] = runAlignment(job)

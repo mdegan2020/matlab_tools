@@ -90,6 +90,130 @@ classdef ProjectionBackendProcessorOutputTest < matlab.unittest.TestCase
             testCase.verifyEqual(result.Scene.layers(2).Alpha, 0.45, ...
                 AbsTol=ProjectionBackendProcessorOutputTest.Tol);
         end
+
+        function testSerialStreamingTiffMatchesInMemoryReference(testCase)
+            outputDirectory = string(tempname);
+            mkdir(outputDirectory);
+            testCase.addTeardown(@() ...
+                ProjectionBackendProcessorOutputTest.removeFolder(outputDirectory));
+            scene = ProjectionBackendProcessorOutputTest.makeTwoLayerScene();
+            renderOptions = struct(OutputSize=[17 19], TileSize=[16 16]);
+            reference = ProjectionBackendProcessor.run( ...
+                struct(Scene=scene, RenderOptions=renderOptions));
+            output = struct(Directory=outputDirectory, WriteFiles=true, ...
+                Formats="tiff", IncludeComposite=true, IncludeLayers=true, ...
+                InMemoryPolicy="never");
+
+            streamed = ProjectionBackendProcessor.run( ...
+                struct(Scene=scene, RenderOptions=renderOptions, Output=output));
+            diskComposite = im2double(imread(fullfile( ...
+                outputDirectory, "composite.tif")));
+            diskMask = logical(imread(fullfile( ...
+                outputDirectory, "composite_mask.tif")));
+            expectedComposite = double(uint8(round( ...
+                255 * reference.Readback.Image))) / 255;
+
+            testCase.verifyTrue(streamed.Readback.Streaming);
+            testCase.verifyFalse(streamed.Readback.ReturnedInMemory);
+            testCase.verifyEmpty(streamed.Readback.Image);
+            testCase.verifyEmpty(streamed.Readback.ValidMask);
+            testCase.verifyEmpty(streamed.Readback.QueryPlaneCoordinates);
+            testCase.verifyEqual(streamed.Readback.TileCount, 4);
+            testCase.verifyGreaterThanOrEqual( ...
+                [streamed.Readback.TileReports.WriteSeconds], zeros(1, 4));
+            testCase.verifyEqual(diskComposite, expectedComposite);
+            testCase.verifyEqual(diskMask, reference.Readback.ValidMask);
+            testCase.verifyTrue(isfile(fullfile( ...
+                outputDirectory, "layer_001_layer1_tif.tif")));
+            testCase.verifyTrue(isfile(fullfile( ...
+                outputDirectory, "layer_001_layer1_tif_mask.tif")));
+            testCase.verifyEqual(string(streamed.OutputFiles.Composite.Path), ...
+                string(fullfile(outputDirectory, "composite.tif")));
+        end
+
+        function testAutoPolicyStreamsAbovePixelLimit(testCase)
+            outputDirectory = string(tempname);
+            mkdir(outputDirectory);
+            testCase.addTeardown(@() ...
+                ProjectionBackendProcessorOutputTest.removeFolder(outputDirectory));
+            scene = ProjectionBackendProcessorOutputTest.makeTwoLayerScene();
+            output = struct(Directory=outputDirectory, WriteFiles=true, ...
+                Formats="tiff", IncludeLayers=false, ...
+                MaximumInMemoryPixels=1);
+            job = struct(Scene=scene, ...
+                RenderOptions=struct(OutputSize=[3 4], TileSize=[16 16]), ...
+                Output=output);
+
+            result = ProjectionBackendProcessor.run(job);
+
+            testCase.verifyTrue(result.Readback.Streaming);
+            testCase.verifyFalse(result.Readback.ReturnedInMemory);
+            testCase.verifyEmpty(result.OutputFiles.Layers);
+        end
+
+        function testStreamingTiffPreservesArbitraryBandCount(testCase)
+            outputDirectory = string(tempname);
+            mkdir(outputDirectory);
+            testCase.addTeardown(@() ...
+                ProjectionBackendProcessorOutputTest.removeFolder(outputDirectory));
+            imageData = reshape(linspace(0, 1, 80), 4, 5, 4);
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                {imageData}, "four_band.tif", ...
+                struct(RowStride=1, ColumnStride=1));
+            output = struct(Directory=outputDirectory, WriteFiles=true, ...
+                Formats="tiff", IncludeLayers=false, ...
+                InMemoryPolicy="never");
+            job = struct(Scene=scene, ...
+                RenderOptions=struct(OutputSize=[17 19], TileSize=[16 16]), ...
+                Output=output);
+
+            result = ProjectionBackendProcessor.run(job);
+            diskImage = imread(fullfile(outputDirectory, "composite.tif"));
+
+            testCase.verifySize(diskImage, [17 19 4]);
+            testCase.verifyTrue(result.Readback.Streaming);
+        end
+
+        function testStreamingRejectsPng(testCase)
+            outputDirectory = string(tempname);
+            mkdir(outputDirectory);
+            testCase.addTeardown(@() ...
+                ProjectionBackendProcessorOutputTest.removeFolder(outputDirectory));
+            scene = ProjectionBackendProcessorOutputTest.makeTwoLayerScene();
+            output = struct(Directory=outputDirectory, WriteFiles=true, ...
+                Formats="png", InMemoryPolicy="never");
+            job = struct(Scene=scene, ...
+                RenderOptions=struct(OutputSize=[3 4], TileSize=[16 16]), ...
+                Output=output);
+
+            testCase.verifyError( ...
+                @() ProjectionBackendProcessor.run(job), ...
+                "ProjectionBackendProcessor:streamingRequiresTiff");
+        end
+
+        function testStreamingFailureRemovesPartialFiles(testCase)
+            outputDirectory = string(tempname);
+            mkdir(outputDirectory);
+            testCase.addTeardown(@() ...
+                ProjectionBackendProcessorOutputTest.removeFolder(outputDirectory));
+            scene = ProjectionBackendProcessorOutputTest.makeTwoLayerScene();
+            scene.layers(1).Image(:) = 2;
+            scene.layers(1).Alpha = 0;
+            output = struct(Directory=outputDirectory, WriteFiles=true, ...
+                Formats="tiff", InMemoryPolicy="never");
+            job = struct(Scene=scene, ...
+                RenderOptions=struct(OutputSize=[3 4], TileSize=[16 16]), ...
+                Output=output);
+
+            testCase.verifyError( ...
+                @() ProjectionBackendProcessor.run(job), ...
+                "ProjectionBackendTiffTileWriter:radiometryOutOfRange");
+            testCase.verifyEmpty(dir(fullfile(outputDirectory, "*.partial")));
+            testCase.verifyFalse(isfile(fullfile( ...
+                outputDirectory, "composite.tif")));
+            testCase.verifyFalse(isfile(fullfile( ...
+                outputDirectory, "metadata.json")));
+        end
     end
 
     methods (Static, Access = private)

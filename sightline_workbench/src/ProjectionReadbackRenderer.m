@@ -38,6 +38,7 @@ classdef ProjectionReadbackRenderer
             options.Interpolation = plan.Interpolation;
             options.InvalidFillValue = plan.InvalidFillValue;
             options.IncludeLayerReadbacks = plan.IncludeLayerReadbacks;
+            options.IncludeQueryCoordinates = plan.IncludeQueryCoordinates;
             options.UseGPU = plan.UseGPU;
             options.GpuInfo = plan.GpuInfo;
             options.NumericalMode = plan.NumericalMode;
@@ -70,7 +71,12 @@ classdef ProjectionReadbackRenderer
                     layerReadbacks(outputIndex).Image = layerImage;
                     layerReadbacks(outputIndex).ValidMask = layerValidMask;
                     layerReadbacks(outputIndex).LayerIndex = layerPlan.LayerIndex;
-                    layerReadbacks(outputIndex).QueryPlaneCoordinates = queryPlaneCoordinates;
+                    if options.IncludeQueryCoordinates
+                        layerReadbacks(outputIndex).QueryPlaneCoordinates = ...
+                            queryPlaneCoordinates;
+                    else
+                        layerReadbacks(outputIndex).QueryPlaneCoordinates = [];
+                    end
                     layerReadbacks(outputIndex).Mesh = layerPlan.Mesh;
                 end
             end

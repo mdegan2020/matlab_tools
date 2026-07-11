@@ -281,6 +281,8 @@ classdef ProjectionBackendJob
             options.Interpolation = "bilinear";
             options.NumericalMode = "fullSourceInverseWarp";
             options.UseGPU = false;
+            options.IncludeLayerReadbacks = true;
+            options.IncludeQueryCoordinates = true;
             options.InvalidIntersectionPolicy = "error";
         end
 
@@ -315,6 +317,14 @@ classdef ProjectionBackendJob
             end
             options.UseGPU = ProjectionBackendJob.validateLogicalScalar( ...
                 options.UseGPU, "RenderOptions.UseGPU");
+            options.IncludeLayerReadbacks = ...
+                ProjectionBackendJob.validateLogicalScalar( ...
+                options.IncludeLayerReadbacks, ...
+                "RenderOptions.IncludeLayerReadbacks");
+            options.IncludeQueryCoordinates = ...
+                ProjectionBackendJob.validateLogicalScalar( ...
+                options.IncludeQueryCoordinates, ...
+                "RenderOptions.IncludeQueryCoordinates");
             options.InvalidIntersectionPolicy = string(options.InvalidIntersectionPolicy);
             if ~isscalar(options.InvalidIntersectionPolicy) || ...
                     options.InvalidIntersectionPolicy ~= "error"
@@ -330,6 +340,8 @@ classdef ProjectionBackendJob
             defaults.WriteFiles = false;
             defaults.IncludeComposite = true;
             defaults.IncludeLayers = true;
+            defaults.InMemoryPolicy = "auto";
+            defaults.MaximumInMemoryPixels = 16000000;
 
             output = ProjectionBackendJob.mergeStruct(defaults, output, "Output");
             output.Directory = string(output.Directory);
@@ -350,9 +362,23 @@ classdef ProjectionBackendJob
                 output.IncludeComposite, "Output.IncludeComposite");
             output.IncludeLayers = ProjectionBackendJob.validateLogicalScalar( ...
                 output.IncludeLayers, "Output.IncludeLayers");
+            output.InMemoryPolicy = lower(string(output.InMemoryPolicy));
+            if ~isscalar(output.InMemoryPolicy) || ...
+                    ~ismember(output.InMemoryPolicy, ["auto", "always", "never"])
+                error("ProjectionBackendJob:invalidOutput", ...
+                    "Output.InMemoryPolicy must be auto, always, or never.");
+            end
+            output.MaximumInMemoryPixels = ...
+                ProjectionBackendJob.validatePositiveInteger( ...
+                output.MaximumInMemoryPixels, ...
+                "Output.MaximumInMemoryPixels");
             if output.WriteFiles && strlength(output.Directory) == 0
                 error("ProjectionBackendJob:invalidOutput", ...
                     "Output.Directory is required when Output.WriteFiles is true.");
+            end
+            if ~output.WriteFiles && output.InMemoryPolicy == "never"
+                error("ProjectionBackendJob:invalidOutput", ...
+                    "Output.InMemoryPolicy cannot be never when WriteFiles is false.");
             end
         end
 
@@ -572,6 +598,15 @@ classdef ProjectionBackendJob
                     "%s must be a scalar logical value.", name);
             end
             value = logical(value);
+        end
+
+        function value = validatePositiveInteger(value, name)
+            if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || ...
+                    value < 1 || fix(value) ~= value
+                error("ProjectionBackendJob:invalidOutput", ...
+                    "%s must be a finite positive integer.", name);
+            end
+            value = double(value);
         end
 
         function value = validateScalarStruct(value, name)
