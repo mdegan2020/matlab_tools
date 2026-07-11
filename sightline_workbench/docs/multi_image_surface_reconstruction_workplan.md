@@ -2,8 +2,9 @@
 
 Status: approved consolidated workplan. Backend Performance Packs 0-5, the
 dense-surface synthetic expansion, Multi-Image Foundation MI-0 through MI-3,
-and A2 pair viewpoint are complete. The read-only MATLAB SDK audit is also
-complete. The current fresh-class repository suite passes 503/503 tests. This
+A2 pair viewpoint, and A3a-1 focus-aware keyboard mapping are complete. The
+read-only MATLAB SDK audit is also
+complete. The current fresh-class repository suite passes 506/506 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1299,8 +1300,9 @@ These trees are coordinated but should remain separately reviewable.
 3. **A2 — Pair viewpoint — complete.** Midpoint camera, fit/restore, optional
    follow, manual-motion suspension, explicit unavailable reasons, and
    presentation-only active-pair orientation without plane mutation.
-4. **A3a — Keyboard and manual motion imagery.** Add focus-aware remapping,
-   explicit sequence/order, stepping, edge controls, labels, Loop, and restore.
+4. **A3a — Keyboard and manual motion imagery — keyboard mapping complete.**
+   Focus-aware remapping is complete as A3a-1. Explicit sequence/order,
+   stepping, edge controls, labels, Loop, and restore remain in A3a-2.
 5. **A3b — Motion playback.** Add measured 0.5-10 fps playback, Space/Escape,
    bounded lookahead, pause reasons, and performance evidence.
 6. **A4 — Multi-view tracks and pair graph.** Reconcile pair matches into
@@ -1406,7 +1408,7 @@ complete. The ordered implementation queue is:
 
 1. Review the completed MI-0 through MI-3 baseline and preserve 496/496.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
-3. A3a focus-aware keyboard remapping.
+3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery.
 5. A3b motion playback and performance evidence.
 6. S1 immutable `CorrectionSet`, MAT/JSON, stale protection, OPK adapter.

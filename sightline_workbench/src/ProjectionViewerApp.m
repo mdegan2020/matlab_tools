@@ -39,6 +39,7 @@ classdef ProjectionViewerApp < handle
         IsControlDown logical = false
         IsShiftDown logical = false
         IsAltDown logical = false
+        ViewportKeyboardMode string = "normal"
         DragMode string = "none"
         LastPointerLocation double = [NaN NaN]
         NeedsDragFinalize logical = false
@@ -5800,6 +5801,11 @@ classdef ProjectionViewerApp < handle
             end
             handled = true;
 
+            app.nudgeSelectedLayerInDirection(key);
+        end
+
+        function nudgeSelectedLayerInDirection(app, key)
+
             layerIndex = app.SelectedLayerIndex;
             layer = app.Scene.layers(layerIndex);
             plane = layer.CurrentProjectionPlane;
@@ -6048,14 +6054,14 @@ classdef ProjectionViewerApp < handle
             if app.eventHasAlt(event)
                 app.IsAltDown = true;
             end
+            if app.handleViewportArrowKey(event)
+                return
+            end
             if app.IsControlDown || app.IsShiftDown || app.IsAltDown
                 return
             end
             if app.eventKeyIs(event, "space")
                 app.setSelectedLayerVisible(false);
-                return
-            end
-            if app.adjustProjectionFromArrowKey(event)
                 return
             end
             if app.nudgeSelectedLayerFromKey(event)
@@ -6164,6 +6170,65 @@ classdef ProjectionViewerApp < handle
             app.updateProjection(tipDegrees, tiltDegrees, ...
                 app.AlphaSlider.Value, app.DefaultMeshSampling);
             app.PreviewTimer = tic;
+        end
+
+        function handled = handleViewportArrowKey(app, event)
+            handled = false;
+            key = app.eventStringValue(event, "Key");
+            if isempty(key) || ~any(key(1) == ...
+                    ["uparrow", "downarrow", "leftarrow", "rightarrow"])
+                return
+            end
+            if ~app.viewportHasInteractionFocus() || ...
+                    app.eventHasControl(event) || app.eventHasAlt(event)
+                return
+            end
+
+            if app.IsShiftDown || app.eventHasShift(event)
+                handled = app.adjustProjectionFromArrowKey(event);
+                return
+            end
+            if app.ViewportKeyboardMode ~= "normal"
+                return
+            end
+
+            handled = true;
+            if key(1) == "leftarrow"
+                app.selectAdjacentLayer(-1);
+            elseif key(1) == "rightarrow"
+                app.selectAdjacentLayer(1);
+            elseif key(1) == "uparrow"
+                app.nudgeSelectedLayerInDirection("w");
+            else
+                app.nudgeSelectedLayerInDirection("s");
+            end
+        end
+
+        function tf = viewportHasInteractionFocus(app)
+            tf = false;
+            focusObject = app.UIFigure.CurrentObject;
+            if isempty(focusObject) || ~isvalid(focusObject)
+                return
+            end
+            if focusObject == app.Axes
+                tf = true;
+                return
+            end
+            if ~isgraphics(focusObject)
+                return
+            end
+            parentAxes = ancestor(focusObject, "axes");
+            tf = ~isempty(parentAxes) && parentAxes == app.Axes;
+        end
+
+        function selectAdjacentLayer(app, direction)
+            targetIndex = min(max(app.SelectedLayerIndex + direction, 1), ...
+                numel(app.Scene.layers));
+            if targetIndex == app.SelectedLayerIndex
+                return
+            end
+            app.SelectedLayerIndex = targetIndex;
+            app.updateControlsFromSelectedLayer();
         end
 
         function value = sliderWheelValue(app, slider, event)
@@ -7655,6 +7720,7 @@ classdef ProjectionViewerApp < handle
             app.IsControlDown = false;
             app.IsShiftDown = false;
             app.IsAltDown = false;
+            app.ViewportKeyboardMode = "normal";
             app.DragMode = "none";
             app.LastPointerLocation = [NaN NaN];
             app.NeedsDragFinalize = false;
@@ -8390,8 +8456,11 @@ classdef ProjectionViewerApp < handle
                 "Double left click: show the next layer and hide the others"
                 ""
                 "Keyboard"
-                "Up/Down arrows: adjust Tip by 0.5 deg"
-                "Left/Right arrows: adjust Tilt by 0.5 deg"
+                "Shift + Up/Down arrows: adjust Tip by 0.5 deg"
+                "Shift + Left/Right arrows: adjust Tilt by 0.5 deg"
+                "Left/Right arrows: select the previous/next layer"
+                "Up/Down arrows: nudge the selected layer vertically"
+                "Arrow shortcuts require viewport interaction focus"
                 "W/A/S/D: nudge the selected layer"
                 "I/K: adjust phi"
                 "J/L: adjust omega"

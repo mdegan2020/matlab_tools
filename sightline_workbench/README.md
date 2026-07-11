@@ -82,7 +82,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest fresh-class repository validation passes all 503 tests;
+- the latest fresh-class repository validation passes all 506 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -205,7 +205,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 503 passing tests with no failures or incomplete tests.
+baseline is 506 passing tests with no failures or incomplete tests.
 
 ## Dense-Surface Synthetic Fixture
 
@@ -500,8 +500,12 @@ Core controls:
 - Mouse wheel zooms the view.
 - Shift + wheel adjusts Tip, Alt/Option + wheel adjusts Tilt, and Control +
   wheel adjusts Twist camera roll.
-- Up/Down arrows adjust Tip by `0.5` degrees; Left/Right arrows adjust Tilt by
-  `0.5` degrees.
+- Shift+Up/Down arrows adjust Tip by `0.5` degrees; Shift+Left/Right arrows
+  adjust Tilt by `0.5` degrees.
+- With viewport interaction focus, plain Left/Right selects the previous/next
+  layer without changing visibility, and plain Up/Down uses the existing W/S
+  vertical layer-nudge behavior. Arrow keys remain available to dropdowns,
+  tables, sliders, and editable controls when those controls have focus.
 - Plain left-drag pans the camera.
 - Control + left-drag translates the selected layer on the projection plane,
   using the same selected-layer projection offset as W/A/S/D.

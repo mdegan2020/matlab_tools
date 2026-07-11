@@ -771,7 +771,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
         end
 
-        function testArrowKeysAdjustTipAndTiltWithoutZoom(testCase)
+        function testShiftArrowKeysAdjustTipAndTiltWithoutZoom(testCase)
             scene = ProjectionViewerAppInteractionTest.makeScene();
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
@@ -787,11 +787,14 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             initialYData = surfaceHandle(1).YData;
             initialZData = surfaceHandle(1).ZData;
             initialCameraViewAngle = ax.CameraViewAngle;
+            fig.CurrentObject = ax;
 
             fig.WindowKeyPressFcn(fig, ...
-                ProjectionViewerAppInteractionTest.makeKeyEvent("uparrow"));
+                ProjectionViewerAppInteractionTest.makeKeyEvent( ...
+                "uparrow", "shift"));
             fig.WindowKeyPressFcn(fig, ...
-                ProjectionViewerAppInteractionTest.makeKeyEvent("rightarrow"));
+                ProjectionViewerAppInteractionTest.makeKeyEvent( ...
+                "rightarrow", "shift"));
             drawnow
             adjustedState = app.exportState();
 
@@ -809,9 +812,11 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 surfaceHandle(1), initialXData, initialYData, initialZData), 1e-9);
 
             fig.WindowKeyPressFcn(fig, ...
-                ProjectionViewerAppInteractionTest.makeKeyEvent("downarrow"));
+                ProjectionViewerAppInteractionTest.makeKeyEvent( ...
+                "downarrow", "shift"));
             fig.WindowKeyPressFcn(fig, ...
-                ProjectionViewerAppInteractionTest.makeKeyEvent("leftarrow"));
+                ProjectionViewerAppInteractionTest.makeKeyEvent( ...
+                "leftarrow", "shift"));
             drawnow
             resetState = app.exportState();
 
@@ -825,6 +830,93 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
             testCase.verifyEqual(ax.CameraViewAngle, initialCameraViewAngle, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
+
+        function testPlainLeftRightSelectLayersWithoutVisibilityChange(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeThreeImageScene();
+            scene.layers(2).Visible = false;
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+            ax = findall(fig, "Type", "axes");
+            visibilityBefore = [app.exportState().Layers.Visible];
+            fig.CurrentObject = ax;
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("leftarrow"));
+            afterLeft = app.exportState();
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("rightarrow"));
+            afterRight = app.exportState();
+
+            testCase.verifyEqual(afterLeft.SelectedLayerIndex, 2);
+            testCase.verifyEqual(afterRight.SelectedLayerIndex, 3);
+            testCase.verifyEqual([afterLeft.Layers.Visible], visibilityBefore);
+            testCase.verifyEqual([afterRight.Layers.Visible], visibilityBefore);
+        end
+
+        function testPlainUpDownReuseVerticalLayerNudge(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+            ax = findall(fig, "Type", "axes");
+            initial = app.exportState();
+            fig.CurrentObject = ax;
+
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("uparrow"));
+            nudged = app.exportState();
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("downarrow"));
+            restored = app.exportState();
+
+            testCase.verifyNotEqual( ...
+                nudged.Layers(2).ProjectionOffsetMeters, ...
+                initial.Layers(2).ProjectionOffsetMeters);
+            testCase.verifyEqual( ...
+                restored.Layers(2).ProjectionOffsetMeters, ...
+                initial.Layers(2).ProjectionOffsetMeters, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual( ...
+                restored.Layers(1).ProjectionOffsetMeters, ...
+                initial.Layers(1).ProjectionOffsetMeters, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
+
+        function testArrowKeysDoNotStealControlFocus(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeThreeImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+            layerDropDown = ...
+                ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
+            tipSlider = ...
+                ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
+            initial = app.exportState();
+
+            fig.CurrentObject = layerDropDown;
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent("leftarrow"));
+            fig.CurrentObject = tipSlider;
+            fig.WindowKeyPressFcn(fig, ...
+                ProjectionViewerAppInteractionTest.makeKeyEvent( ...
+                "uparrow", "shift"));
+            after = app.exportState();
+
+            testCase.verifyEqual(after.SelectedLayerIndex, ...
+                initial.SelectedLayerIndex);
+            testCase.verifyEqual(after.Projection, initial.Projection);
+            testCase.verifyEqual(after.Layers, initial.Layers);
         end
 
         function testLayerSpecificAlphaDragUpdatesSelectedLayerOnly(testCase)
@@ -1910,10 +2002,13 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             bounds = struct(Minimum=minimums, Maximum=maximums);
         end
 
-        function event = makeKeyEvent(key)
+        function event = makeKeyEvent(key, modifier)
+            if nargin < 2
+                modifier = key;
+            end
             event = struct();
             event.Key = key;
-            event.Modifier = key;
+            event.Modifier = modifier;
         end
 
         function event = makeMouseEvent(modifier)

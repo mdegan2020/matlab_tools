@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 503/503 tests with zero
+- The latest fresh-class repository suite passes 506/506 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -57,6 +57,7 @@ As of July 11, 2026:
 | Multi-Image Foundation MI-2 | Complete |
 | Multi-Image Foundation MI-3 | Complete |
 | Multi-Image A2 pair viewpoint | Complete |
+| Multi-Image A3a-1 focus-aware keyboard mapping | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -104,14 +105,21 @@ Manual pan, zoom, or twist suspends follow for the current pair. The feature
 changes only camera presentation and reports unavailable overlap/geometry
 without mutating scene or scientific state.
 
+Multi-image A3a-1 makes arrows viewport-focus-aware. Shift+Arrows retain
+Tip/Tilt adjustment, plain Left/Right select layers without visibility changes,
+and plain Up/Down reuse W/S vertical nudge semantics. Focused dropdowns,
+tables, sliders, and editable controls keep their native arrow behavior. A
+runtime keyboard-mode boundary is reserved for the subsequent motion-imagery
+pack without implementing motion mode here.
+
 ## Current Implementation Queue
 
 The completed read-only MATLAB SDK entry-point inventory, proposed reuse points,
 and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The
 approved consolidated implementation queue is now
 `docs/multi_image_surface_reconstruction_workplan.md`. MI-0 through MI-3, A2
-pair viewpoint, and the SDK audit are complete; the next ordered packs are
-focus-aware keyboard remapping, manual motion imagery, and measured motion
+pair viewpoint, A3a-1 focus-aware keyboard mapping, and the SDK audit are
+complete; the next ordered packs are manual motion imagery and measured motion
 playback. Correction SDK, global multi-image solving, precision validation,
 dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow
 in the explicit dependency order recorded there.
