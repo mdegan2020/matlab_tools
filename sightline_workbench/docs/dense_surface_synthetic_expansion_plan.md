@@ -1,7 +1,7 @@
 # Dense-Surface Synthetic Expansion Plan
 
-Status: approved for implementation. Milestone 1 is complete; Milestone 2 is
-the active queue after completion of Backend Performance Packs 0-5. Fixture
+Status: approved for implementation. Milestones 1-2 are complete; Milestone 3
+is the active queue after completion of Backend Performance Packs 0-5. Fixture
 inputs and modeling decisions remain in the local ignored configuration.
 
 ## Purpose
@@ -223,12 +223,22 @@ configured fixture passes range, per-axis sampling, scan, constant-gap
 schedule, pitch field-of-regard, footprint, and reflected-texture growth checks.
 No full-size image allocation occurs in this milestone.
 
-### Milestone 2: Terrain, Texture, And Truth Geometry
+### Milestone 2: Terrain, Texture, And Truth Geometry — Complete
 
 - Implement logical reflected texture addressing and continuity tests.
 - Implement deterministic asymmetric terrain with first-hit occlusion.
 - Implement continuous truth trajectory and compact on-demand truth sampling.
 - Validate source-band cycling and ensure truth is excluded from viewer input.
+
+Implemented by `ProjectionReflectedTexture`,
+`ProjectionDenseSurfaceSyntheticTerrain`, and
+`ProjectionDenseSurfaceSyntheticTruth`. Reflected coordinates share source
+edges continuously without allocating a mosaic. Terrain is a normalized smooth
+asymmetric composite with first-forward-hit intersections and verified
+view-dependent occlusion. Continuous deterministic sortie motion, image rays,
+terrain intersections, and cyclic source bands are sampled from compact truth
+parameters. The viewer-safe scene metadata contract explicitly excludes the
+terrain, trajectory, and truth-view payloads.
 
 ### Milestone 3: Full-Scale Image Generation
 

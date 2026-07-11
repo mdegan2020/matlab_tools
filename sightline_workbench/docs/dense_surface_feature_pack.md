@@ -147,5 +147,5 @@ results = runTests;
 ```
 
 The completed Pack 1 fresh-class run passed all 386 repository tests at that
-milestone. The current fresh-class repository baseline is 424/424 after
-synthetic-expansion Milestone 1.
+milestone. The current fresh-class repository baseline is 436/436 after
+synthetic-expansion Milestone 2.

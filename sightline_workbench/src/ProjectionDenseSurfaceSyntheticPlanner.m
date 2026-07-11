@@ -381,8 +381,8 @@ classdef ProjectionDenseSurfaceSyntheticPlanner
         function counts = tileCounts(bounds, target, sourceSize, spacing, config)
             relativeX = bounds(1:2) - target(1);
             relativeY = bounds(3:4) - target(2);
-            rowSpan = sourceSize(1) * spacing(1);
-            columnSpan = sourceSize(2) * spacing(2);
+            rowSpan = (sourceSize(1) - 1) * spacing(1);
+            columnSpan = (sourceSize(2) - 1) * spacing(2);
             rows = ProjectionDenseSurfaceSyntheticPlanner.axisTileCount( ...
                 relativeY, rowSpan, ...
                 config.sampling.minimum_reflection_tiles_rows, ...

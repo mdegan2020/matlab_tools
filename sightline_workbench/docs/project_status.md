@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 424/424 tests with zero
+- The latest fresh-class repository suite passes 436/436 tests with zero
   failures and zero incomplete tests.
 
 ## Completed Feature Trees
@@ -39,7 +39,7 @@ As of July 11, 2026:
 | Viewer Orientation and Anaglyph Presentation Pack | Complete |
 | Alignment Workbench Usability and Offset-Semantics Pack | Complete |
 | Cross-System Acceleration Pass | Complete |
-| Dense-Surface Synthetic Expansion Milestone 1 | Complete |
+| Dense-Surface Synthetic Expansion Milestones 1-2 | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -88,7 +88,7 @@ provenance summaries, and in-memory/file-backed numerical parity. MATLAB TIFF
 region reads require serial execution because their internal reader is not
 supported on thread workers.
 
-The remaining implementation queue is Milestones 2-5 of the approved
+The remaining implementation queue is Milestones 3-5 of the approved
 dense-surface synthetic expansion. Required fixture decisions are captured in
 an ignored local JSON configuration. Actual sensor and geometry values must
 remain out of committed documentation.
@@ -99,9 +99,11 @@ remain out of committed documentation.
    per-axis oversampling, and ordered explainable feasibility checks are in
    place. The ignored configured fixture passes every planner check before
    full-scale allocation.
-2. **Terrain, texture, and truth geometry.** Add logical reflected texture
-   addressing, asymmetric smooth terrain with real occlusion, continuous truth
-   motion, and compact on-demand truth sampling.
+2. **Terrain, texture, and truth geometry — complete.** Logical shared-edge
+   reflected addressing supports continuous arbitrary-band interpolation;
+   compact deterministic terrain enforces configured extrema and uses first-hit
+   intersections with explicit occlusion; fixture-local Gauss-Markov motion and
+   truth rays are sampled on demand. Truth is absent from viewer-safe metadata.
 3. **Full-scale image generation.** Render the configured single-band views
    from truth geometry and full in-memory texture, then write final TIFF/PNG
    products and compact ignored diagnostics.

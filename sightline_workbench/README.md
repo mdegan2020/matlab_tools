@@ -79,9 +79,9 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete;
-- the latest fresh-class repository validation passes all 424 tests;
-- dense-surface synthetic Milestone 1 is complete, and terrain, reflected
-  texture, truth motion, and occlusion are next; and
+- the latest fresh-class repository validation passes all 436 tests;
+- dense-surface synthetic Milestones 1-2 are complete, and full-scale truth
+  image generation and final output are next; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -201,9 +201,9 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 424 passing tests with no failures or incomplete tests.
+baseline is 436 passing tests with no failures or incomplete tests.
 
-## Dense-Surface Synthetic Feasibility
+## Dense-Surface Synthetic Fixture
 
 Milestone 1 adds strict loading of the ignored local fixture configuration and
 a pure collection planner. The planner validates the complete committed schema,
@@ -226,6 +226,17 @@ Infeasible plans return an ordered check ledger, the first violated constraint,
 and the nearest computed schedule rather than changing configured image,
 platform, scan, range, texture, or field-of-regard inputs. Committed tests use
 independently selected small public values and never load the local fixture.
+
+Milestone 2 adds logical reflected texture sampling without materializing a
+mosaic, including continuous shared-edge interpolation for odd and even source
+dimensions. Compact terrain truth uses a deterministic asymmetric smooth
+composite with enforced extrema and first-forward-hit ray intersection.
+Visibility explicitly distinguishes visible terrain, terrain occlusion,
+texture-coverage failure, and invalid geometry. A fixture-local deterministic
+Gauss-Markov process supplies continuous on-demand position and attitude truth;
+full per-pixel XYZ arrays are not retained. Viewer-safe scene metadata contains
+only reported-geometry intent and never includes terrain, trajectory, or truth
+view payloads.
 
 ## Viewer Performance Evaluation
 
@@ -844,9 +855,10 @@ provide `BackendSource=struct(Kind="tiff",Path=...)`; each serial output tile
 reads only the required source bounding region. Runtime provider images/caches
 remain in the render plan, never the serializable scene descriptor. MATLAB TIFF
 region reads are unsupported on thread workers, so file-backed sources
-currently require serial execution. Dense-surface synthetic expansion is now
-the active queue; its private configuration and ordered public contract are
-described in `docs/dense_surface_synthetic_expansion_plan.md`.
+currently require serial execution. Dense-surface synthetic full-scale image
+generation is now the active queue; its private configuration and ordered
+public contract are described in
+`docs/dense_surface_synthetic_expansion_plan.md`.
 See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output
 production work.
