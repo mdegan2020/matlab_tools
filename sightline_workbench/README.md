@@ -1,8 +1,15 @@
-# PlanarProjection
+# Sightline Workbench
 
-`PlanarProjection` is a small MATLAB geometry library for 2D/3D projection work, with an emphasis on plane-based stereo vision, positive-focal-plane camera projections, and future high-performance imagery workflows.
+**Sightline Workbench** is an interactive MATLAB environment for projection,
+multi-image visualization, pointing correction, stereo alignment, dense surface
+exploration, and explainable full-resolution image processing. It began as a
+compact collection of 3-D/2-D planar-projection utilities and has grown into a
+broader image-geometry workbench with programmatic GUI and headless backend
+workflows.
 
-The library is implemented as a single static-method class:
+The original `PlanarProjection` static class remains the stable core geometry
+API. Existing class and function names are intentionally retained for
+compatibility:
 
 ```matlab
 plane = PlanarProjection.definePlane(G0, V0, V1, R0);
@@ -353,7 +360,7 @@ remain the default. See
 `docs/viewer_performance_pack_8_raster_preview_decision.md` and reproduce the
 comparison with `viewer_raster_preview_evaluation`.
 
-## Projection Viewer Prototype
+## Sightline Workbench Viewer
 
 The interactive prototype is programmatic MATLAB app code, not an `.mlapp` file. From MATLAB:
 
