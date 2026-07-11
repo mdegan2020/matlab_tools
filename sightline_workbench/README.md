@@ -40,6 +40,7 @@ src/ProjectionBackendCustomGpuKernelPlan.m Backend custom GPU kernel assessment
 src/ProjectionBackendOutputGrid.m Backend full-extent output grid planner
 src/ProjectionBackendOutputWriter.m Backend image/mask/metadata writers
 src/ProjectionBackendRadiometry.m Explicit output scale/offset/class policy
+src/ProjectionBackendSourceProvider.m In-memory/TIFF backend region adapter
 src/ProjectionBackendTiffTileWriter.m Bounded indexed tiled-TIFF writer
 src/ProjectionBackendTiledRenderer.m Bounded serial/thread tile pipeline
 src/ProjectionBackendProcessor.m Backend job invocation facade
@@ -72,14 +73,13 @@ The current implementation baseline is summarized in
 
 - the original viewer milestones, Backend Milestones 1-10, Auto Alignment
   Milestones 1-13, Alignment Reliability Packs 0-8, Viewer Performance Packs
-  0-8, Backend Performance Packs 0-4, Dense Surface Pack 1, the Viewer
+  0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the Viewer
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete;
-- the latest fresh-class repository validation passes all 413 tests;
-- the remaining implementation queue is Backend Performance Pack 5,
-  followed by dense-surface synthetic expansion after the requested fixture
-  inputs are available; and
+- the latest fresh-class repository validation passes all 416 tests;
+- the remaining implementation queue is dense-surface synthetic expansion
+  after the requested fixture inputs are available; and
 - representative 100-150 MP Windows/real-data validation remains external
   because no user real-data pair is available in this repository.
 
@@ -796,7 +796,7 @@ backend records the fallback reason in `GpuInfo` and continues on CPU.
 Dense-surface extraction likewise defaults to CPU and can optionally request
 capability-checked GPU execution for only the `disparitySGM` kernel.
 
-Backend Performance Packs 0-4 compile one reusable render plan per job, make
+Backend Performance Packs 0-5 compile one reusable render plan per job, make
 full-source inverse warp the default, and provide bounded serial tiled-TIFF
 output. `Output.InMemoryPolicy` selects `auto`, `always`, or `never`, with
 `Output.MaximumInMemoryPixels` providing the explicit retention ceiling.
@@ -810,8 +810,13 @@ Thread mode now uses bounded `parfeval` submission on `parpool("threads")`,
 consumes `fetchNext` results immediately, and exposes the configured and
 observed in-flight counts. `RenderOptions.WorkingPrecision="single"` optionally
 reduces retained/in-flight image products while preserving the double reference
-within tested tolerance. Backend Performance Pack 5 covers file-backed source
-regions. Dense-surface synthetic expansion follows the backend packs.
+within tested tolerance. File-backed backend layers may set `Image=[]` and
+provide `BackendSource=struct(Kind="tiff",Path=...)`; each serial output tile
+reads only the required source bounding region. Runtime provider images/caches
+remain in the render plan, never the serializable scene descriptor. MATLAB TIFF
+region reads are unsupported on thread workers, so file-backed sources
+currently require serial execution. Dense-surface synthetic expansion follows
+after the requested fixture inputs are supplied.
 See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output
 production work.

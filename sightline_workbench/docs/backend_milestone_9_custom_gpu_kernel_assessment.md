@@ -16,12 +16,11 @@ after tiled CPU rendering, thread-pool execution, and MATLAB-managed GPU
 compositing. Without that evidence, a custom kernel would add maintenance risk
 before proving that it solves the right problem.
 
-Backend Performance Packs 0-4 have since added reusable render plans,
+Backend Performance Packs 0-5 have since added reusable render plans,
 full-source inverse-warp radiometry, and bounded serial/thread tiled-TIFF
-output with explicit radiometric/precision policy. Within the backend
-workstream, the next priority is file-backed source regions. The cross-system
-acceleration pass is complete; that remaining memory/lifetime problem should be
-resolved and
+output with explicit radiometric/precision policy and serial file-backed source
+regions. The cross-system acceleration pass and backend performance workstream
+are complete; representative workloads should be
 profiled before this custom-kernel decision is revisited.
 
 ## Candidate Kernel If Future Profiling Justifies It

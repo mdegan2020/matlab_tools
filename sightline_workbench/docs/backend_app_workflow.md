@@ -107,7 +107,7 @@ jobOptions.RenderOptions.UseGPU = true;
 
 ## Large-output status
 
-Backend Performance Packs 0-4 are complete: one runtime render plan is compiled
+Backend Performance Packs 0-5 are complete: one runtime render plan is compiled
 per job, backend radiometry defaults to full-source inverse warp, and serial
 TIFF products can be streamed without retaining output-wide image, mask, or
 query-coordinate arrays. Thread mode submits at most
@@ -147,5 +147,24 @@ Stored normalized values reconstruct physical renderer values as
 the fill/clipping policy are written to metadata. Optional
 `RenderOptions.WorkingPrecision="single"` casts tile image/coordinate products
 before retention or worker transfer; the tested tolerance versus double is
-`1e-6`. Pack 5 owns file-backed source regions. See
+`1e-6`.
+
+For a file-backed backend source, keep the geometry and provenance in the
+scene, omit the full in-memory image, and add a serializable descriptor:
+
+```matlab
+scene.layers(1).Image = [];
+scene.layers(1).BackendSource = struct( ...
+    Kind="tiff", ...
+    Path="/absolute/path/to/source.tif");
+job.Scene = scene;
+job.Execution = struct(Mode="serial");
+```
+
+The runtime provider verifies TIFF dimensions against
+`SourceGeometry.ImageSize`, reads only the floor/ceil source bounding region
+needed by each output tile, and records path, size, band count, and class in
+the render-plan summary without serializing image data or runtime handles.
+MATLAB TIFF region reads use an internal class unavailable on thread workers;
+file-backed jobs therefore reject `Mode="threads"` with a clear error. See
 `docs/project_status.md` and `docs/performance_optimization_workplan.md`.

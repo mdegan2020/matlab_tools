@@ -41,17 +41,22 @@ classdef ProjectionBackendRenderPlan
                 meshPlaneCoordinates = PlanarProjection.worldToPlane( ...
                     worldPoints, plane);
                 if options.NumericalMode == "fullSourceInverseWarp"
+                    sourceProvider = ...
+                        ProjectionBackendSourceProvider.fromLayer(layer);
                     inverseWarp = ProjectionFullSourceInverseWarp.prepare( ...
-                        mesh, plane, layer.SourceGeometry.ImageSize);
+                        mesh, plane, sourceProvider.ImageSize);
                     interpolant = inverseWarp.InterpolantTemplate;
                     sampledImage = [];
-                    sourceImage = layer.Image;
-                    bandCount = size(sourceImage, 3);
+                    bandCount = sourceProvider.BandCount;
                 else
+                    sourceProvider = [];
                     inverseWarp = [];
+                    if isempty(layer.Image)
+                        error("ProjectionBackendRenderPlan:sparseRequiresImage", ...
+                            "Sparse compatibility mode requires an in-memory layer.Image.");
+                    end
                     sampledImage = layer.Image( ...
                         mesh.RowIndices, mesh.ColumnIndices, :);
-                    sourceImage = [];
                     bandCount = size(sampledImage, 3);
                     interpolant = scatteredInterpolant( ...
                         meshPlaneCoordinates(1, :).', ...
@@ -67,7 +72,7 @@ classdef ProjectionBackendRenderPlan
                 layerPlan.Mesh = mesh;
                 layerPlan.MeshPlaneCoordinates = meshPlaneCoordinates;
                 layerPlan.SampledImage = sampledImage;
-                layerPlan.SourceImage = sourceImage;
+                layerPlan.SourceProvider = sourceProvider;
                 layerPlan.BandCount = bandCount;
                 layerPlan.InterpolantTemplate = interpolant;
                 layerPlan.InverseWarp = inverseWarp;
@@ -158,7 +163,7 @@ classdef ProjectionBackendRenderPlan
                     "Plan layers must match LayerIndices.");
             end
             requiredLayerFields = ["LayerIndex", "Plane", "Mesh", ...
-                "SampledImage", "SourceImage", "BandCount", ...
+                "SampledImage", "SourceProvider", "BandCount", ...
                 "InterpolantTemplate", "InverseWarp", ...
                 "Alpha", "Visible", "BlendMode"];
             if any(~isfield(plan.Layers, requiredLayerFields)) || ...
@@ -179,10 +184,8 @@ classdef ProjectionBackendRenderPlan
                 if numericalMode == "fullSourceInverseWarp"
                     ProjectionFullSourceInverseWarp.validate( ...
                         plan.Layers(layerIndex).InverseWarp);
-                    if isempty(plan.Layers(layerIndex).SourceImage)
-                        error("ProjectionBackendRenderPlan:invalidPlan", ...
-                            "Full-source plan layers must retain source imagery.");
-                    end
+                    ProjectionBackendSourceProvider.validate( ...
+                        plan.Layers(layerIndex).SourceProvider);
                 elseif isempty(plan.Layers(layerIndex).SampledImage)
                     error("ProjectionBackendRenderPlan:invalidPlan", ...
                         "Sparse-reference plan layers must retain sampled imagery.");
@@ -222,10 +225,33 @@ classdef ProjectionBackendRenderPlan
             summary.TopologyBuildCount = plan.Preparation.TopologyBuildCount;
             summary.GpuResolutionCount = plan.Preparation.GpuResolutionCount;
             summary.CompileSeconds = plan.Preparation.CompileSeconds;
+            summary.Sources = ProjectionBackendRenderPlan.sourceSummaries( ...
+                plan.Layers);
         end
     end
 
     methods (Static, Access = private)
+        function summaries = sourceSummaries(layers)
+            summaries = struct([]);
+            for layerIndex = 1:numel(layers)
+                if isempty(layers(layerIndex).SourceProvider)
+                    source = struct(Kind="sparseCompatibility", Path="", ...
+                        ImageSize=size(layers(layerIndex).SampledImage, [1 2]), ...
+                        BandCount=layers(layerIndex).BandCount, ...
+                        SourceClass=string(class( ...
+                        layers(layerIndex).SampledImage)), RuntimeOnly=true);
+                else
+                    source = ProjectionBackendSourceProvider.summary( ...
+                        layers(layerIndex).SourceProvider);
+                end
+                if isempty(summaries)
+                    summaries = source;
+                else
+                    summaries(layerIndex) = source;
+                end
+            end
+        end
+
         function validateScene(scene)
             requiredFields = ["frameCamera", "renderOrigin", "layers"];
             if ~isstruct(scene) || ~isscalar(scene) || ...

@@ -260,6 +260,10 @@ classdef ProjectionBackendTiledRenderer
         function [tileReports, peakInFlightTiles] = consumeTilesInThreads( ...
                 renderPlan, options, outputGrid, tiles, tileConsumer, ...
                 measureConsumer)
+            if ProjectionBackendTiledRenderer.hasFileBackedSources(renderPlan)
+                error("ProjectionBackendTiledRenderer:fileBackedThreadsUnsupported", ...
+                    "MATLAB TIFF region reads are unsupported on thread workers; use serial execution for file-backed sources.");
+            end
             pool = ProjectionBackendTiledRenderer.ensureThreadPool();
             maximumInFlight = min(options.MaximumInFlightTiles, numel(tiles));
             futures = parallel.FevalFuture.empty;
@@ -287,8 +291,10 @@ classdef ProjectionBackendTiledRenderer
                         error("ProjectionBackendTiledRenderer:tileFailed", ...
                             "Tile %d rows [%d %d] columns [%d %d] failed (%s): %s", ...
                             tileResult.TileIndex, ...
-                            tileResult.Tile.RowRange([1 end]), ...
-                            tileResult.Tile.ColumnRange([1 end]), ...
+                            tileResult.Tile.RowRange(1), ...
+                            tileResult.Tile.RowRange(end), ...
+                            tileResult.Tile.ColumnRange(1), ...
+                            tileResult.Tile.ColumnRange(end), ...
                             tileResult.ErrorIdentifier, tileResult.ErrorMessage);
                     end
                     completionOrdinal = completionOrdinal + 1;
@@ -336,6 +342,17 @@ classdef ProjectionBackendTiledRenderer
         function cancelFutures(futures)
             if ~isempty(futures)
                 cancel(futures);
+            end
+        end
+
+        function tf = hasFileBackedSources(renderPlan)
+            tf = false;
+            for layerIndex = 1:numel(renderPlan.Layers)
+                provider = renderPlan.Layers(layerIndex).SourceProvider;
+                if ~isempty(provider) && provider.Kind == "tiff"
+                    tf = true;
+                    return
+                end
             end
         end
 

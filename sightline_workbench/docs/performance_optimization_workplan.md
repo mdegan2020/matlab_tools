@@ -49,8 +49,8 @@ retains CPU viewer/alignment execution, keeps new backend threading dependent
 on bounded serial streaming, and adds optional capability-checked GPU SGM with
 CPU fallback. Backend Performance Pack 2 now provides bounded serial tiled-TIFF
 output, Pack 3 adds bounded thread submission/consumption, and Pack 4 defines
-output radiometry/precision. Pack 5 is active. The current
-fresh-class repository baseline is 413/413 passing tests. See
+output radiometry/precision, and Pack 5 adds file-backed source regions. The
+current fresh-class repository baseline is 416/416 passing tests. See
 `docs/project_status.md` for the concise cross-workstream status.
 
 Use the selected project queue and the backend dependency order in this
@@ -1486,7 +1486,26 @@ Backend Performance Pack 4: Define output radiometric policy
 
 ### Backend Performance Pack 5: File-Backed Source Regions
 
-Status: not started; follows Pack 4.
+Status: complete on July 11, 2026.
+
+Implementation:
+
+- `ProjectionBackendSourceProvider` is a runtime-only render-plan adapter with
+  compatible in-memory and TIFF-region modes.
+- A serializable layer descriptor uses
+  `BackendSource=struct(Kind="tiff",Path=...)`; `layer.Image` may be empty for
+  the backend job while source geometry and full-resolution provenance remain.
+- Each tile mapping computes the floor/ceil row/column bounding region, reads
+  only that region, shifts coordinates into the regional array, and applies the
+  unchanged full-source interpolation/mask policy.
+- Render-plan summaries record provider kind, path, image size, band count, and
+  source class without serializing provider image data, handles, or caches.
+- In-memory and TIFF-backed serial renders agree exactly, including serialized
+  job execution. Viewer preview/file-backed providers remain separate and are
+  never selected as backend radiometric inputs.
+- MATLAB's TIFF region reader is not supported on thread workers. File-backed
+  sources therefore fail early with a clear serial-execution requirement;
+  in-memory sources retain bounded thread execution from Pack 3.
 
 Deliverables:
 
@@ -1706,16 +1725,15 @@ The completed viewer sequence was:
 8. Viewer Performance Pack 7: lazy UI and preview storage.
 9. Viewer Performance Pack 8: raster preview prototype and decision.
 
-Viewer Packs 0-8, Backend Packs 0-4, the Viewer Orientation and Anaglyph
+Viewer Packs 0-8, Backend Packs 0-5, the Viewer Orientation and Anaglyph
 Presentation Pack, and the Alignment Workbench Usability and Offset-Semantics
 Pack, and the Cross-System Acceleration Pass are complete. The remaining
-implementation queue is, in order: Backend Performance Pack 5; then
-dense-surface synthetic expansion after the user supplies the requested
-fixture inputs. Keep backend
-work dependency-aware: bounded serial and thread streaming are complete;
-optional GPU work remains capability-checked with CPU
-equivalence. The representative 100-150 MP Windows viewer/tile-size matrix
-remains an external validation gate rather than an additional viewer pack.
+implementation queue is dense-surface synthetic expansion after the user
+supplies the requested fixture inputs. Backend performance packs are complete;
+bounded serial/thread behavior retains CPU equivalence, and optional GPU work
+remains capability-checked. The representative 100-150 MP Windows
+viewer/tile-size matrix remains an external validation gate rather than an
+additional viewer pack.
 
 Do not mix the viewer quick wins and backend renderer rewrite into one commit.
 Each pack should remain independently reviewable, validated, and reversible.

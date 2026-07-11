@@ -521,7 +521,20 @@ classdef ProjectionBackendJob
                     "Scene layer %d is missing required backend fields.", layerIndex);
             end
 
-            ProjectionBackendJob.validateImage(layer.Image, layerIndex);
+            hasMemoryImage = ~isempty(layer.Image);
+            hasBackendSource = isfield(layer, "BackendSource") && ...
+                ~isempty(layer.BackendSource);
+            if ~hasMemoryImage && ~hasBackendSource
+                error("ProjectionBackendJob:invalidLayer", ...
+                    "Scene layer %d requires Image or BackendSource.", layerIndex);
+            end
+            if hasMemoryImage
+                ProjectionBackendJob.validateImage(layer.Image, layerIndex);
+            end
+            if hasBackendSource
+                ProjectionBackendJob.validateBackendSource( ...
+                    layer.BackendSource, layerIndex);
+            end
             ProjectionBackendJob.validateSourceGeometry(layer.SourceGeometry, layerIndex);
             ProjectionBackendJob.validateMeshSampling(layer.MeshSampling, layerIndex);
             PlanarProjection.validatePlane(layer.BaseProjectionPlane);
@@ -541,6 +554,19 @@ classdef ProjectionBackendJob
             if size(imageData, 3) < 1
                 error("ProjectionBackendJob:invalidLayer", ...
                     "Scene layer %d Image must contain at least one band.", layerIndex);
+            end
+        end
+
+        function validateBackendSource(source, layerIndex)
+            if ~isstruct(source) || ~isscalar(source) || ...
+                    ~isfield(source, "Kind") || ~isfield(source, "Path") || ...
+                    ~isscalar(string(source.Kind)) || ...
+                    lower(string(source.Kind)) ~= "tiff" || ...
+                    ~isscalar(string(source.Path)) || ...
+                    strlength(string(source.Path)) == 0
+                error("ProjectionBackendJob:invalidLayer", ...
+                    "Scene layer %d BackendSource must describe a TIFF Path.", ...
+                    layerIndex);
             end
         end
 

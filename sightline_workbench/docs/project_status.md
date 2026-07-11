@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 413/413 tests with zero
+- The latest fresh-class repository suite passes 416/416 tests with zero
   failures and zero incomplete tests.
 
 ## Completed Feature Trees
@@ -34,7 +34,7 @@ As of July 11, 2026:
 | Initial Alignment Hardening Feature Packs 1-5 | Complete |
 | Alignment Reliability Packs 0-8 | Complete |
 | Viewer Performance Packs 0-8 | Complete |
-| Backend Performance Packs 0-4 | Complete |
+| Backend Performance Packs 0-5 | Complete |
 | Dense Surface Pack 1 | Complete |
 | Viewer Orientation and Anaglyph Presentation Pack | Complete |
 | Alignment Workbench Usability and Offset-Semantics Pack | Complete |
@@ -81,21 +81,22 @@ Backend Performance Pack 4 replaces implicit min/max normalization with one
 shared scale/offset/class/fill/clipping contract, records reconstruction
 metadata, supports uint8/uint16 PNG/TIFF and single TIFF, and validates optional
 single-precision tile products against double.
+Backend Performance Pack 5 adds runtime-only in-memory/TIFF source providers,
+serializable TIFF descriptors, per-tile source bounding-region reads, source
+provenance summaries, and in-memory/file-backed numerical parity. MATLAB TIFF
+region reads require serial execution because their internal reader is not
+supported on thread workers.
 
-The remaining queue is Backend Performance Pack 5 followed by dense-surface
-synthetic expansion.
+The remaining implementation queue is dense-surface synthetic expansion.
 
-1. **Backend Performance Pack 5 — File-backed source regions.** Add a backend
-   source-region provider with in-memory compatibility and TIFF/`blockedImage`
-   adapters so tiled jobs need not hold a complete source array.
-2. **Dense-surface synthetic data expansion.** Lowest priority until user
-   inputs are available. The user will provide desired output dimensions and
+1. **Dense-surface synthetic data expansion.** The user will provide desired
+   output dimensions and
    rough sensor geometry such as azimuth, elevation, and range; the tooling
    should derive the remaining synthetic image/geometry details for more
    representative surface-extraction validation fixtures.
 
-The bounded claim applies to serial/thread TIFF output. PNG remains in-memory,
-and file-backed source imagery remains owned by Pack 5.
+The bounded claim applies to serial/thread TIFF output with in-memory sources,
+and to serial TIFF output with file-backed sources. PNG remains in-memory.
 
 ## External Validation Gates
 

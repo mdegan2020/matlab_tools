@@ -539,7 +539,7 @@ buildtool test
 
 The current suite exercises pure geometry, scene construction, sparse geometry,
 mesh building, readback, layer workflows, state serialization, and app
-interactions. The current fresh-class baseline is 413/413 passing tests with no
+interactions. The current fresh-class baseline is 416/416 passing tests with no
 failures or incomplete tests.
 
 ## Backend Processor Work Plan
@@ -647,11 +647,10 @@ Implementation status:
 - The Auto Alignment Feature Tree milestones 1-13 are complete, validated, and
   committed; the milestone list below is retained as implementation history and
   design reference.
-- Backend Performance Packs 0-4 subsequently added one reusable runtime render
+- Backend Performance Packs 0-5 subsequently added one reusable runtime render
   plan per job, selected full-source inverse-warp radiometry, and bounded serial
   and threaded tiled-TIFF output with explicit in-memory/in-flight limits.
-  explicit radiometric/precision policy. Backend Performance Pack 5 remains
-  the backend subqueue for file-backed source regions.
+  explicit radiometric/precision policy, and serial TIFF source-region reads.
 
 #### Backend Milestone 1: Job Contract And Serialization
 
@@ -1171,8 +1170,7 @@ Presentation Pack, and Alignment Workbench Usability and Offset-Semantics Pack
 are implemented. The Cross-System Acceleration Pass is also complete. The
 remaining queue is:
 
-1. Backend Performance Pack 5: file-backed source regions.
-2. Dense-surface synthetic data expansion after the user supplies desired
+1. Dense-surface synthetic data expansion after the user supplies desired
    image dimensions and rough sensor azimuth/elevation/range.
 
 The items below remain broader design topics to prioritize with user guidance.
@@ -1216,9 +1214,9 @@ app-facing display pyramid and visible tile selection path. Follow-up work may
 still consider `blockedImage` and profiling on representative 100-150 MP
 Windows scenes. The current viewer already has lazy/file-backed preview levels,
 settle-aware LOD hysteresis, cached visibility, and differential tile reuse.
-Backend Performance Packs 2-4 now provide bounded serial/thread TIFF output and
-explicit radiometric policy. Pack 5 separately addresses file-backed source
-regions. Preview pyramids remain outside backend input.
+Backend Performance Packs 2-5 now provide bounded serial/thread TIFF output,
+explicit radiometric policy, and serial file-backed source regions. Preview
+pyramids remain outside backend input.
 
 ### Optional GPU Path
 
