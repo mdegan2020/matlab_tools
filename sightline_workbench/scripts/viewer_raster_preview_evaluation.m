@@ -150,7 +150,7 @@ end
 
 function timings = evaluateSurfaceInteractions(app, fig, options)
 alphaSlider = findSlider(fig, [0 1]);
-twistSlider = findSlider(fig, [-45 45]);
+twistSlider = findSlider(fig, [-85 85], 4);
 visibilityCheckBox = findall(fig, "Type", "uicheckbox");
 if isempty(visibilityCheckBox)
     error("viewer_raster_preview_evaluation:missingControl", ...
@@ -249,10 +249,14 @@ timings = timingSummary(alphaSamples, visibilitySamples, ...
     twistSamples, crosshairSamples);
 end
 
-function slider = findSlider(fig, expectedLimits)
+function slider = findSlider(fig, expectedLimits, layoutColumn)
 sliders = findall(fig, "Type", "uislider");
 matches = arrayfun(@(candidate) isequal(candidate.Limits, expectedLimits), ...
     sliders);
+if nargin >= 3
+    matches = matches & arrayfun( ...
+        @(candidate) candidate.Layout.Column == layoutColumn, sliders);
+end
 slider = sliders(matches);
 if numel(slider) ~= 1
     error("viewer_raster_preview_evaluation:missingControl", ...
@@ -378,7 +382,7 @@ defaults.Iterations = defaults.Iterations(1);
 defaults.AlphaValues = validateFiniteVector( ...
     defaults.AlphaValues, "AlphaValues", [0 1]);
 defaults.TwistValues = validateFiniteVector( ...
-    defaults.TwistValues, "TwistValues", [-45 45]);
+    defaults.TwistValues, "TwistValues", [-85 85]);
 defaults.Interpolation = lower(string(defaults.Interpolation));
 if ~isscalar(defaults.Interpolation) || ...
         ~ismember(defaults.Interpolation, ["bilinear", "nearest"])

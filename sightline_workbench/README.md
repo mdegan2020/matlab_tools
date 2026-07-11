@@ -49,7 +49,7 @@ validateProjectionBackendJob.m  Validate backend jobs without rendering
 scripts/backend_interactive_evaluation.m Sectioned backend evaluation script
 scripts/viewer_performance_evaluation.m Repeatable viewer interaction benchmark
 scripts/alignment_reliability_validation.m Consolidated synthetic alignment matrix
-docs/alignment_workflow_hardening_plan.md Completed alignment hardening record
+docs/alignment_workflow_hardening_plan.md Completed reliability record and active usability follow-up
 docs/alignment_operator_guide.md Staged workflow and failure-recovery guide
 docs/alignment_reliability_validation_report.md Pack 8 reference results and remaining gate
 docs/dense_surface_feature_pack.md Dense stereo surface scope, workflow, and limitations
@@ -68,11 +68,13 @@ The current implementation baseline is summarized in
 
 - the original viewer milestones, Backend Milestones 1-10, Auto Alignment
   Milestones 1-13, Alignment Reliability Packs 0-8, Viewer Performance Packs
-  0-8, Backend Performance Packs 0-1, and Dense Surface Pack 1 are complete;
-- the latest fresh-class repository validation passes all 386 tests;
-- the active implementation queue now starts with viewer orientation/anaglyph
-  presentation and Alignment Workbench usability, then continues through a
-  dependency-aware performance pass and Backend Performance Packs 2-5; and
+  0-8, Backend Performance Packs 0-1, Dense Surface Pack 1, and the Viewer
+  Orientation and Anaglyph Presentation Pack are complete;
+- the latest fresh-class repository validation passes all 390 tests;
+- the remaining implementation queue is Alignment Workbench usability and
+  projection-offset semantics, a cross-system thread/GPU acceleration pass,
+  Backend Performance Packs 2-5, and finally dense-surface synthetic expansion
+  after the requested fixture inputs are available; and
 - representative 100-150 MP Windows/real-data validation remains external
   because no user real-data pair is available in this repository.
 
@@ -190,7 +192,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 386 passing tests with no failures or incomplete tests.
+baseline is 390 passing tests with no failures or incomplete tests.
 
 ## Viewer Performance Evaluation
 
@@ -431,11 +433,13 @@ Core controls:
   to one estimated IFOV per key press; kappa defaults to 0.1 degrees.
 - Save and Load write/read a human-readable JSON viewer state containing camera,
   layer, alpha, blend, projection offset, OPK, tip, tilt, and twist settings.
-- The selected follow-up queue includes a wider `+/-85` degree twist range,
-  real-data default camera orientation that makes an explicitly supplied
-  oblique plane appear naturally upright, automatic two-image anaglyph
-  left/right assignment with left eye red, display-only stereo depth/exaggeration
-  controls, and anaglyph brightness improvements.
+- Twist spans `+/-85` degrees. Real-data default camera orientation makes an
+  explicitly supplied oblique plane appear naturally upright. For exactly two
+  visible anaglyph layers, the current-view sensor baseline assigns the left
+  eye to red and updates that assignment after twist. The presentation submenu
+  provides brighter display-only stereo separation and screen-depth controls;
+  these translate existing surfaces without resampling geometry and remain out
+  of viewer-state serialization and backend products.
 - The alignment panel is hidden by default and can be shown from the image
   context menu. It is now a compact launcher/status strip for a separate lazy,
   nonmodal Alignment Workbench, leaving the image viewport available for
@@ -788,16 +792,18 @@ full-source inverse warp the default. The current tiled renderer is not yet
 bounded-memory end to end: large file writes still assemble full output arrays.
 Backend Performance Packs 2-5 cover bounded serial streaming, bounded thread
 submission, explicit radiometric/precision policy, and file-backed source
-regions. The active queue puts viewer/anaglyph usability and a dependency-aware
-cross-system thread/GPU acceleration pass ahead of or alongside backend work as
-appropriate, but backend thread acceleration still follows bounded serial
-streaming. See `docs/project_status.md` and
+regions. They follow the Alignment Workbench usability and
+projection-offset-semantics pack and cross-system thread/GPU acceleration pass
+in the remaining queue. Dense-surface synthetic expansion follows the backend
+packs. Backend thread acceleration still depends on bounded serial streaming.
+See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output
 production work.
 
 See `docs/backend_app_workflow.md` for the complete app-to-backend workflow,
-`docs/alignment_workflow_hardening_plan.md` for the completed GUI alignment
-hardening record and remaining external acceptance gate, and
+`docs/alignment_workflow_hardening_plan.md` for the completed reliability
+record, active usability/offset-semantics follow-up, and remaining external
+acceptance gate, and
 `docs/backend_milestone_9_custom_gpu_kernel_assessment.md` for the current
 custom GPU kernel decision record.
 

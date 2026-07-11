@@ -73,7 +73,15 @@ classdef ProjectionViewerApp < handle
         InteractivePreviewMaxTileMeshVertices double = 17
         PreviewLayerDepthStepFraction double = 1e-4
         PreviewLayerDepthMinimumStepMeters double = 0.5
-        AnaglyphPreviewFaceAlpha double = 0.55
+        AnaglyphPreviewFaceAlpha double = 0.70
+        AnaglyphChannelGain double = 1.25
+        AnaglyphOffChannelFloor double = 0.08
+        AnaglyphStereoExaggeration double = 1
+        AnaglyphStereoExaggerationStep double = 0.25
+        AnaglyphStereoExaggerationLimits double = [0 3]
+        AnaglyphStereoBaseSeparationFraction double = 0.01
+        AnaglyphScreenDepthOffsetMeters double = 0
+        AnaglyphScreenDepthStepFraction double = 0.01
         MinProjectedNudgeNorm double = 1e-9
         ResetScene struct
         UIFigure matlab.ui.Figure
@@ -95,6 +103,12 @@ classdef ProjectionViewerApp < handle
         BlendModeMenu
         AlphaBlendMenuItem
         AnaglyphBlendMenuItem
+        AnaglyphControlsMenu
+        AnaglyphIncreaseSeparationMenuItem
+        AnaglyphDecreaseSeparationMenuItem
+        AnaglyphMoveNearerMenuItem
+        AnaglyphMoveFartherMenuItem
+        AnaglyphResetPresentationMenuItem
         CrosshairHorizontal
         CrosshairVertical
         TipSlider matlab.ui.control.Slider
@@ -230,6 +244,7 @@ classdef ProjectionViewerApp < handle
             else
                 app.frameCurrentProjectionView(app.InitialViewportFillFraction);
             end
+            app.updateAllSurfaceBlendAppearance();
             app.refreshTiledProjectionSurfaces();
             app.updateControlsFromSelectedLayer();
 
@@ -296,6 +311,7 @@ classdef ProjectionViewerApp < handle
             else
                 app.frameCurrentProjectionView(app.InitialViewportFillFraction);
             end
+            app.updateAllSurfaceBlendAppearance();
             app.refreshTiledProjectionSurfaces();
             app.updateControlsFromSelectedLayer();
             app.clearAlignmentComputationState();
@@ -795,10 +811,10 @@ classdef ProjectionViewerApp < handle
             app.TwistLabel = uilabel(app.ControlGrid, Text="Twist 0.0 deg");
             app.TwistLabel.Layout.Row = 1;
             app.TwistLabel.Layout.Column = 4;
-            app.TwistSlider = uislider(app.ControlGrid, Limits=[-45 45], Value=0);
+            app.TwistSlider = uislider(app.ControlGrid, Limits=[-85 85], Value=0);
             app.TwistSlider.Layout.Row = 2;
             app.TwistSlider.Layout.Column = 4;
-            app.TwistSlider.MajorTicks = -45:15:45;
+            app.TwistSlider.MajorTicks = [-85 -45 0 45 85];
             app.TwistSlider.ValueChangingFcn = @(source, event) ...
                 app.twistChanging(source, event);
             app.TwistSlider.ValueChangedFcn = @(~, ~) app.updateViewTwistFromSlider();
@@ -3761,6 +3777,31 @@ classdef ProjectionViewerApp < handle
                 Text="Red/blue anaglyph", Checked="off", ...
                 MenuSelectedFcn=@(~, ~) app.setSelectedLayerBlendMode("redBlueAnaglyph"), ...
                 Tag="ProjectionViewerAnaglyphBlendMenuItem");
+            app.AnaglyphControlsMenu = uimenu(app.BlendModeMenu, ...
+                Text="Anaglyph presentation", Separator="on", ...
+                Tag="ProjectionViewerAnaglyphControlsMenu");
+            app.AnaglyphIncreaseSeparationMenuItem = uimenu( ...
+                app.AnaglyphControlsMenu, ...
+                Text="Increase stereo separation", ...
+                MenuSelectedFcn=@(~, ~) app.adjustAnaglyphStereoExaggeration(1), ...
+                Tag="ProjectionViewerAnaglyphIncreaseSeparationMenuItem");
+            app.AnaglyphDecreaseSeparationMenuItem = uimenu( ...
+                app.AnaglyphControlsMenu, ...
+                Text="Decrease stereo separation", ...
+                MenuSelectedFcn=@(~, ~) app.adjustAnaglyphStereoExaggeration(-1), ...
+                Tag="ProjectionViewerAnaglyphDecreaseSeparationMenuItem");
+            app.AnaglyphMoveNearerMenuItem = uimenu( ...
+                app.AnaglyphControlsMenu, Text="Move depth nearer", ...
+                MenuSelectedFcn=@(~, ~) app.adjustAnaglyphScreenDepthOffset(1), ...
+                Tag="ProjectionViewerAnaglyphMoveNearerMenuItem");
+            app.AnaglyphMoveFartherMenuItem = uimenu( ...
+                app.AnaglyphControlsMenu, Text="Move depth farther", ...
+                MenuSelectedFcn=@(~, ~) app.adjustAnaglyphScreenDepthOffset(-1), ...
+                Tag="ProjectionViewerAnaglyphMoveFartherMenuItem");
+            app.AnaglyphResetPresentationMenuItem = uimenu( ...
+                app.AnaglyphControlsMenu, Text="Reset anaglyph presentation", ...
+                MenuSelectedFcn=@(~, ~) app.resetAnaglyphPresentation(), ...
+                Tag="ProjectionViewerAnaglyphResetPresentationMenuItem");
             app.Axes.ContextMenu = app.ImageContextMenu;
         end
 
@@ -4890,8 +4931,16 @@ classdef ProjectionViewerApp < handle
         function updateViewTwist(app, twistDegrees)
             frameTimer = app.beginPerformanceFrame();
             app.suspendCameraReconciliationTimer();
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
+            oldChannelAssignments = app.anaglyphChannelAssignments();
             app.ViewTwistDegrees = twistDegrees;
             app.applyViewTwist();
+            newChannelAssignments = app.anaglyphChannelAssignments();
+            if ~isequal(oldChannelAssignments, newChannelAssignments)
+                app.updateAllSurfaceBlendAppearance();
+            end
+            app.applyAnaglyphPresentationOffsetDelta( ...
+                oldPresentationOffsets);
 
             layer = app.Scene.layers(app.SelectedLayerIndex);
             app.updateLabels(app.ProjectionTipDegrees, ...
@@ -6334,10 +6383,13 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
-            gray = app.grayscaleDisplayTexture(texture);
-            texture = zeros([size(gray, 1), size(gray, 2), 3], "like", texture);
+            gray = app.normalizedGrayscaleDisplayTexture(texture);
+            texture = app.AnaglyphOffChannelFloor * ...
+                ones([size(gray, 1), size(gray, 2), 3], "single");
             channelIndex = app.anaglyphChannelForLayer(layerIndex);
-            texture(:, :, channelIndex) = gray;
+            texture(:, :, channelIndex) = min(1, ...
+                app.AnaglyphOffChannelFloor + ...
+                app.AnaglyphChannelGain * gray);
         end
 
         function alpha = previewFaceAlphaForLayer(app, alpha, layerIndex)
@@ -6353,21 +6405,53 @@ classdef ProjectionViewerApp < handle
         end
 
         function channelIndex = anaglyphChannelForLayer(app, layerIndex)
-            anaglyphLayers = find([app.Scene.layers.Visible] & ...
-                lower(string([app.Scene.layers.BlendMode])) == "redblueanaglyph");
-            ordinal = find(anaglyphLayers == layerIndex, 1, "first");
-            if isempty(ordinal)
-                ordinal = 1;
+            channelAssignments = app.anaglyphChannelAssignments();
+            channelIndex = channelAssignments(layerIndex);
+            if channelIndex == 0
+                channelIndex = 1;
             end
-            channelIndex = 1 + 2 * double(mod(ordinal, 2) == 0);
+        end
+
+        function channelAssignments = anaglyphChannelAssignments(app)
+            channelAssignments = zeros(1, numel(app.Scene.layers));
+            anaglyphLayers = app.visibleAnaglyphLayerIndices();
+            for ordinal = 1:numel(anaglyphLayers)
+                channelAssignments(anaglyphLayers(ordinal)) = ...
+                    1 + 2 * double(mod(ordinal, 2) == 0);
+            end
+            if numel(anaglyphLayers) ~= 2
+                return
+            end
+
+            origins = app.layerViewOrigins(anaglyphLayers);
+            if any(~isfinite(origins), "all")
+                return
+            end
+            baseline = origins(:, 2) - origins(:, 1);
+            projectedBaseline = ...
+                app.anaglyphPresentationRightVector().' * baseline;
+            tolerance = 1e-12 * max(1, norm(baseline));
+            if abs(projectedBaseline) <= tolerance
+                return
+            end
+            if projectedBaseline > 0
+                channelAssignments(anaglyphLayers) = [1 3];
+            else
+                channelAssignments(anaglyphLayers) = [3 1];
+            end
         end
 
         function count = visibleAnaglyphLayerCount(app)
-            count = nnz([app.Scene.layers.Visible] & ...
-                lower(string([app.Scene.layers.BlendMode])) == "redblueanaglyph");
+            count = numel(app.visibleAnaglyphLayerIndices());
         end
 
-        function gray = grayscaleDisplayTexture(~, texture)
+        function layerIndices = visibleAnaglyphLayerIndices(app)
+            layerIndices = find([app.Scene.layers.Visible] & ...
+                lower(string([app.Scene.layers.BlendMode])) == ...
+                "redblueanaglyph");
+        end
+
+        function gray = normalizedGrayscaleDisplayTexture(~, texture)
             if ismatrix(texture)
                 gray = texture;
             elseif isinteger(texture)
@@ -6377,13 +6461,117 @@ classdef ProjectionViewerApp < handle
             else
                 gray = mean(texture, 3);
             end
+            if isinteger(gray)
+                gray = single(gray) / single(intmax(class(gray)));
+            elseif islogical(gray)
+                gray = single(gray);
+            else
+                gray = single(gray);
+                gray = min(max(gray, 0), 1);
+            end
         end
 
         function [X, Y, Z] = previewSurfaceCoordinates(app, mesh, layerIndex)
-            offset = app.previewLayerDepthOffset(layerIndex);
+            offset = app.previewLayerDepthOffset(layerIndex) + ...
+                app.anaglyphPresentationOffset(layerIndex);
             X = mesh.X + offset(1);
             Y = mesh.Y + offset(2);
             Z = mesh.Z + offset(3);
+        end
+
+        function offset = anaglyphPresentationOffset(app, layerIndex)
+            offset = zeros(3, 1);
+            if abs(app.AnaglyphStereoExaggeration - 1) <= eps && ...
+                    abs(app.AnaglyphScreenDepthOffsetMeters) <= eps
+                return
+            end
+            if lower(string(app.Scene.layers(layerIndex).BlendMode)) ~= ...
+                    "redblueanaglyph" || app.visibleAnaglyphLayerCount() ~= 2
+                return
+            end
+
+            rightVector = app.anaglyphPresentationRightVector();
+            channelIndex = app.anaglyphChannelForLayer(layerIndex);
+            eyeSign = -1 + 2 * double(channelIndex == 3);
+            [viewWidth, ~] = app.cameraViewWorldSize();
+            separationShift = (app.AnaglyphStereoExaggeration - 1) * ...
+                app.AnaglyphStereoBaseSeparationFraction * viewWidth;
+            parallaxShift = eyeSign * (separationShift + ...
+                app.AnaglyphScreenDepthOffsetMeters);
+            offset = parallaxShift * rightVector;
+        end
+
+        function offsets = anaglyphPresentationOffsets(app)
+            offsets = zeros(3, numel(app.Scene.layers));
+            for layerIndex = 1:numel(app.Scene.layers)
+                offsets(:, layerIndex) = ...
+                    app.anaglyphPresentationOffset(layerIndex);
+            end
+        end
+
+        function applyAnaglyphPresentationOffsetDelta(app, oldOffsets)
+            newOffsets = app.anaglyphPresentationOffsets();
+            if ~isequal(size(oldOffsets), size(newOffsets))
+                return
+            end
+            for layerIndex = 1:numel(app.Scene.layers)
+                delta = newOffsets(:, layerIndex) - ...
+                    oldOffsets(:, layerIndex);
+                if norm(delta) <= eps
+                    continue
+                end
+                surfaceHandles = app.validLayerSurfaces(layerIndex);
+                for surfaceIndex = 1:numel(surfaceHandles)
+                    surfaceHandle = surfaceHandles(surfaceIndex);
+                    surfaceHandle.XData = surfaceHandle.XData + delta(1);
+                    surfaceHandle.YData = surfaceHandle.YData + delta(2);
+                    surfaceHandle.ZData = surfaceHandle.ZData + delta(3);
+                end
+            end
+        end
+
+        function origins = layerViewOrigins(app, layerIndices)
+            origins = zeros(3, numel(layerIndices));
+            for k = 1:numel(layerIndices)
+                layer = app.Scene.layers(layerIndices(k));
+                sourceGeometry = layer.SourceGeometry;
+                origin = [NaN; NaN; NaN];
+                if isfield(sourceGeometry, "ReferenceOrigin") && ...
+                        isnumeric(sourceGeometry.ReferenceOrigin) && ...
+                        numel(sourceGeometry.ReferenceOrigin) == 3
+                    origin = sourceGeometry.ReferenceOrigin;
+                elseif isfield(sourceGeometry, "Origins") && ...
+                        isnumeric(sourceGeometry.Origins) && ...
+                        size(sourceGeometry.Origins, 1) == 3
+                    origin = mean(double(sourceGeometry.Origins), 2);
+                elseif isfield(sourceGeometry, "ViewVectorOrigins") && ...
+                        isnumeric(sourceGeometry.ViewVectorOrigins) && ...
+                        size(sourceGeometry.ViewVectorOrigins, 1) == 3
+                    origin = mean(double(sourceGeometry.ViewVectorOrigins), 2);
+                end
+                origins(:, k) = double(origin(:));
+            end
+        end
+
+        function rightVector = anaglyphPresentationRightVector(app)
+            if ~isempty(app.Axes) && isvalid(app.Axes) && ...
+                    app.IsPreviewCameraReady
+                viewDirection = camtarget(app.Axes).' - campos(app.Axes).';
+                if norm(viewDirection) > 0
+                    viewDirection = viewDirection / norm(viewDirection);
+                    upVector = camup(app.Axes).';
+                    if norm(upVector) > 0
+                        upVector = upVector / norm(upVector);
+                        rightVector = cross(viewDirection, upVector);
+                        if norm(rightVector) > 1e-12
+                            rightVector = rightVector / norm(rightVector);
+                            return
+                        end
+                    end
+                end
+            end
+            rightVector = app.Scene.frameCamera.focalPlane.basis(:, 1);
+            rightVector = rightVector / norm(rightVector);
         end
 
         function offset = previewLayerDepthOffset(app, layerIndex)
@@ -6589,6 +6777,8 @@ classdef ProjectionViewerApp < handle
             app.ProjectionTipDegrees = 0;
             app.ProjectionTiltDegrees = 0;
             app.ViewTwistDegrees = 0;
+            app.AnaglyphStereoExaggeration = 1;
+            app.AnaglyphScreenDepthOffsetMeters = 0;
             app.IsControlDown = false;
             app.IsShiftDown = false;
             app.IsAltDown = false;
@@ -6642,6 +6832,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function setSelectedLayerBlendMode(app, blendMode)
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
             targetLayerIndices = find([app.Scene.layers.Visible]);
             if isempty(targetLayerIndices)
                 targetLayerIndices = app.SelectedLayerIndex;
@@ -6652,10 +6843,72 @@ classdef ProjectionViewerApp < handle
                 app.Scene.layers(layerIndex) = layer;
             end
             app.updateAllSurfaceBlendAppearance();
+            app.applyAnaglyphPresentationOffsetDelta( ...
+                oldPresentationOffsets);
             app.updateBlendMenuChecks();
         end
 
+        function adjustAnaglyphStereoExaggeration(app, direction)
+            direction = sign(double(direction));
+            if direction == 0
+                return
+            end
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
+            limits = app.AnaglyphStereoExaggerationLimits;
+            app.AnaglyphStereoExaggeration = min(max( ...
+                app.AnaglyphStereoExaggeration + ...
+                direction * app.AnaglyphStereoExaggerationStep, ...
+                limits(1)), limits(2));
+            app.applyAnaglyphPresentationOffsetDelta( ...
+                oldPresentationOffsets);
+            app.updateAnaglyphPresentationMenuText();
+            drawnow limitrate
+        end
+
+        function adjustAnaglyphScreenDepthOffset(app, direction)
+            direction = sign(double(direction));
+            if direction == 0
+                return
+            end
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
+            app.AnaglyphScreenDepthOffsetMeters = ...
+                app.AnaglyphScreenDepthOffsetMeters + ...
+                direction * app.anaglyphScreenDepthStepMeters();
+            app.applyAnaglyphPresentationOffsetDelta( ...
+                oldPresentationOffsets);
+            app.updateAnaglyphPresentationMenuText();
+            drawnow limitrate
+        end
+
+        function resetAnaglyphPresentation(app)
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
+            app.AnaglyphStereoExaggeration = 1;
+            app.AnaglyphScreenDepthOffsetMeters = 0;
+            app.applyAnaglyphPresentationOffsetDelta( ...
+                oldPresentationOffsets);
+            app.updateAnaglyphPresentationMenuText();
+            drawnow limitrate
+        end
+
+        function stepMeters = anaglyphScreenDepthStepMeters(app)
+            if ~isempty(app.Axes) && isvalid(app.Axes) && ...
+                    app.IsPreviewCameraReady
+                viewDistance = norm(camtarget(app.Axes).' - campos(app.Axes).');
+                axesPosition = app.Axes.InnerPosition;
+                viewHeight = 2 * viewDistance * tan( ...
+                    deg2rad(app.Axes.CameraViewAngle) / 2);
+                viewWidth = viewHeight * max(axesPosition(3), 1) / ...
+                    max(axesPosition(4), 1);
+                stepMeters = app.AnaglyphScreenDepthStepFraction * viewWidth;
+            else
+                stepMeters = app.AnaglyphScreenDepthStepFraction * ...
+                    app.frameCameraRange();
+            end
+            stepMeters = max(stepMeters, eps);
+        end
+
         function cycleLayer(app)
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
             nextLayerIndex = mod(app.SelectedLayerIndex, numel(app.Scene.layers)) + 1;
             for layerIndex = 1:numel(app.Scene.layers)
                 layer = app.Scene.layers(layerIndex);
@@ -6667,6 +6920,8 @@ classdef ProjectionViewerApp < handle
                 app.refreshTiledLayerSurfaces(nextLayerIndex);
             end
             app.updateAllSurfaceBlendAppearance();
+            app.applyAnaglyphPresentationOffsetDelta( ...
+                oldPresentationOffsets);
             app.SelectedLayerIndex = nextLayerIndex;
             app.updateControlsFromSelectedLayer();
         end
@@ -6871,6 +7126,7 @@ classdef ProjectionViewerApp < handle
                 app.VisibleCheckBox.Value = layer.Visible;
                 return
             end
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
             layer.Visible = isVisible;
             app.Scene.layers(layerIndex) = layer;
             if isVisible && app.usesTiledPreview(layerIndex)
@@ -6881,7 +7137,10 @@ classdef ProjectionViewerApp < handle
             else
                 app.setLayerSurfaceVisible(layerIndex, layer.Visible);
             end
+            app.applyAnaglyphPresentationOffsetDelta( ...
+                oldPresentationOffsets);
             app.VisibleCheckBox.Value = layer.Visible;
+            app.updateBlendMenuChecks();
         end
 
         function tf = layerVisibilityRequiresBlendRefresh(app, layerIndex)
@@ -6898,6 +7157,20 @@ classdef ProjectionViewerApp < handle
             app.AlphaBlendMenuItem.Checked = app.onOff(all(visibleModes == "alpha"));
             app.AnaglyphBlendMenuItem.Checked = ...
                 app.onOff(all(visibleModes == "redBlueAnaglyph"));
+            app.updateAnaglyphPresentationMenuText();
+        end
+
+        function updateAnaglyphPresentationMenuText(app)
+            if isempty(app.AnaglyphControlsMenu) || ...
+                    ~isvalid(app.AnaglyphControlsMenu)
+                return
+            end
+            app.AnaglyphControlsMenu.Text = sprintf( ...
+                "Anaglyph presentation (%.2fx, %.3g m)", ...
+                app.AnaglyphStereoExaggeration, ...
+                app.AnaglyphScreenDepthOffsetMeters);
+            app.AnaglyphControlsMenu.Enable = app.onOff( ...
+                app.visibleAnaglyphLayerCount() == 2);
         end
 
         function modes = visibleBlendModes(app)

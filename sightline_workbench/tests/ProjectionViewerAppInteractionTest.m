@@ -281,7 +281,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 string(scene.layers(2).Name)));
         end
 
-        function testTipTiltRangesAreEightyFiveDegreesAndTwistIsFortyFive(testCase)
+        function testTipTiltAndTwistRangesAreEightyFiveDegrees(testCase)
             scene = ProjectionViewerAppInteractionTest.makeScene();
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
@@ -295,10 +295,10 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
 
             testCase.verifyEqual(tipSlider.Limits, [-85 85]);
             testCase.verifyEqual(tiltSlider.Limits, [-85 85]);
-            testCase.verifyEqual(twistSlider.Limits, [-45 45]);
+            testCase.verifyEqual(twistSlider.Limits, [-85 85]);
             testCase.verifyEqual(tipSlider.MajorTicks, [-85 -45 0 45 85]);
             testCase.verifyEqual(tiltSlider.MajorTicks, [-85 -45 0 45 85]);
-            testCase.verifyEqual(twistSlider.MajorTicks, -45:15:45);
+            testCase.verifyEqual(twistSlider.MajorTicks, [-85 -45 0 45 85]);
         end
 
         function testExtremeTipTiltMeshesStayInsideStabilizedAxesLimits(testCase)
@@ -467,6 +467,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 "ProjectionViewerAnaglyphBlendMenuItem");
             alphaBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAlphaBlendMenuItem");
+            presentationMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAnaglyphControlsMenu");
 
             anaglyphBlendMenu.MenuSelectedFcn(anaglyphBlendMenu, struct());
             drawnow
@@ -476,22 +478,30 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(state.Layers(2).BlendMode, "redBlueAnaglyph");
             testCase.verifyEqual(string(anaglyphBlendMenu.Checked), "on");
             testCase.verifyEqual(string(alphaBlendMenu.Checked), "off");
+            testCase.verifyClass(layerSurfaces(1).CData, "single");
+            testCase.verifyClass(layerSurfaces(2).CData, "single");
             testCase.verifyEqual(layerSurfaces(1).CData(:, :, 2), ...
-                zeros(size(layerSurfaces(1).CData(:, :, 2)), ...
-                "like", layerSurfaces(1).CData));
-            testCase.verifyEqual(layerSurfaces(1).CData(:, :, 3), ...
-                zeros(size(layerSurfaces(1).CData(:, :, 3)), ...
-                "like", layerSurfaces(1).CData));
-            testCase.verifyEqual(layerSurfaces(2).CData(:, :, 1), ...
-                zeros(size(layerSurfaces(2).CData(:, :, 1)), ...
-                "like", layerSurfaces(2).CData));
+                0.08 * ones(size(layerSurfaces(1).CData(:, :, 2)), ...
+                "single"), AbsTol=1e-6);
             testCase.verifyEqual(layerSurfaces(2).CData(:, :, 2), ...
-                zeros(size(layerSurfaces(2).CData(:, :, 2)), ...
-                "like", layerSurfaces(2).CData));
-            testCase.verifyEqual(layerSurfaces(1).FaceAlpha, 0.55, ...
+                0.08 * ones(size(layerSurfaces(2).CData(:, :, 2)), ...
+                "single"), AbsTol=1e-6);
+            layer1Mean = squeeze(mean(layerSurfaces(1).CData, [1 2]));
+            layer2Mean = squeeze(mean(layerSurfaces(2).CData, [1 2]));
+            actualRedLayerIndex = 1 + double(layer2Mean(1) > layer2Mean(3));
+            expectedRedLayerIndex = ...
+                ProjectionViewerAppInteractionTest.expectedRedLayerIndex( ...
+                scene, ax);
+            channelDominance = [layer1Mean(1) - layer1Mean(3), ...
+                layer2Mean(1) - layer2Mean(3)];
+            testCase.verifyEqual(double(sort(sign(channelDominance))), [-1 1]);
+            testCase.verifyEqual(actualRedLayerIndex, ...
+                expectedRedLayerIndex);
+            testCase.verifyEqual(layerSurfaces(1).FaceAlpha, 0.70, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
-            testCase.verifyEqual(layerSurfaces(2).FaceAlpha, 0.55, ...
+            testCase.verifyEqual(layerSurfaces(2).FaceAlpha, 0.70, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(string(presentationMenu.Enable), "on");
 
             alphaBlendMenu.MenuSelectedFcn(alphaBlendMenu, struct());
             drawnow
@@ -509,6 +519,98 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
             testCase.verifyEqual(layerSurfaces(2).FaceAlpha, 1, ...
                 AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(string(presentationMenu.Enable), "off");
+        end
+
+        function testTwistRefreshesGeometryDerivedEyeAssignment(testCase)
+            scene = ...
+                ProjectionViewerAppInteractionTest.makeTwistCrossingAnaglyphScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+            ax = findall(fig, "Type", "axes");
+            twistSlider = ...
+                ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 4);
+            anaglyphBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAnaglyphBlendMenuItem");
+
+            anaglyphBlendMenu.MenuSelectedFcn(anaglyphBlendMenu, struct());
+            drawnow
+            initialSurfaces = ...
+                ProjectionViewerAppInteractionTest.findLayerSurfacesByTag(ax);
+            initialRedLayerIndex = ...
+                ProjectionViewerAppInteractionTest.redLayerIndex( ...
+                initialSurfaces);
+
+            twistSlider.Value = 85;
+            twistSlider.ValueChangedFcn(twistSlider, struct());
+            drawnow
+            twistedSurfaces = ...
+                ProjectionViewerAppInteractionTest.findLayerSurfacesByTag(ax);
+            actualRedLayerIndex = ...
+                ProjectionViewerAppInteractionTest.redLayerIndex( ...
+                twistedSurfaces);
+            expectedRedLayerIndex = ...
+                ProjectionViewerAppInteractionTest.expectedRedLayerIndex( ...
+                scene, ax);
+
+            testCase.verifyNotEqual(actualRedLayerIndex, ...
+                initialRedLayerIndex);
+            testCase.verifyEqual(actualRedLayerIndex, ...
+                expectedRedLayerIndex);
+        end
+
+        function testAnaglyphPresentationControlsAreRuntimeOnly(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+            ax = findall(fig, "Type", "axes");
+            anaglyphBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAnaglyphBlendMenuItem");
+            nearerMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAnaglyphMoveNearerMenuItem");
+            resetMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAnaglyphResetPresentationMenuItem");
+
+            anaglyphBlendMenu.MenuSelectedFcn(anaglyphBlendMenu, struct());
+            drawnow
+            app.resetPerformanceDiagnostics();
+            stateBefore = app.exportState();
+            layerSurfaces = ...
+                ProjectionViewerAppInteractionTest.findLayerSurfacesByTag(ax);
+            layer1X0 = layerSurfaces(1).XData;
+            layer1Y0 = layerSurfaces(1).YData;
+            layer1Z0 = layerSurfaces(1).ZData;
+
+            nearerMenu.MenuSelectedFcn(nearerMenu, struct());
+            drawnow
+            stateAfter = app.exportState();
+            layerSurfaces = ...
+                ProjectionViewerAppInteractionTest.findLayerSurfacesByTag(ax);
+            layer1Change = ProjectionViewerAppInteractionTest.surfaceChange( ...
+                layerSurfaces(1), layer1X0, layer1Y0, layer1Z0);
+
+            testCase.verifyGreaterThan(layer1Change, 0);
+            testCase.verifyEqual(stateAfter, stateBefore);
+            diagnostics = app.performanceDiagnostics();
+            testCase.verifyEqual( ...
+                diagnostics.Counters.LayerGeometryRefreshes, 0);
+            testCase.verifyEqual(diagnostics.Counters.SampleFcnCalls, 0);
+
+            resetMenu.MenuSelectedFcn(resetMenu, struct());
+            drawnow
+            layerSurfaces = ...
+                ProjectionViewerAppInteractionTest.findLayerSurfacesByTag(ax);
+            resetChange = ProjectionViewerAppInteractionTest.surfaceChange( ...
+                layerSurfaces(1), layer1X0, layer1Y0, layer1Z0);
+            testCase.verifyLessThan(resetChange, 1e-8);
         end
 
         function testLayerOrderButtonsSwapAdjacentLayers(testCase)
@@ -1524,6 +1626,14 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 ["layer1.tif", "layer2.tif", "layer3.tif"], options);
         end
 
+        function scene = makeTwistCrossingAnaglyphScene()
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            referenceOrigin = ...
+                scene.layers(1).SourceGeometry.ReferenceOrigin;
+            scene.layers(2).SourceGeometry.ReferenceOrigin = ...
+                referenceOrigin + [0; 0.25; -0.25];
+        end
+
         function removeFolder(folder)
             if isfolder(folder)
                 rmdir(folder, "s");
@@ -1664,6 +1774,28 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                     scene.layers(layerIndex).DisplayTexture), surfaceHandles);
                 surfaces(layerIndex) = surfaceHandles(isLayerSurface);
             end
+        end
+
+        function surfaces = findLayerSurfacesByTag(ax)
+            surfaces = findall(ax, "Type", "surface", ...
+                "Tag", "ProjectionViewerLayerSurface");
+            surfaces = flip(reshape(surfaces, 1, []));
+        end
+
+        function layerIndex = redLayerIndex(surfaces)
+            layer1Mean = squeeze(mean(surfaces(1).CData, [1 2]));
+            layer2Mean = squeeze(mean(surfaces(2).CData, [1 2]));
+            channelDominance = [layer1Mean(1) - layer1Mean(3), ...
+                layer2Mean(1) - layer2Mean(3)];
+            [~, layerIndex] = max(channelDominance);
+        end
+
+        function layerIndex = expectedRedLayerIndex(scene, ax)
+            origins = [scene.layers(1).SourceGeometry.ReferenceOrigin, ...
+                scene.layers(2).SourceGeometry.ReferenceOrigin];
+            [rightVector, ~] = ...
+                ProjectionViewerAppInteractionTest.cameraScreenBasis(ax);
+            [~, layerIndex] = min(rightVector.' * origins);
         end
 
         function viewDirection = cameraViewDirection(ax)

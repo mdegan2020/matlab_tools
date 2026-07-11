@@ -43,20 +43,22 @@ leaving only hidden pooled surfaces and a blank viewport.
 Backend Performance Pack 0 now compiles reusable per-job mesh/interpolation
 plans and resolves GPU capability once. Backend Performance Pack 1 makes
 full-source inverse-warp radiometry the backend default while retaining the old
-sparse path as an explicit comparison mode. Backend Performance Pack 2 is next.
-The July 10, 2026 follow-up queue also asks for a broader responsiveness and
-acceleration pass across viewer, alignment, backend, and dense-surface
-workflows. That pass should use `parpool("threads")` only for bounded work,
-should add optional capability-checked `gpuArray` paths only where CPU
-equivalence and fallback stay complete, and should evaluate dense-surface SGM
-on GPU-capable MATLAB installations if `disparitySGM` supports GPU inputs.
-Backend thread acceleration must still follow Backend Performance Pack 2 rather
-than bypass bounded serial streaming.
-The current fresh-class repository baseline is 386/386 passing tests. See
+sparse path as an explicit comparison mode. The Viewer Orientation and
+Anaglyph Presentation Pack is also complete. Backend Performance Pack 2 is the
+next backend pack, after the Alignment Workbench usability and cross-system
+acceleration priorities in the remaining project queue. The cross-system pass
+covers viewer, alignment, backend, and dense-surface
+workflows. It should use `parpool("threads")` only for bounded work, add optional
+capability-checked `gpuArray` paths only where CPU equivalence and fallback stay
+complete, and evaluate dense-surface SGM on GPU-capable MATLAB installations if
+`disparitySGM` supports GPU inputs. Backend thread acceleration must still
+follow Backend Performance Pack 2 rather than bypass bounded serial streaming.
+The current fresh-class repository baseline is 390/390 passing tests. See
 `docs/project_status.md` for the concise cross-workstream status.
 
-Use the pack order in this document and commit and push each coherent, validated
-pack separately.
+Use the selected project queue and the backend dependency order in this
+document. Commit each coherent, validated pack separately. Do not push unless
+the user explicitly asks.
 
 ## Non-Negotiable Contracts
 
@@ -1354,7 +1356,8 @@ Backend Performance Pack 1: Render full-source inverse warps
 
 ### Backend Performance Pack 2: Bounded Serial Streaming
 
-Status: not started; this is the next implementation pack.
+Status: not started; this is the next backend implementation pack and follows
+the three higher-priority project-queue items.
 
 Deliverables:
 
@@ -1649,14 +1652,16 @@ The completed viewer sequence was:
 8. Viewer Performance Pack 7: lazy UI and preview storage.
 9. Viewer Performance Pack 8: raster preview prototype and decision.
 
-Viewer Packs 0-8 and Backend Packs 0-1 are complete. The current active
-implementation queue now begins with viewer orientation/anaglyph presentation
-and Alignment Workbench usability work, followed by a cross-system acceleration
-pass and Backend Performance Packs 2-5. Keep backend work dependency-aware:
-bounded serial streaming comes before bounded thread submission, and optional
-GPU work remains capability-checked with CPU equivalence. The representative
-100-150 MP Windows viewer/tile-size matrix remains an external validation gate
-rather than an additional viewer pack.
+Viewer Packs 0-8, Backend Packs 0-1, and the Viewer Orientation and Anaglyph
+Presentation Pack are complete. The remaining implementation queue is, in
+order: Alignment Workbench usability and projection-offset semantics; a
+cross-system thread/GPU acceleration pass; Backend Performance Packs 2-5; and
+dense-surface synthetic expansion after the user supplies the requested
+fixture inputs. Keep backend
+work dependency-aware: bounded serial streaming comes before bounded thread
+submission, and optional GPU work remains capability-checked with CPU
+equivalence. The representative 100-150 MP Windows viewer/tile-size matrix
+remains an external validation gate rather than an additional viewer pack.
 
 Do not mix the viewer quick wins and backend renderer rewrite into one commit.
 Each pack should remain independently reviewable, validated, and reversible.

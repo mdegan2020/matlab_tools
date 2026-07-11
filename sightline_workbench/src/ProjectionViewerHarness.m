@@ -736,8 +736,24 @@ classdef ProjectionViewerHarness
             cameraOrigin = mean(double(nominalSceneCenters), 2);
             cameraAxis = ProjectionViewerHarness.unitVector( ...
                 projectionPlane.P0 - cameraOrigin, "FrameCameraViewDirection");
-            frameCamera = PlanarProjection.defineFrameCamera( ...
-                cameraOrigin, cameraAxis, frameFocalLength, projectionPlane);
+            desiredUp = projectionPlane.VN - ...
+                dot(projectionPlane.VN, cameraAxis) * cameraAxis;
+            if norm(desiredUp) <= 1e-10
+                frameCamera = PlanarProjection.defineFrameCamera( ...
+                    cameraOrigin, cameraAxis, frameFocalLength, projectionPlane);
+                return
+            end
+
+            desiredUp = desiredUp / norm(desiredUp);
+            cameraRight = cross(desiredUp, cameraAxis);
+            cameraRight = ProjectionViewerHarness.unitVector( ...
+                cameraRight, "FrameCameraRight");
+            focalPlane = PlanarProjection.definePlaneFromBasis( ...
+                cameraOrigin + frameFocalLength * cameraAxis, ...
+                cameraRight, desiredUp);
+            frameCamera = struct("G0", cameraOrigin, "V0", cameraAxis, ...
+                "F", frameFocalLength, "focalPlane", focalPlane);
+            PlanarProjection.validateCamera(frameCamera);
         end
 
         function options = mergeRealDataOptions(options, overrides)

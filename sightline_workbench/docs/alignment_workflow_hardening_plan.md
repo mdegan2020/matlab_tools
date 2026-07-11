@@ -1,7 +1,8 @@
 # Alignment Workflow Hardening Plan
 
 This document records the completed GUI auto-alignment hardening and
-Reliability Packs 0-8, together with their design rationale and deferred scope.
+Reliability Packs 0-8, together with their design rationale, the selected
+Alignment Workbench usability/offset-semantics follow-up, and deferred scope.
 For the concise current queue, see `docs/project_status.md`. The only remaining
 alignment acceptance item is an external representative Windows/real-data run;
 no user real-data pair is currently available to the repository.
@@ -1409,7 +1410,7 @@ Decided:
   through the truth-aware oblique-terrain decision fixture. Sparse radiometry
   remains an explicit comparison oracle.
 
-Deferred:
+Selected active follow-up (first in the remaining project queue):
 
 - Alignment Workbench control grouping, labels, button order, and diagnostic
   text layout should receive a usability pass. Preserve the staged Match,
@@ -1420,6 +1421,9 @@ Deferred:
   post-intersection projection-plane translation; do not change it to a
   source-origin adjustment without compatibility tests and an explicit
   geometry-model decision.
+
+Deferred beyond the selected follow-up:
+
 - DEM/terrain-constrained adjustment is out of scope for Reliability Packs
   0-8. It may be reconsidered later as an optional absolute constraint and
   must not be assumed available by the solver.

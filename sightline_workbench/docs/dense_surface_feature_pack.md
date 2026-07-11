@@ -1,7 +1,9 @@
 # Dense Surface Feature Pack
 
-Status: Pack 1 is complete. Follow-up candidates below are decision-gated and
-are not part of the active implementation queue; see `docs/project_status.md`.
+Status: Pack 1 is complete. Representative synthetic image/geometry expansion
+is the final item in the active implementation queue and begins after the user
+supplies the requested fixture dimensions and rough sensor geometry. Other
+follow-up candidates below remain decision-gated; see `docs/project_status.md`.
 
 ## Purpose
 

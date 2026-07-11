@@ -73,9 +73,85 @@ classdef ProjectionViewerRealDataFramingTest < matlab.unittest.TestCase
             testCase.verifyGreaterThan( ...
                 diagnostics.Viewer.PredictedVisibleTileCounts(1), 0);
         end
+
+        function testObliquePlaneNormalProjectsTowardScreenTop(testCase)
+            scene = ProjectionViewerRealDataFramingTest.makeObliquePlaneScene();
+            planeNormal = scene.layers.BaseProjectionPlane.VN;
+
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            ax = ProjectionViewerRealDataFramingTest.viewerAxes();
+            viewDirection = ProjectionViewerRealDataFramingTest.viewDirection(ax);
+            expectedUp = planeNormal - dot(planeNormal, viewDirection) * ...
+                viewDirection;
+            expectedUp = expectedUp / norm(expectedUp);
+            actualUp = camup(ax).';
+            actualUp = actualUp / norm(actualUp);
+
+            testCase.verifyGreaterThan(dot(actualUp, expectedUp), 1 - 1e-10);
+        end
+
+        function testForwardFacingPlaneUsesValidCameraFallback(testCase)
+            scene = ...
+                ProjectionViewerRealDataFramingTest.makeForwardFacingPlaneScene();
+            camera = scene.frameCamera;
+
+            testCase.verifyTrue(PlanarProjection.validateCamera(camera));
+            testCase.verifyEqual(camera.focalPlane.basis(:, 1), ...
+                scene.layers.BaseProjectionPlane.basis(:, 1), AbsTol=1e-12);
+        end
     end
 
     methods (Static, Access = private)
+        function scene = makeObliquePlaneScene()
+            projectionPlane = PlanarProjection.definePlaneFromNormal( ...
+                [100; 0; 0], [0.25; 0; 1], [0; 1; 0]);
+            scene = ProjectionViewerRealDataFramingTest.makePlaneScene( ...
+                projectionPlane);
+        end
+
+        function scene = makeForwardFacingPlaneScene()
+            projectionPlane = PlanarProjection.definePlaneFromNormal( ...
+                [100; 0; 0], [1; 0; 0], [0; 1; 0]);
+            scene = ProjectionViewerRealDataFramingTest.makePlaneScene( ...
+                projectionPlane);
+        end
+
+        function scene = makePlaneScene(projectionPlane)
+            imageSize = [5 7];
+            imageData = uint8(reshape(1:prod(imageSize), imageSize));
+            rowPosts = [1 3 5];
+            columnPosts = [1 4 7];
+            centerRow = (imageSize(1) + 1) / 2;
+            centerColumn = (imageSize(2) + 1) / 2;
+            origins = zeros(3, numel(columnPosts));
+            viewVectors = zeros(3, numel(rowPosts), numel(columnPosts));
+            for rowIndex = 1:numel(rowPosts)
+                for columnIndex = 1:numel(columnPosts)
+                    viewVectors(:, rowIndex, columnIndex) = [1; ...
+                        0.01 * (rowPosts(rowIndex) - centerRow); ...
+                        0.01 * (columnPosts(columnIndex) - centerColumn)];
+                end
+            end
+            viewVectors = viewVectors ./ sqrt(sum(viewVectors .^ 2, 1));
+            geometryDefinition = struct( ...
+                RowPostIndices=rowPosts, ...
+                ColumnPostIndices=columnPosts, ...
+                ViewVectorOrigins=origins, ...
+                ViewVectors=viewVectors, ...
+                NominalSceneCenter=[0; 0; 0], ...
+                Metadata=struct(Source="oblique-plane-framing-test"));
+            options = ProjectionViewerHarness.realDataOptions(struct( ...
+                RowStride=2, ColumnStride=3, FrameFocalLength=1, ...
+                ReferenceOrigin=[0; 0; 0], OpticalAxis=[1; 0; 0], ...
+                PlatformDirection=[0; 0; 1], RowAxis=[0; 1; 0], ...
+                ImageXAxis=[0; 0; 1], ImageYAxis=[0; 1; 0]));
+            scene = ProjectionViewerHarness.createRealDataScene( ...
+                "Oblique real layer", {imageData}, {geometryDefinition}, ...
+                projectionPlane, options);
+        end
+
         function scene = makeScene(rangeMeters, lateralOffsetMeters)
             imageSize = [5 7];
             imageData = uint8(reshape(1:prod(imageSize), imageSize));
