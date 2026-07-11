@@ -21,6 +21,8 @@ classdef ProjectionViewMetadata
                 layers, "PassId", ProjectionViewMetadata.DefaultPassId);
             layers = ProjectionViewMetadata.addMissingField( ...
                 layers, "AcquisitionStartTime", []);
+            layers = ProjectionViewMetadata.addMissingField( ...
+                layers, "AcquisitionStartTimeOriginalText", "");
             layers = ProjectionViewMetadata.addMissingField(layers, "LineRateHz", []);
             layers = ProjectionViewMetadata.addMissingField( ...
                 layers, "ScanAxis", "column");
@@ -46,9 +48,17 @@ classdef ProjectionViewMetadata
                 layers(layerIndex).ViewId = viewIds(layerIndex);
                 layers(layerIndex).PassId = ProjectionViewMetadata.passId( ...
                     layers(layerIndex).PassId, layerIndex);
-                layers(layerIndex).AcquisitionStartTime = ...
+                originalText = string( ...
+                    layers(layerIndex).AcquisitionStartTimeOriginalText);
+                [startTime, parsedOriginalText] = ...
                     ProjectionViewMetadata.acquisitionStart( ...
                     layers(layerIndex).AcquisitionStartTime, layerIndex);
+                layers(layerIndex).AcquisitionStartTime = startTime;
+                if strlength(parsedOriginalText) > 0
+                    originalText = parsedOriginalText;
+                end
+                layers(layerIndex).AcquisitionStartTimeOriginalText = ...
+                    originalText;
                 layers(layerIndex).LineRateHz = ProjectionViewMetadata.lineRate( ...
                     layers(layerIndex).LineRateHz, layerIndex);
                 layers(layerIndex).ScanAxis = ProjectionViewMetadata.scanAxis( ...
@@ -69,7 +79,8 @@ classdef ProjectionViewMetadata
                     "View metadata overrides must be a scalar struct.");
             end
             fieldNames = ["ViewId", "PassId", "AcquisitionStartTime", ...
-                "LineRateHz", "ScanAxis", "ScanDirection"];
+                "AcquisitionStartTimeOriginalText", "LineRateHz", ...
+                "ScanAxis", "ScanDirection"];
             for fieldName = fieldNames
                 if isfield(metadata, fieldName)
                     layer.(fieldName) = metadata.(fieldName);
@@ -271,9 +282,23 @@ classdef ProjectionViewMetadata
             end
         end
 
-        function value = acquisitionStart(value, layerIndex)
+        function [value, originalText] = acquisitionStart(value, layerIndex)
+            originalText = "";
             if isempty(value)
                 value = [];
+                return
+            end
+            if ischar(value) || isstring(value)
+                value = string(value);
+                if ~isscalar(value) || ismissing(value) || ...
+                        value ~= strip(value) || strlength(value) == 0
+                    error("ProjectionViewMetadata:invalidAcquisitionStartTime", ...
+                        "Scene layer %d acquisition time text is invalid.", ...
+                        layerIndex);
+                end
+                originalText = value;
+                value = ProjectionViewMetadata.parseUtcAcquisitionText( ...
+                    value, layerIndex);
                 return
             end
             validNumeric = isnumeric(value) && isscalar(value) && isfinite(value);
@@ -284,6 +309,50 @@ classdef ProjectionViewMetadata
                 error("ProjectionViewMetadata:invalidAcquisitionStartTime", ...
                     ["Scene layer %d AcquisitionStartTime must be a finite " ...
                     "numeric scalar, duration, datetime, or empty."], layerIndex);
+            end
+        end
+
+        function value = parseUtcAcquisitionText(text, layerIndex)
+            expression = ['^(?<day>\d{2})(?<month>\d{2})' ...
+                '(?<year>\d{2}|\d{4})_(?<hour>\d{2})' ...
+                '(?<minute>\d{2})(?<second>\d{2})' ...
+                '(?<fraction>\.\d+)?$'];
+            tokens = regexp(char(text), expression, "names", "once");
+            if isempty(tokens)
+                error("ProjectionViewMetadata:invalidAcquisitionStartTime", ...
+                    "Scene layer %d acquisition time must use strict UTC " + ...
+                    "DDMMYY_HHmmSS[.fraction] or DDMMYYYY_HHmmSS[.fraction].", ...
+                    layerIndex);
+            end
+            parsedYear = str2double(tokens.year);
+            if strlength(string(tokens.year)) == 2
+                if parsedYear >= 80
+                    parsedYear = 1900 + parsedYear;
+                else
+                    parsedYear = 2000 + parsedYear;
+                end
+            end
+            fraction = 0;
+            if ~isempty(tokens.fraction)
+                fraction = str2double(tokens.fraction);
+            end
+            components = [parsedYear, str2double(tokens.month), ...
+                str2double(tokens.day), str2double(tokens.hour), ...
+                str2double(tokens.minute), ...
+                str2double(tokens.second) + fraction];
+            try
+                value = datetime(components, TimeZone="UTC");
+            catch exception
+                error("ProjectionViewMetadata:invalidAcquisitionStartTime", ...
+                    "Scene layer %d acquisition time is invalid: %s", ...
+                    layerIndex, exception.message);
+            end
+            actual = [year(value), month(value), day(value), hour(value), ...
+                minute(value), second(value)];
+            if any(abs(actual - components) > 1e-9)
+                error("ProjectionViewMetadata:invalidAcquisitionStartTime", ...
+                    "Scene layer %d acquisition time is not a valid UTC date.", ...
+                    layerIndex);
             end
         end
 

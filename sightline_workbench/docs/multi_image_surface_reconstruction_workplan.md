@@ -2,9 +2,9 @@
 
 Status: approved consolidated workplan. Backend Performance Packs 0-5, the
 dense-surface synthetic expansion, Multi-Image Foundation MI-0 through MI-3,
-A2 pair viewpoint, and A3a-1 focus-aware keyboard mapping are complete. The
-read-only MATLAB SDK audit is also
-complete. The current fresh-class repository suite passes 506/506 tests. This
+A2 pair viewpoint, A3a-1 focus-aware keyboard mapping, and A3a-2 manual motion
+imagery are complete. The read-only MATLAB SDK audit is also complete. The
+current fresh-class repository suite passes 520/520 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -332,6 +332,16 @@ Prototype two implementations and measure them:
 
 1. demand-activated lightweight UI controls near the viewport edges; and
 2. axes/figure overlay glyphs with hit regions.
+
+A3a-2 measured both prototypes in MATLAB R2026a. Visibility-state changes for
+two lightweight buttons measured 0.035 ms median / 0.045 ms p95 over 1,000
+changes; two axes glyphs plus transparent hit regions measured 0.029 ms median /
+0.045 ms p95. The committed button overlay provides clearer hit targets and a
+persistent-control fallback without a material state-change penalty. In the
+integrated pointer path, 100 callbacks measured 0.838 ms median / 2.154 ms p95
+(3.402 ms maximum) and triggered zero mesh builds, tile refreshes, or surface
+creations. These measurements characterize the development machine and are not
+portable acceptance thresholds.
 
 Pointer handling should update only when the hover state changes. If hover
 tracking measurably degrades pan/zoom/crosshair interaction, retain keyboard
@@ -1300,9 +1310,10 @@ These trees are coordinated but should remain separately reviewable.
 3. **A2 — Pair viewpoint — complete.** Midpoint camera, fit/restore, optional
    follow, manual-motion suspension, explicit unavailable reasons, and
    presentation-only active-pair orientation without plane mutation.
-4. **A3a — Keyboard and manual motion imagery — keyboard mapping complete.**
-   Focus-aware remapping is complete as A3a-1. Explicit sequence/order,
-   stepping, edge controls, labels, Loop, and restore remain in A3a-2.
+4. **A3a — Keyboard and manual motion imagery — complete.** Focus-aware
+   remapping shipped as A3a-1. A3a-2 adds explicit sequence/order, strict UTC
+   parsing, manual stepping, measured edge controls with persistent fallback,
+   identity labels, Loop, visible warnings, and exact runtime restore.
 5. **A3b — Motion playback.** Add measured 0.5-10 fps playback, Space/Escape,
    bounded lookahead, pause reasons, and performance evidence.
 6. **A4 — Multi-view tracks and pair graph.** Reconcile pair matches into
@@ -1409,7 +1420,7 @@ complete. The ordered implementation queue is:
 1. Review the completed MI-0 through MI-3 baseline and preserve 496/496.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
-4. A3a manual motion imagery.
+4. A3a manual motion imagery — complete.
 5. A3b motion playback and performance evidence.
 6. S1 immutable `CorrectionSet`, MAT/JSON, stale protection, OPK adapter.
 7. S2 callbacks and explicit apply/revert/generation lineage.

@@ -82,7 +82,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest fresh-class repository validation passes all 506 tests;
+- the latest fresh-class repository validation passes all 520 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -805,11 +805,15 @@ changing the lightweight launch signature:
 ```matlab
 geometryDefinitions{1}.ViewId = "flight-a-view-001";
 geometryDefinitions{1}.PassId = "flight-a";
-geometryDefinitions{1}.AcquisitionStartTime = 0; % relative seconds or datetime
+geometryDefinitions{1}.AcquisitionStartTime = 0; % relative seconds, datetime, or strict UTC text
 geometryDefinitions{1}.LineRateHz = 1200;
 geometryDefinitions{1}.ScanAxis = "column";       % row or column
 geometryDefinitions{1}.ScanDirection = "increasing";
 ```
+
+Strict UTC text accepts `DDMMYY_HHmmSS[.fraction]` or
+`DDMMYYYY_HHmmSS[.fraction]`, retains the original text, and uses the fixed
+two-digit-year pivot `80-99 -> 1980-1999`, `00-79 -> 2000-2079`.
 
 Missing view IDs are generated independently of filenames and display names;
 missing pass IDs place all views in `pass-default`. Timing remains optional and
@@ -842,6 +846,19 @@ twist suspends it for the current pair and the next pair navigation resumes it.
 Unavailable overlap or geometry disables the commands with an explanation.
 These controls change camera presentation only and never mutate the plane,
 source geometry, rays, output grids, radiometry, or serialized scientific state.
+
+`Motion imagery...` in the image context menu opens a nonmodal configuration
+window without adding permanent main-view controls. Its runtime sequence is
+independent of layer visibility, defaults to every image, supports pass and
+per-view inclusion, and requires at least two frames. Caller order is preserved
+when supplied programmatically; otherwise frames remain grouped by pass and are
+ordered by comparable acquisition time, with visible stable-order warnings.
+Plain Left/Right steps one applied-geometry frame at a time, plain Up/Down is
+reserved, Shift+Arrows retains Tip/Tilt, and Loop is off by default. Edge
+buttons can be hover-activated or persistently visible; frame identity is
+transient or pinnable. Escape, Exit, or closing the window restores the prior
+camera, selected layer, visibility/blend/anaglyph/stereo presentation exactly.
+The manual pack intentionally provides no playback, interpolation, or crossfade.
 
 Stereo-eye assignment is independent of moving/reference roles and layer order.
 For each rendered stereo pair, the viewer projects the existing center-column

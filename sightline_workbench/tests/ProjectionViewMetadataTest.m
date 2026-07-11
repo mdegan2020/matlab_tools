@@ -120,6 +120,42 @@ classdef ProjectionViewMetadataTest < matlab.unittest.TestCase
             testCase.verifyNotEmpty(status.Explanation);
         end
 
+        function testStrictUtcTextParsesWithFixedYearPivot(testCase)
+            scene = ProjectionViewMetadataTest.makeScene(3);
+            scene.layers(1).AcquisitionStartTime = "311299_235959.25";
+            scene.layers(2).AcquisitionStartTime = "01011979_000001";
+            scene.layers(3).AcquisitionStartTime = "010179_000001";
+
+            normalized = ProjectionViewMetadata.ensureScene(scene);
+
+            first = normalized.layers(1).AcquisitionStartTime;
+            secondTime = normalized.layers(2).AcquisitionStartTime;
+            third = normalized.layers(3).AcquisitionStartTime;
+            testCase.verifyEqual(string(first.TimeZone), "UTC");
+            testCase.verifyEqual(year(first), 1999);
+            testCase.verifyEqual(string(secondTime.TimeZone), "UTC");
+            testCase.verifyEqual(year(secondTime), 1979);
+            testCase.verifyEqual(year(third), 2079);
+            testCase.verifyEqual(second(first), 59.25, AbsTol=1e-12);
+            testCase.verifyEqual( ...
+                normalized.layers(1).AcquisitionStartTimeOriginalText, ...
+                "311299_235959.25");
+        end
+
+        function testMalformedOrAmbiguousAcquisitionTextErrors(testCase)
+            malformed = ProjectionViewMetadataTest.makeScene(1);
+            malformed.layers.AcquisitionStartTime = "19991231_235959";
+            invalidDate = ProjectionViewMetadataTest.makeScene(1);
+            invalidDate.layers.AcquisitionStartTime = "31022026_120000";
+
+            testCase.verifyError( ...
+                @() ProjectionViewMetadata.ensureScene(malformed), ...
+                "ProjectionViewMetadata:invalidAcquisitionStartTime");
+            testCase.verifyError( ...
+                @() ProjectionViewMetadata.ensureScene(invalidDate), ...
+                "ProjectionViewMetadata:invalidAcquisitionStartTime");
+        end
+
         function testViewMetadataSurvivesMatSerialization(testCase)
             scene = ProjectionViewMetadataTest.makeScene(2);
             scene.layers(1).ViewId = "serialized-a";

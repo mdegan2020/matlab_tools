@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 506/506 tests with zero
+- The latest fresh-class repository suite passes 520/520 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -58,6 +58,7 @@ As of July 11, 2026:
 | Multi-Image Foundation MI-3 | Complete |
 | Multi-Image A2 pair viewpoint | Complete |
 | Multi-Image A3a-1 focus-aware keyboard mapping | Complete |
+| Multi-Image A3a-2 manual motion imagery | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -112,14 +113,29 @@ tables, sliders, and editable controls keep their native arrow behavior. A
 runtime keyboard-mode boundary is reserved for the subsequent motion-imagery
 pack without implementing motion mode here.
 
+Multi-image A3a-2 adds a lazy context-launched manual motion-imagery window.
+Sequences default to all image layers independently of visibility, support pass
+and per-view filtering, preserve explicit caller order, otherwise order time
+within pass, and expose stable fallback warnings. The non-stereo runtime shows
+one currently applied geometry at a time, supplies no-wrap/Loop stepping,
+hover-edge or persistent buttons, and transient/pinnable identity. Exit restores
+camera and presentation state exactly without changing scene geometry,
+visibility, blend, stereo identity, radiometry, or corrections. Strict UTC text
+parsing now preserves provenance and implements the locked two-digit-year pivot.
+The integrated hover path measured 0.838 ms median and 2.154 ms p95 over 100
+callbacks on the development machine, with zero mesh, tile-refresh, or surface-
+creation work; lightweight buttons and axes glyphs had equivalent p95
+visibility-toggle cost, so buttons were retained for clearer hit targets and a
+persistent fallback.
+
 ## Current Implementation Queue
 
 The completed read-only MATLAB SDK entry-point inventory, proposed reuse points,
 and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The
 approved consolidated implementation queue is now
 `docs/multi_image_surface_reconstruction_workplan.md`. MI-0 through MI-3, A2
-pair viewpoint, A3a-1 focus-aware keyboard mapping, and the SDK audit are
-complete; the next ordered packs are manual motion imagery and measured motion
+pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
+and the SDK audit are complete; the next ordered pack is measured motion
 playback. Correction SDK, global multi-image solving, precision validation,
 dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow
 in the explicit dependency order recorded there.
