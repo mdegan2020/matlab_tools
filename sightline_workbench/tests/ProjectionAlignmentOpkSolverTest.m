@@ -502,6 +502,30 @@ classdef ProjectionAlignmentOpkSolverTest < matlab.unittest.TestCase
             testCase.verifyGreaterThan( ...
                 diagnostics.ProjectionPlane2D.RmsAfter, 0);
         end
+
+        function testProjectionOffsetsChangePlaneButNotPhysicalMetrics(testCase)
+            scene = ProjectionAlignmentOpkSolverTest.makeBaseTwoLayerScene();
+            changedScene = scene;
+            changedScene.layers(1).ProjectionOffsetMeters = [2; -1];
+            changedScene.layers(2).ProjectionOffsetMeters = [-3; 4];
+            matchResult = ProjectionAlignmentOpkSolverTest.makeMatchResult();
+            options = ProjectionAlignmentOpkSolverTest.looseOptions();
+            options.MovableParameters.Parameters = ...
+                ["projectionOffsetX", "projectionOffsetY"];
+            options.MovableParameters.IncludeProjectionOffsets = true;
+            options.Bounds.ProjectionOffsetMeters = [10 10];
+
+            diagnostics = ProjectionAlignmentOpkSolver.compareScenes( ...
+                scene, changedScene, matchResult, options);
+
+            testCase.verifyGreaterThan( ...
+                diagnostics.ProjectionPlane2D.RmsAfter, 0);
+            testCase.verifyEqual(diagnostics.ForwardRay3D.RmsAfter, ...
+                diagnostics.ForwardRay3D.RmsBefore, AbsTol=1e-12);
+            testCase.verifyEqual( ...
+                diagnostics.EpipolarCoplanarity.RmsAfter, ...
+                diagnostics.EpipolarCoplanarity.RmsBefore, AbsTol=1e-12);
+        end
     end
 
     methods (Static, Access = private)

@@ -1,7 +1,7 @@
 # Alignment Workflow Hardening Plan
 
 This document records the completed GUI auto-alignment hardening and
-Reliability Packs 0-8, together with their design rationale, the selected
+Reliability Packs 0-8, together with their design rationale, the completed
 Alignment Workbench usability/offset-semantics follow-up, and deferred scope.
 For the concise current queue, see `docs/project_status.md`. The only remaining
 alignment acceptance item is an external representative Windows/real-data run;
@@ -1149,7 +1149,7 @@ Acceptance criteria:
   and stable `LayerIds`/`SigmaDegrees` overrides; with a meaningful prior
   weight, the less trusted image moves farther. `AllowReferenceMotion=false`
   fixes the scheduled reference exactly as a non-default control. The
-  Workbench exposes that choice as `Move reference`; calibrated unequal
+  Workbench exposes that choice as `Allow reference motion`; calibrated unequal
   covariance presets remain deferred until representative data exist.
 - `MovableParameters` is no longer descriptive-only. Excluded OPK axes and the
   fixed reference receive zero bounds, selected projection-offset axes are
@@ -1410,19 +1410,34 @@ Decided:
   through the truth-aware oblique-terrain decision fixture. Sparse radiometry
   remains an explicit comparison oracle.
 
-Selected active follow-up (first in the remaining project queue):
+Completed Alignment Workbench usability and offset-semantics follow-up:
 
 - Alignment Workbench control grouping, labels, button order, and diagnostic
-  text layout should receive a usability pass. Preserve the staged Match,
-  Filter, Solve, Preview, Apply, Revert, and Clear semantics unless a separate
-  design decision changes them.
-- WASD/projection-offset semantics need a focused evaluation against
-  epipolar/coplanarity and forward-ray filtering. The current offset is a
-  post-intersection projection-plane translation; do not change it to a
-  source-origin adjustment without compatibility tests and an explicit
-  geometry-model decision.
+  text layout received a usability pass while preserving staged Match, Filter,
+  Solve, Preview, Apply, Revert, and Clear semantics.
+- Focused plane, epipolar/coplanarity, and forward-ray tests selected the
+  existing WASD/projection-offset contract: it is a post-intersection
+  projection-plane translation, not a source-origin adjustment.
 
-Deferred beyond the selected follow-up:
+Implementation result:
+
+- The Workbench now uses responsive nested grids for Setup and matching inputs,
+  Filter and Solve settings, Staged Workflow and Review, Pair Schedule, Match
+  Ledger, and full-width Stage Status and Diagnostics. Match, Filter, Solve,
+  Preview, Apply, and Revert remain visibly ordered and retain the existing
+  session invalidation rules.
+- Labels now distinguish the loss model from the coplanarity prefilter, use
+  `Allow reference motion` for the balanced-solve control, identify the
+  projection-plane ROI explicitly, and name accepted/rejected/worst/feature
+  overlays and curation actions directly.
+- The offset-semantics decision preserves compatibility: WASD and
+  `ProjectionOffsetMeters` remain post-intersection plane translations. Exact
+  overlay and working-image plane coordinates include them, while sampled
+  sensor origins/rays, forward-ray 3-D metrics, and epipolar coplanarity do
+  not. Any future physical platform-position correction must use a distinct
+  source-origin parameter and contract.
+
+Deferred beyond the completed follow-up:
 
 - DEM/terrain-constrained adjustment is out of scope for Reliability Packs
   0-8. It may be reconsidered later as an optional absolute constraint and

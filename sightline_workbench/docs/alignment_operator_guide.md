@@ -12,8 +12,8 @@ retain full source imagery and the ordinary source-ray inverse warp.
    the separate **Alignment Workbench**.
 2. Choose the moving and reference layers for a pair, or choose visible-layer
    scope for a scheduled network. “Reference” defines pair direction and
-   scheduling; it is not assumed to be absolute truth. Keep **Move reference**
-   enabled unless deliberately comparing with a fixed-reference solve.
+   scheduling; it is not assumed to be absolute truth. Keep **Allow reference
+   motion** enabled unless deliberately comparing with a fixed-reference solve.
 3. Start with the **Quality** preset and the default projection-plane loss.
    Click **Match**, inspect raw matches, then click **Filter**. Match and Filter
    are separate so filter settings, ROI, and curation can be changed without
@@ -46,6 +46,19 @@ retain full source imagery and the ordinary source-ray inverse warp.
    masked intensity view and a metric surface whose height is measured along
    the current projection-plane normal. Treat this as runtime analysis only:
    it is not serialized, exported as a DEM, or used by backend rendering.
+
+The Workbench is organized from top to bottom as Setup and matching inputs,
+Filter and Solve settings, the left-to-right staged workflow, Pair Schedule,
+Match Ledger, and Stage status/diagnostics. Overlay visibility and curation
+controls share the workflow region; selecting an overlay or ledger row keeps
+the other view synchronized.
+
+`ProjectionOffsetMeters` and WASD remain projection-plane registration tools.
+They translate intersections after source-ray projection and therefore affect
+working-image and overlay plane coordinates. They do not move sensor origins or
+change forward-ray or coplanarity metrics. Do not use them as a substitute for
+a physical platform-position correction; that requires a separately modeled
+source-origin parameter.
 
 ## Choosing the loss
 

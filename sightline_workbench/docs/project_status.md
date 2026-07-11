@@ -21,7 +21,7 @@ As of July 10, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 390/390 tests with zero
+- The latest fresh-class repository suite passes 393/393 tests with zero
   failures and zero incomplete tests.
 
 ## Completed Feature Trees
@@ -37,6 +37,7 @@ As of July 10, 2026:
 | Backend Performance Packs 0-1 | Complete |
 | Dense Surface Pack 1 | Complete |
 | Viewer Orientation and Anaglyph Presentation Pack | Complete |
+| Alignment Workbench Usability and Offset-Semantics Pack | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -56,40 +57,40 @@ left-eye layer to red from the current-view sensor baseline, brightens the
 preview, and provides runtime-only separation/depth controls without rebuilding
 projection geometry or changing serialized/backend state.
 
+The completed Alignment Workbench usability pack groups controls into Setup,
+Filter/Solve Settings, Staged Workflow/Review, Pair Schedule, Match Ledger, and
+full-width Diagnostics regions. It preserves the staged state machine and
+records the projection-offset decision: offsets remain post-intersection
+projection-plane registration terms, affect plane-coordinate products, and do
+not alter source origins, forward-ray metrics, or coplanarity.
+
 ## Active Implementation Queue
 
-The remaining queue is ordered as written below: Alignment Workbench usability
-first, cross-system acceleration second, Backend Performance Packs 2-5 third
-through sixth, and dense-surface synthetic expansion last. Backend thread/GPU
-work must still respect the bounded-streaming dependencies below.
+The remaining queue is ordered as written below: cross-system acceleration
+first, Backend Performance Packs 2-5 second through fifth, and dense-surface
+synthetic expansion last. Backend thread/GPU work must still respect the
+bounded-streaming dependencies below.
 
-1. **Alignment workbench usability and offset-semantics pack.** Rearrange and
-   relabel Alignment Workbench controls and diagnostics while preserving staged
-   workflow semantics. Evaluate whether the current WASD/projection-offset
-   translation after planar intersection remains physically appropriate for
-   epipolar/ray filtering, or whether a source-origin adjustment model is
-   needed. Do not change this semantics without focused tests and an explicit
-   compatibility decision.
-2. **Cross-system acceleration pass.** Re-profile viewer, alignment, backend,
+1. **Cross-system acceleration pass.** Re-profile viewer, alignment, backend,
    and dense-surface workflows. Use `parpool("threads")` only where work is
    bounded and the CPU serial path remains complete. Add optional
    capability-checked `gpuArray` acceleration where it is supported and proven
    useful, including dense-surface SGM if `disparitySGM` accepts GPU inputs in
    the target MATLAB environment. Backend thread work must not bypass Backend
    Performance Pack 2's streaming prerequisite.
-3. **Backend Performance Pack 2 — Bounded serial streaming.** Incrementally
+2. **Backend Performance Pack 2 — Bounded serial streaming.** Incrementally
    write tiled TIFF/mask products, remove output-sized index temporaries, make
    in-memory return policy explicit, and close partial files safely.
-4. **Backend Performance Pack 3 — Bounded thread pipeline.** Submit a limited
+3. **Backend Performance Pack 3 — Bounded thread pipeline.** Submit a limited
    number of tiles through `parpool("threads")`, consume results
    incrementally, and keep deterministic writes and bounded in-flight memory.
-5. **Backend Performance Pack 4 — Radiometric and precision policy.** Define
+4. **Backend Performance Pack 4 — Radiometric and precision policy.** Define
    output class, scale/offset, fill, single-precision tolerances, and
    format-specific writing without repeated full-image normalization.
-6. **Backend Performance Pack 5 — File-backed source regions.** Add a backend
+5. **Backend Performance Pack 5 — File-backed source regions.** Add a backend
    source-region provider with in-memory compatibility and TIFF/`blockedImage`
    adapters so tiled jobs need not hold a complete source array.
-7. **Dense-surface synthetic data expansion.** Lowest priority until user
+6. **Dense-surface synthetic data expansion.** Lowest priority until user
    inputs are available. The user will provide desired output dimensions and
    rough sensor geometry such as azimuth, elevation, and range; the tooling
    should derive the remaining synthetic image/geometry details for more

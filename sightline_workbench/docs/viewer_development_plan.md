@@ -539,7 +539,7 @@ buildtool test
 
 The current suite exercises pure geometry, scene construction, sparse geometry,
 mesh building, readback, layer workflows, state serialization, and app
-interactions. The current fresh-class baseline is 390/390 passing tests with no
+interactions. The current fresh-class baseline is 393/393 passing tests with no
 failures or incomplete tests.
 
 ## Backend Processor Work Plan
@@ -1165,21 +1165,17 @@ Feedback checkpoint:
 
 ## Active Roadmap For Discussion
 
-The backend and auto-alignment feature trees are implemented, as is the Viewer
-Orientation and Anaglyph Presentation Pack. The remaining queue is:
+The backend and auto-alignment feature trees, Viewer Orientation and Anaglyph
+Presentation Pack, and Alignment Workbench Usability and Offset-Semantics Pack
+are implemented. The remaining queue is:
 
-1. Alignment Workbench usability and projection-offset semantics: improve
-   grouping, labels, button order, and diagnostic text layout, then evaluate
-   whether post-intersection WASD offsets remain appropriate for ray/epipolar
-   filtering or should become a different, explicitly physical source-origin
-   adjustment.
-2. Cross-system acceleration pass: re-profile viewer, alignment, backend, and
+1. Cross-system acceleration pass: re-profile viewer, alignment, backend, and
    dense surface extraction for bounded `parpool("threads")` opportunities and
    optional capability-checked `gpuArray` support. Backend thread work remains
    dependent on bounded serial streaming.
-3. Backend Performance Packs 2-5: bounded serial streaming, bounded threaded
+2. Backend Performance Packs 2-5: bounded serial streaming, bounded threaded
    execution, radiometric/precision policy, and file-backed source regions.
-4. Dense-surface synthetic data expansion after the user supplies desired
+3. Dense-surface synthetic data expansion after the user supplies desired
    image dimensions and rough sensor azimuth/elevation/range.
 
 The items below remain broader design topics to prioritize with user guidance.

@@ -45,15 +45,15 @@ plans and resolves GPU capability once. Backend Performance Pack 1 makes
 full-source inverse-warp radiometry the backend default while retaining the old
 sparse path as an explicit comparison mode. The Viewer Orientation and
 Anaglyph Presentation Pack is also complete. Backend Performance Pack 2 is the
-next backend pack, after the Alignment Workbench usability and cross-system
-acceleration priorities in the remaining project queue. The cross-system pass
+next backend pack, after the cross-system acceleration priority in the
+remaining project queue. The cross-system pass
 covers viewer, alignment, backend, and dense-surface
 workflows. It should use `parpool("threads")` only for bounded work, add optional
 capability-checked `gpuArray` paths only where CPU equivalence and fallback stay
 complete, and evaluate dense-surface SGM on GPU-capable MATLAB installations if
 `disparitySGM` supports GPU inputs. Backend thread acceleration must still
 follow Backend Performance Pack 2 rather than bypass bounded serial streaming.
-The current fresh-class repository baseline is 390/390 passing tests. See
+The current fresh-class repository baseline is 393/393 passing tests. See
 `docs/project_status.md` for the concise cross-workstream status.
 
 Use the selected project queue and the backend dependency order in this
@@ -1652,9 +1652,9 @@ The completed viewer sequence was:
 8. Viewer Performance Pack 7: lazy UI and preview storage.
 9. Viewer Performance Pack 8: raster preview prototype and decision.
 
-Viewer Packs 0-8, Backend Packs 0-1, and the Viewer Orientation and Anaglyph
-Presentation Pack are complete. The remaining implementation queue is, in
-order: Alignment Workbench usability and projection-offset semantics; a
+Viewer Packs 0-8, Backend Packs 0-1, the Viewer Orientation and Anaglyph
+Presentation Pack, and the Alignment Workbench Usability and Offset-Semantics
+Pack are complete. The remaining implementation queue is, in order: a
 cross-system thread/GPU acceleration pass; Backend Performance Packs 2-5; and
 dense-surface synthetic expansion after the user supplies the requested
 fixture inputs. Keep backend

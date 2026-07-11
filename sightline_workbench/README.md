@@ -68,13 +68,13 @@ The current implementation baseline is summarized in
 
 - the original viewer milestones, Backend Milestones 1-10, Auto Alignment
   Milestones 1-13, Alignment Reliability Packs 0-8, Viewer Performance Packs
-  0-8, Backend Performance Packs 0-1, Dense Surface Pack 1, and the Viewer
-  Orientation and Anaglyph Presentation Pack are complete;
-- the latest fresh-class repository validation passes all 390 tests;
-- the remaining implementation queue is Alignment Workbench usability and
-  projection-offset semantics, a cross-system thread/GPU acceleration pass,
-  Backend Performance Packs 2-5, and finally dense-surface synthetic expansion
-  after the requested fixture inputs are available; and
+  0-8, Backend Performance Packs 0-1, Dense Surface Pack 1, the Viewer
+  Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
+  Usability and Offset-Semantics Pack are complete;
+- the latest fresh-class repository validation passes all 393 tests;
+- the remaining implementation queue is a cross-system thread/GPU acceleration
+  pass, Backend Performance Packs 2-5, and finally dense-surface synthetic
+  expansion after the requested fixture inputs are available; and
 - representative 100-150 MP Windows/real-data validation remains external
   because no user real-data pair is available in this repository.
 
@@ -192,7 +192,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 390 passing tests with no failures or incomplete tests.
+baseline is 393 passing tests with no failures or incomplete tests.
 
 ## Viewer Performance Evaluation
 
@@ -444,8 +444,10 @@ Core controls:
   context menu. It is now a compact launcher/status strip for a separate lazy,
   nonmodal Alignment Workbench, leaving the image viewport available for
   inspection. The Workbench runs auto-alignment for the selected pair or all
-  visible layers and stacks setup, match tables, solve/curation controls, and
-  diagnostics in one window. Choose a fast or quality preset, detector, loss
+  visible layers and groups Setup and matching inputs, Filter and Solve
+  settings, staged Workflow and Review actions, Pair Schedule, Match Ledger,
+  and full-width Diagnostics in one window. Choose a fast or quality preset,
+  detector, loss
   mode, optional coplanarity filter, ROI, and enabled pair-table rows, then use
   the explicit Match, Filter, Solve, Preview, Apply, Revert, and Clear stages.
   Match stops after deterministic feature matching and reports raw observations;
@@ -502,8 +504,8 @@ iterations; opaque MATLAB detector calls remain cancellable only between API
 stages.
 
 The Pack 6 solver uses an explicit common-plus-differential attitude model.
-Both images move by default; the Workbench `Move reference` toggle provides an
-intentional fixed-reference control. Equal pointing priors split relative
+Both images move by default; the Workbench `Allow reference motion` toggle
+provides an intentional fixed-reference control. Equal pointing priors split relative
 correction evenly, while stable layer-ID `PointingPriors.SigmaDegrees` move a
 less trusted image farther. The result reports the common and per-layer
 differential correction, prior precision, active/fixed parameter contract,
@@ -792,10 +794,9 @@ full-source inverse warp the default. The current tiled renderer is not yet
 bounded-memory end to end: large file writes still assemble full output arrays.
 Backend Performance Packs 2-5 cover bounded serial streaming, bounded thread
 submission, explicit radiometric/precision policy, and file-backed source
-regions. They follow the Alignment Workbench usability and
-projection-offset-semantics pack and cross-system thread/GPU acceleration pass
-in the remaining queue. Dense-surface synthetic expansion follows the backend
-packs. Backend thread acceleration still depends on bounded serial streaming.
+regions. They follow the cross-system thread/GPU acceleration pass in the
+remaining queue. Dense-surface synthetic expansion follows the backend packs.
+Backend thread acceleration still depends on bounded serial streaming.
 See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output
 production work.

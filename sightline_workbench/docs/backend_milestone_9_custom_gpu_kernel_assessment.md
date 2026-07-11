@@ -20,8 +20,8 @@ Backend Performance Packs 0-1 have since added reusable render plans and
 full-source inverse-warp radiometry. Within the backend workstream, the next
 priority is bounded serial streaming, followed by bounded thread execution,
 radiometric policy, and file-backed source regions. These packs follow the
-alignment-usability and cross-system acceleration priorities in the remaining
-project queue. Those memory/lifetime problems should be resolved and
+cross-system acceleration priority in the remaining project queue. Those
+memory/lifetime problems should be resolved and
 profiled before this custom-kernel decision is revisited.
 
 ## Candidate Kernel If Future Profiling Justifies It

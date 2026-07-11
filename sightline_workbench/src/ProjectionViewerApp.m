@@ -896,7 +896,7 @@ classdef ProjectionViewerApp < handle
 
         function createAlignmentControls(app)
             app.AlignmentWorkbenchFigure = uifigure( ...
-                Name="Alignment Workbench", Position=[140 120 1380 820], ...
+                Name="Alignment Workbench", Position=[140 100 1400 900], ...
                 CloseRequestFcn=@(~, ~) app.hideAlignmentWorkbench(), ...
                 Tag="ProjectionViewerAlignmentWorkbench");
             app.AlignmentGrid = uigridlayout(app.AlignmentWorkbenchFigure, ...
@@ -1159,9 +1159,191 @@ classdef ProjectionViewerApp < handle
             app.AlignmentMatchTable.Layout.Row = 6;
             app.AlignmentMatchTable.Layout.Column = [1 17];
 
+            app.organizeAlignmentWorkbenchLayout(setupHeading, solveHeading, ...
+                referenceLabel, movingLabel, presetLabel, scopeLabel, ...
+                detectorLabel, lossLabel, coplanarityLabel);
+
             app.updateAlignmentLayerItems();
             app.setAlignmentActionEnabled(false);
             app.refreshAlignmentSessionIndicators();
+        end
+
+        function organizeAlignmentWorkbenchLayout(app, setupHeading, ...
+                solveHeading, referenceLabel, movingLabel, presetLabel, ...
+                scopeLabel, detectorLabel, lossLabel, coplanarityLabel)
+            delete([setupHeading solveHeading]);
+            app.AlignmentGrid.RowHeight = {36, "fit", "fit", 115, ...
+                "1x", 155};
+            app.AlignmentGrid.ColumnWidth = {"1x", "1x"};
+            app.AlignmentGrid.RowSpacing = 8;
+            app.AlignmentGrid.ColumnSpacing = 10;
+
+            headerGrid = uigridlayout(app.AlignmentGrid, [1 2]);
+            headerGrid.Layout.Row = 1;
+            headerGrid.Layout.Column = [1 2];
+            headerGrid.RowHeight = {"1x"};
+            headerGrid.ColumnWidth = {260, "1x"};
+            headerGrid.Padding = [0 0 0 0];
+            headerGrid.ColumnSpacing = 10;
+            headerGrid.Tag = "ProjectionViewerAlignmentHeaderGrid";
+            heading = uilabel(headerGrid, Text="ALIGNMENT WORKBENCH", ...
+                FontWeight="bold", FontSize=15);
+            heading.Layout.Column = 1;
+            app.AlignmentStatusLabel.Parent = headerGrid;
+            app.AlignmentStatusLabel.Layout.Row = 1;
+            app.AlignmentStatusLabel.Layout.Column = 2;
+
+            setupPanel = uipanel(app.AlignmentGrid, ...
+                Title="1. Setup and matching inputs", ...
+                Tag="ProjectionViewerAlignmentSetupPanel");
+            setupPanel.Layout.Row = 2;
+            setupPanel.Layout.Column = 1;
+            setupGrid = uigridlayout(setupPanel, [2 5]);
+            setupGrid.RowHeight = {"fit", "fit"};
+            setupGrid.ColumnWidth = {"1x", "1x", "1x", "1x", "1x"};
+            setupGrid.Padding = [8 6 8 8];
+            setupGrid.ColumnSpacing = 8;
+            setupLabels = [referenceLabel movingLabel scopeLabel ...
+                presetLabel detectorLabel];
+            setupControls = [app.AlignmentReferenceDropDown ...
+                app.AlignmentMovingDropDown app.AlignmentScopeDropDown ...
+                app.AlignmentPresetDropDown app.AlignmentDetectorDropDown];
+            for column = 1:numel(setupLabels)
+                setupLabels(column).Parent = setupGrid;
+                setupLabels(column).Layout.Row = 1;
+                setupLabels(column).Layout.Column = column;
+                setupControls(column).Parent = setupGrid;
+                setupControls(column).Layout.Row = 2;
+                setupControls(column).Layout.Column = column;
+            end
+
+            settingsPanel = uipanel(app.AlignmentGrid, ...
+                Title="2. Filter and solve settings", ...
+                Tag="ProjectionViewerAlignmentSettingsPanel");
+            settingsPanel.Layout.Row = 2;
+            settingsPanel.Layout.Column = 2;
+            settingsGrid = uigridlayout(settingsPanel, [2 5]);
+            settingsGrid.RowHeight = {"fit", "fit"};
+            settingsGrid.ColumnWidth = {"1.2x", "1.2x", "1.4x", ...
+                "1x", "1x"};
+            settingsGrid.Padding = [8 6 8 8];
+            settingsGrid.ColumnSpacing = 8;
+            lossLabel.Text = "Loss model";
+            coplanarityLabel.Text = "Coplanarity prefilter";
+            referencePolicyLabel = uilabel(settingsGrid, ...
+                Text="Reference policy");
+            drawRoiLabel = uilabel(settingsGrid, Text="Projection-plane ROI");
+            clearRoiLabel = uilabel(settingsGrid, Text="");
+            settingLabels = [lossLabel coplanarityLabel ...
+                referencePolicyLabel drawRoiLabel clearRoiLabel];
+            for column = 1:numel(settingLabels)
+                settingLabels(column).Parent = settingsGrid;
+                settingLabels(column).Layout.Row = 1;
+                settingLabels(column).Layout.Column = column;
+            end
+            app.AlignmentLossDropDown.Parent = settingsGrid;
+            app.AlignmentLossDropDown.Layout.Row = 2;
+            app.AlignmentLossDropDown.Layout.Column = 1;
+            app.AlignmentCoplanarityDropDown.Parent = settingsGrid;
+            app.AlignmentCoplanarityDropDown.Layout.Row = 2;
+            app.AlignmentCoplanarityDropDown.Layout.Column = 2;
+            app.AlignmentReferenceMotionCheckBox.Parent = settingsGrid;
+            app.AlignmentReferenceMotionCheckBox.Layout.Row = 2;
+            app.AlignmentReferenceMotionCheckBox.Layout.Column = 3;
+            app.AlignmentReferenceMotionCheckBox.Text = ...
+                "Allow reference motion";
+            app.AlignmentRoiButton.Parent = settingsGrid;
+            app.AlignmentRoiButton.Layout.Row = 2;
+            app.AlignmentRoiButton.Layout.Column = 4;
+            app.AlignmentRoiButton.Text = "Draw ROI";
+            app.AlignmentClearRoiButton.Parent = settingsGrid;
+            app.AlignmentClearRoiButton.Layout.Row = 2;
+            app.AlignmentClearRoiButton.Layout.Column = 5;
+            app.AlignmentClearRoiButton.Text = "Clear ROI";
+
+            workflowPanel = uipanel(app.AlignmentGrid, ...
+                Title="3. Staged workflow and review", ...
+                Tag="ProjectionViewerAlignmentWorkflowPanel");
+            workflowPanel.Layout.Row = 3;
+            workflowPanel.Layout.Column = [1 2];
+            workflowGrid = uigridlayout(workflowPanel, [2 9]);
+            workflowGrid.RowHeight = {"fit", "fit"};
+            workflowGrid.ColumnWidth = {85, 85, 85, 85, 85, 85, 85, ...
+                115, "1x"};
+            workflowGrid.Padding = [8 6 8 8];
+            workflowGrid.RowSpacing = 6;
+            workflowGrid.ColumnSpacing = 8;
+            stageControls = [app.AlignmentMatchButton ...
+                app.AlignmentFilterButton app.AlignmentSolveButton ...
+                app.AlignmentPreviewButton app.AlignmentApplyButton ...
+                app.AlignmentRevertButton app.AlignmentCancelButton ...
+                app.AlignmentDenseSurfaceButton];
+            for column = 1:numel(stageControls)
+                stageControls(column).Parent = workflowGrid;
+                stageControls(column).Layout.Row = 1;
+                stageControls(column).Layout.Column = column;
+            end
+            stageHint = uilabel(workflowGrid, ...
+                Text="Run stages left to right; inspect before Solve");
+            stageHint.Layout.Row = 1;
+            stageHint.Layout.Column = 9;
+            app.AlignmentAcceptedOverlayCheckBox.Text = "Accepted lines";
+            app.AlignmentRejectedOverlayCheckBox.Text = "Rejected lines";
+            app.AlignmentWorstOverlayCheckBox.Text = "Worst 10%";
+            app.AlignmentFeatureOverlayCheckBox.Text = "Feature points";
+            app.AlignmentClearOverlaysButton.Text = "Clear overlays";
+            app.AlignmentDeleteMatchButton.Text = "Delete selected";
+            app.AlignmentUndoCurationButton.Text = "Undo last";
+            reviewControls = {app.AlignmentAcceptedOverlayCheckBox, ...
+                app.AlignmentRejectedOverlayCheckBox, ...
+                app.AlignmentWorstOverlayCheckBox, ...
+                app.AlignmentFeatureOverlayCheckBox, ...
+                app.AlignmentClearOverlaysButton, ...
+                app.AlignmentDeleteMatchButton, ...
+                app.AlignmentUndoCurationButton};
+            for column = 1:numel(reviewControls)
+                control = reviewControls{column};
+                control.Parent = workflowGrid;
+                control.Layout.Row = 2;
+                control.Layout.Column = column;
+            end
+            reviewHint = uilabel(workflowGrid, ...
+                Text="Selection is synchronized with the match ledger");
+            reviewHint.Layout.Row = 2;
+            reviewHint.Layout.Column = [8 9];
+
+            pairPanel = uipanel(app.AlignmentGrid, ...
+                Title="Pair schedule — enable rows before Match", ...
+                Tag="ProjectionViewerAlignmentPairPanel");
+            pairPanel.Layout.Row = 4;
+            pairPanel.Layout.Column = [1 2];
+            pairGrid = uigridlayout(pairPanel, [1 1]);
+            pairGrid.Padding = [4 4 4 4];
+            app.AlignmentPairTable.Parent = pairGrid;
+            app.AlignmentPairTable.Layout.Row = 1;
+            app.AlignmentPairTable.Layout.Column = 1;
+
+            matchPanel = uipanel(app.AlignmentGrid, ...
+                Title="Match ledger — Enabled controls the next Solve", ...
+                Tag="ProjectionViewerAlignmentMatchPanel");
+            matchPanel.Layout.Row = 5;
+            matchPanel.Layout.Column = [1 2];
+            matchGrid = uigridlayout(matchPanel, [1 1]);
+            matchGrid.Padding = [4 4 4 4];
+            app.AlignmentMatchTable.Parent = matchGrid;
+            app.AlignmentMatchTable.Layout.Row = 1;
+            app.AlignmentMatchTable.Layout.Column = 1;
+
+            diagnosticsPanel = uipanel(app.AlignmentGrid, ...
+                Title="Stage status and diagnostics", ...
+                Tag="ProjectionViewerAlignmentDiagnosticsPanel");
+            diagnosticsPanel.Layout.Row = 6;
+            diagnosticsPanel.Layout.Column = [1 2];
+            diagnosticsGrid = uigridlayout(diagnosticsPanel, [1 1]);
+            diagnosticsGrid.Padding = [4 4 4 4];
+            app.AlignmentDiagnosticsTextArea.Parent = diagnosticsGrid;
+            app.AlignmentDiagnosticsTextArea.Layout.Row = 1;
+            app.AlignmentDiagnosticsTextArea.Layout.Column = 1;
         end
 
         function updateAlignmentLayerItems(app)
