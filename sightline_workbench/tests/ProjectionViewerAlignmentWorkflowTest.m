@@ -16,7 +16,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
 
     methods (TestMethodSetup)
         function closeExistingViewer(testCase)
-            names = ["Projection Viewer Prototype", "Alignment Workbench"];
+            names = ["Sightline Workbench", "Alignment Workbench"];
             for name = names
                 delete(findall(groot, "Type", "figure", "Name", name));
             end
@@ -1152,7 +1152,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
 
     methods (Static, Access = private)
         function closeAlignmentFigures()
-            names = ["Projection Viewer Prototype", "Alignment Workbench"];
+            names = ["Sightline Workbench", "Alignment Workbench"];
             for name = names
                 delete(findall(groot, "Type", "figure", "Name", name));
             end
@@ -1180,7 +1180,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
 
         function fig = findViewerFigure()
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             fig = fig(1);
             if isempty(findall(fig, "Tag", ...
                     "ProjectionViewerAlignmentGrid"))

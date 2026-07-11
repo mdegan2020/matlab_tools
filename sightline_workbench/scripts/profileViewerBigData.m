@@ -152,7 +152,7 @@ end
 
 function [tileSurfaceCount, plainSurfaceCount, tileTextureSizes] = ...
         viewerSurfaceSummary()
-fig = findall(groot, "Type", "figure", "Name", "Projection Viewer Prototype");
+fig = findall(groot, "Type", "figure", "Name", "Sightline Workbench");
 ax = findall(fig, "Type", "axes");
 tileSurfaces = findall(ax, "Type", "surface", ...
     "Tag", "ProjectionViewerPreviewTileSurface");
@@ -167,7 +167,7 @@ end
 end
 
 function slider = findSliderInColumn(column)
-fig = findall(groot, "Type", "figure", "Name", "Projection Viewer Prototype");
+fig = findall(groot, "Type", "figure", "Name", "Sightline Workbench");
 sliders = findall(fig, "-isa", "matlab.ui.control.Slider");
 for k = 1:numel(sliders)
     if sliders(k).Layout.Column == column

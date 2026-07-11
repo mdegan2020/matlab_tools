@@ -60,7 +60,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             alphaSlider = ProjectionViewerPerformanceTest.findSlider(fig, 5);
             app.resetPerformanceDiagnostics();
 
@@ -81,7 +81,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             alphaSlider = ProjectionViewerPerformanceTest.findSlider(fig, 5);
             surfaceHandle = findall(fig, "Type", "surface", ...
                 "Tag", "ProjectionViewerLayerSurface");
@@ -124,7 +124,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             alphaSlider = ProjectionViewerPerformanceTest.findSlider(fig, 5);
             surfaceHandle = findall(fig, "Type", "surface", ...
                 "Tag", "ProjectionViewerLayerSurface");
@@ -155,7 +155,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
             menuItem = findall(fig, ...
                 "Tag", "ProjectionViewerCrosshairMenuItem");
@@ -192,7 +192,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             menuItem = findall(fig, ...
                 "Tag", "ProjectionViewerCrosshairMenuItem");
             testCase.verifyEmpty(fig.WindowButtonMotionFcn);
@@ -218,7 +218,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
             fig.SelectionType = "normal";
             fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
@@ -237,7 +237,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
             fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
             initialAngle = ax.CameraViewAngle;
@@ -277,7 +277,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             twistSlider = ProjectionViewerPerformanceTest.findSlider(fig, 4);
             app.resetPerformanceDiagnostics();
 
@@ -308,7 +308,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
             fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
             app.resetPerformanceDiagnostics();
@@ -330,7 +330,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
             fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
             app.resetPerformanceDiagnostics();
@@ -361,7 +361,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
             fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
             app.resetPerformanceDiagnostics();
@@ -384,7 +384,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
             tipSlider = ProjectionViewerPerformanceTest.findSlider(fig, 2);
             fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
@@ -439,7 +439,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
             fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
 
@@ -490,7 +490,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             app.resetPerformanceDiagnostics();
 
             fig.WindowKeyPressFcn(fig, struct(Key="i", Modifier="i"));
@@ -510,7 +510,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             sampleRows = [1 4];
             sampleColumns = [1 5];
             [originsBefore, vectorsBefore] = ...
@@ -546,7 +546,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             tipSlider = ProjectionViewerPerformanceTest.findSlider(fig, 2);
             tipSlider.Value = 1;
             app.resetPerformanceDiagnostics();
@@ -570,7 +570,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             app.configurePreviewTiling(struct(TileSize=512));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
             ax.CameraViewAngle = 0.5;
             center = ProjectionViewerPerformanceTest.axesCenter(ax);
@@ -644,7 +644,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
                 MaxVisibleTextureBytes=512 * 1024^2, ...
                 AutomaticTilePolicy=false));
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
             ax.CameraViewAngle = 0.5;
             fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
@@ -685,7 +685,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             app.configurePreviewTiling(struct(TileSize=512));
             diagnostics = app.performanceDiagnostics();
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             surfaces = ProjectionViewerPerformanceTest.activeTileSurfaces( ...
                 findall(fig, "Type", "axes"));
 
@@ -719,7 +719,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype");
+                "Name", "Sightline Workbench");
             surfaces = ProjectionViewerPerformanceTest.activeTileSurfaces( ...
                 findall(fig, "Type", "axes"));
             dimensions = arrayfun( ...

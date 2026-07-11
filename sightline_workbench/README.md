@@ -187,7 +187,7 @@ use the exact singular tags below. `findall` is intentional because pooled
 surfaces are hidden:
 
 ```matlab
-fig = findall(groot, Type="figure", Name="Projection Viewer Prototype");
+fig = findall(groot, Type="figure", Name="Sightline Workbench");
 assert(~isempty(fig), "Projection Viewer figure not found.");
 ax = findall(fig(1), Type="axes");
 assert(~isempty(ax), "Projection Viewer axes not found.");

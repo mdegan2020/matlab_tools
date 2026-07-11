@@ -16,9 +16,9 @@ classdef ProjectionViewerStateSceneTest < matlab.unittest.TestCase
     methods (TestMethodSetup)
         function closeExistingViewer(testCase)
             delete(findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype"));
+                "Name", "Sightline Workbench"));
             testCase.addTeardown(@() delete(findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Prototype")));
+                "Name", "Sightline Workbench")));
         end
     end
 
