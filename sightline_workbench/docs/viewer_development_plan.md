@@ -1169,7 +1169,9 @@ Feedback checkpoint:
 The backend and auto-alignment feature trees, Viewer Orientation and Anaglyph
 Presentation Pack, and Alignment Workbench Usability and Offset-Semantics Pack
 are implemented. The Cross-System Acceleration Pass is also complete. The
-remaining queue is:
+Multi-Image Foundation MI-0 through MI-2 are complete, including stable view
+metadata, the runtime pair controller, and active/Solo pair Workbench controls.
+The remaining queue is:
 
 1. The approved dense-surface synthetic expansion milestones in
    `docs/dense_surface_synthetic_expansion_plan.md`. Required fixture decisions

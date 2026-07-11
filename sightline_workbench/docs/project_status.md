@@ -21,11 +21,15 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 477/477 tests with zero
+- The latest fresh-class repository suite passes 486/486 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
   existing viewer launch signature and legacy `LayerId` contracts.
+- Multi-image foundation MI-2 adds an Alignment Workbench active-pair bar and
+  stable-ID runtime Solo-pair visibility without changing serialized scene
+  visibility, matching state, corrections, or projection caches during pair
+  navigation.
 
 ## Completed Feature Trees
 
@@ -47,6 +51,7 @@ As of July 11, 2026:
 | Dense-Surface Synthetic acceptance-threshold proposal | Complete |
 | Multi-Image Foundation MI-0 | Complete |
 | Multi-Image Foundation MI-1 | Complete |
+| Multi-Image Foundation MI-2 | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -72,6 +77,12 @@ full-width Diagnostics regions. It preserves the staged state machine and
 records the projection-offset decision: offsets remain post-intersection
 projection-plane registration terms, affect plane-coordinate products, and do
 not alter source origins, forward-ray metrics, or coplanarity.
+
+Multi-image MI-2 extends that workbench with compact active-pair selectors,
+Swap and deterministic schedule navigation, pair status/enablement, and Solo
+pair presentation. The Solo snapshot is runtime-only, follows the selected
+pair, retains overlays, and restores surviving layers by stable `ViewId` on
+explicit exit or workbench/viewer close.
 
 ## Current Implementation Queue
 

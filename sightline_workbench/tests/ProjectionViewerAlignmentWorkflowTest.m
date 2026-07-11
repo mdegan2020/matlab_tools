@@ -192,11 +192,14 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             diagnostics = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentDiagnosticsTextArea");
 
-            testCase.verifyEqual(setupPanel.Layout.Row, 2);
+            activePanel = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentActivePairPanel");
+            testCase.verifyEqual(activePanel.Layout.Row, 2);
+            testCase.verifyEqual(setupPanel.Layout.Row, 3);
             testCase.verifyEqual(setupPanel.Layout.Column, 1);
-            testCase.verifyEqual(settingsPanel.Layout.Row, 2);
+            testCase.verifyEqual(settingsPanel.Layout.Row, 3);
             testCase.verifyEqual(settingsPanel.Layout.Column, 2);
-            testCase.verifyEqual(workflowPanel.Layout.Row, 3);
+            testCase.verifyEqual(workflowPanel.Layout.Row, 4);
             testCase.verifyEqual(workflowPanel.Layout.Column, [1 2]);
             testCase.verifyEqual(string(referenceMotion.Text), ...
                 "Allow reference motion");

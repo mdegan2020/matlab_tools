@@ -137,6 +137,12 @@ classdef ProjectionViewerApp < handle
         AlignmentDiagnosticsTextArea matlab.ui.control.TextArea
         AlignmentReferenceDropDown matlab.ui.control.DropDown
         AlignmentMovingDropDown matlab.ui.control.DropDown
+        AlignmentSwapPairButton matlab.ui.control.Button
+        AlignmentPreviousPairButton matlab.ui.control.Button
+        AlignmentNextPairButton matlab.ui.control.Button
+        AlignmentPairStatusLabel matlab.ui.control.Label
+        AlignmentPairEnabledCheckBox matlab.ui.control.StateButton
+        AlignmentSoloPairCheckBox matlab.ui.control.StateButton
         AlignmentPresetDropDown matlab.ui.control.DropDown
         AlignmentScopeDropDown matlab.ui.control.DropDown
         AlignmentDetectorDropDown matlab.ui.control.DropDown
@@ -164,6 +170,8 @@ classdef ProjectionViewerApp < handle
         AlignmentPairTable matlab.ui.control.Table
         AlignmentMatchTable matlab.ui.control.Table
         AlignmentSession
+        AlignmentPairController
+        AlignmentSoloState struct = struct()
         AlignmentOverlayLines = gobjects(0)
         AlignmentSelectedMatchOverlay = gobjects(0)
         AlignmentRoiHandle = []
@@ -225,6 +233,18 @@ classdef ProjectionViewerApp < handle
             app.PreviewSampledGeometryCache = ProjectionViewerLruCache( ...
                 app.PreviewSampleCacheMaxBytes);
             app.SelectedLayerIndex = numel(app.Scene.layers);
+            app.AlignmentPairController = ProjectionPairController(app.Scene);
+            if numel(app.Scene.layers) > 1
+                referenceIndex = ceil(numel(app.Scene.layers) / 2);
+                movingIndex = app.SelectedLayerIndex;
+                if movingIndex == referenceIndex
+                    movingIndex = min(numel(app.Scene.layers), ...
+                        referenceIndex + 1);
+                end
+                viewIds = ProjectionViewMetadata.ids(app.Scene);
+                app.AlignmentPairController.selectViews( ...
+                    viewIds(referenceIndex), viewIds(movingIndex));
+            end
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
             app.initializePreviewPyramids();
@@ -254,6 +274,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function delete(app)
+            app.exitAlignmentSoloPair();
             app.deleteCameraSettleTimer();
             app.clearPreviewTileRuntimeCache();
             app.clearPreviewSampledGeometryCache();
@@ -365,6 +386,11 @@ classdef ProjectionViewerApp < handle
             diagnostics.RenderOptions = app.alignmentRenderOptions();
             diagnostics.Stage = app.alignmentStageDiagnostics();
             diagnostics.Warning = "";
+            diagnostics.ActivePair = app.AlignmentPairController.currentPair();
+            diagnostics.SoloPairActive = ...
+                ProjectionSoloPairVisibility.isActive(app.AlignmentSoloState);
+            diagnostics.EffectiveLayerVisibility = ...
+                app.effectiveLayerVisibilityMask();
 
             try
                 request = app.currentAlignmentRequest();
@@ -888,6 +914,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function hideAlignmentWorkbench(app)
+            app.exitAlignmentSoloPair();
             if ~isempty(app.AlignmentWorkbenchFigure) && ...
                     isvalid(app.AlignmentWorkbenchFigure)
                 app.AlignmentWorkbenchFigure.Visible = "off";
@@ -925,7 +952,8 @@ classdef ProjectionViewerApp < handle
             app.AlignmentReferenceDropDown = uidropdown(app.AlignmentGrid, ...
                 Items=cellstr(app.layerDisplayNames()), ...
                 ItemsData=string(1:numel(app.Scene.layers)), ...
-                ValueChangedFcn=@(~, ~) app.alignmentSetupChanged(true), ...
+                ValueChangedFcn=@(~, ~) ...
+                app.alignmentActivePairSelectorsChanged(), ...
                 Tag="ProjectionViewerAlignmentReferenceDropDown");
             app.AlignmentReferenceDropDown.Layout.Row = 3;
             app.AlignmentReferenceDropDown.Layout.Column = 1;
@@ -936,7 +964,8 @@ classdef ProjectionViewerApp < handle
             app.AlignmentMovingDropDown = uidropdown(app.AlignmentGrid, ...
                 Items=cellstr(app.layerDisplayNames()), ...
                 ItemsData=string(1:numel(app.Scene.layers)), ...
-                ValueChangedFcn=@(~, ~) app.alignmentSetupChanged(true), ...
+                ValueChangedFcn=@(~, ~) ...
+                app.alignmentActivePairSelectorsChanged(), ...
                 Tag="ProjectionViewerAlignmentMovingDropDown");
             app.AlignmentMovingDropDown.Layout.Row = 3;
             app.AlignmentMovingDropDown.Layout.Column = 2;
@@ -1172,8 +1201,8 @@ classdef ProjectionViewerApp < handle
                 solveHeading, referenceLabel, movingLabel, presetLabel, ...
                 scopeLabel, detectorLabel, lossLabel, coplanarityLabel)
             delete([setupHeading solveHeading]);
-            app.AlignmentGrid.RowHeight = {36, "fit", "fit", 115, ...
-                "1x", 155};
+            app.AlignmentGrid.RowHeight = {36, "fit", "fit", "fit", ...
+                115, "1x", 155};
             app.AlignmentGrid.ColumnWidth = {"1x", "1x"};
             app.AlignmentGrid.RowSpacing = 8;
             app.AlignmentGrid.ColumnSpacing = 10;
@@ -1193,20 +1222,75 @@ classdef ProjectionViewerApp < handle
             app.AlignmentStatusLabel.Layout.Row = 1;
             app.AlignmentStatusLabel.Layout.Column = 2;
 
+            activePairPanel = uipanel(app.AlignmentGrid, ...
+                Title="Active pair — inspection and navigation", ...
+                Tag="ProjectionViewerAlignmentActivePairPanel");
+            activePairPanel.Layout.Row = 2;
+            activePairPanel.Layout.Column = [1 2];
+            activePairGrid = uigridlayout(activePairPanel, [2 8]);
+            activePairGrid.RowHeight = {"fit", "fit"};
+            activePairGrid.ColumnWidth = {70, "1x", "1x", 70, 70, ...
+                95, 95, "1.4x"};
+            activePairGrid.Padding = [8 4 8 6];
+            activePairGrid.ColumnSpacing = 8;
+            app.AlignmentPreviousPairButton = uibutton(activePairGrid, ...
+                Text="Previous", ...
+                Tag="ProjectionViewerAlignmentPreviousPairButton", ...
+                ButtonPushedFcn=@(~, ~) app.stepAlignmentActivePair(-1));
+            app.AlignmentPreviousPairButton.Layout.Row = 2;
+            app.AlignmentPreviousPairButton.Layout.Column = 1;
+            referenceLabel.Parent = activePairGrid;
+            referenceLabel.Layout.Row = 1;
+            referenceLabel.Layout.Column = 2;
+            app.AlignmentReferenceDropDown.Parent = activePairGrid;
+            app.AlignmentReferenceDropDown.Layout.Row = 2;
+            app.AlignmentReferenceDropDown.Layout.Column = 2;
+            movingLabel.Parent = activePairGrid;
+            movingLabel.Layout.Row = 1;
+            movingLabel.Layout.Column = 3;
+            app.AlignmentMovingDropDown.Parent = activePairGrid;
+            app.AlignmentMovingDropDown.Layout.Row = 2;
+            app.AlignmentMovingDropDown.Layout.Column = 3;
+            app.AlignmentSwapPairButton = uibutton(activePairGrid, ...
+                Text="Swap", Tag="ProjectionViewerAlignmentSwapPairButton", ...
+                ButtonPushedFcn=@(~, ~) app.swapAlignmentActivePair());
+            app.AlignmentSwapPairButton.Layout.Row = 2;
+            app.AlignmentSwapPairButton.Layout.Column = 4;
+            app.AlignmentNextPairButton = uibutton(activePairGrid, ...
+                Text="Next", Tag="ProjectionViewerAlignmentNextPairButton", ...
+                ButtonPushedFcn=@(~, ~) app.stepAlignmentActivePair(1));
+            app.AlignmentNextPairButton.Layout.Row = 2;
+            app.AlignmentNextPairButton.Layout.Column = 5;
+            app.AlignmentPairEnabledCheckBox = uibutton( ...
+                activePairGrid, "state", Text="Pair enabled", Value=true, ...
+                Tag="ProjectionViewerAlignmentPairEnabledCheckBox", ...
+                ValueChangedFcn=@(~, ~) app.alignmentPairEnabledChanged());
+            app.AlignmentPairEnabledCheckBox.Layout.Row = 2;
+            app.AlignmentPairEnabledCheckBox.Layout.Column = 6;
+            app.AlignmentSoloPairCheckBox = uibutton( ...
+                activePairGrid, "state", Text="Solo pair", Value=false, ...
+                Tag="ProjectionViewerAlignmentSoloPairCheckBox", ...
+                ValueChangedFcn=@(~, ~) app.alignmentSoloPairChanged());
+            app.AlignmentSoloPairCheckBox.Layout.Row = 2;
+            app.AlignmentSoloPairCheckBox.Layout.Column = 7;
+            app.AlignmentPairStatusLabel = uilabel(activePairGrid, ...
+                Text="No active pair", ...
+                Tag="ProjectionViewerAlignmentPairStatusLabel");
+            app.AlignmentPairStatusLabel.Layout.Row = [1 2];
+            app.AlignmentPairStatusLabel.Layout.Column = 8;
+
             setupPanel = uipanel(app.AlignmentGrid, ...
                 Title="1. Setup and matching inputs", ...
                 Tag="ProjectionViewerAlignmentSetupPanel");
-            setupPanel.Layout.Row = 2;
+            setupPanel.Layout.Row = 3;
             setupPanel.Layout.Column = 1;
-            setupGrid = uigridlayout(setupPanel, [2 5]);
+            setupGrid = uigridlayout(setupPanel, [2 3]);
             setupGrid.RowHeight = {"fit", "fit"};
-            setupGrid.ColumnWidth = {"1x", "1x", "1x", "1x", "1x"};
+            setupGrid.ColumnWidth = {"1x", "1x", "1x"};
             setupGrid.Padding = [8 6 8 8];
             setupGrid.ColumnSpacing = 8;
-            setupLabels = [referenceLabel movingLabel scopeLabel ...
-                presetLabel detectorLabel];
-            setupControls = [app.AlignmentReferenceDropDown ...
-                app.AlignmentMovingDropDown app.AlignmentScopeDropDown ...
+            setupLabels = [scopeLabel presetLabel detectorLabel];
+            setupControls = [app.AlignmentScopeDropDown ...
                 app.AlignmentPresetDropDown app.AlignmentDetectorDropDown];
             for column = 1:numel(setupLabels)
                 setupLabels(column).Parent = setupGrid;
@@ -1220,7 +1304,7 @@ classdef ProjectionViewerApp < handle
             settingsPanel = uipanel(app.AlignmentGrid, ...
                 Title="2. Filter and solve settings", ...
                 Tag="ProjectionViewerAlignmentSettingsPanel");
-            settingsPanel.Layout.Row = 2;
+            settingsPanel.Layout.Row = 3;
             settingsPanel.Layout.Column = 2;
             settingsGrid = uigridlayout(settingsPanel, [2 5]);
             settingsGrid.RowHeight = {"fit", "fit"};
@@ -1264,7 +1348,7 @@ classdef ProjectionViewerApp < handle
             workflowPanel = uipanel(app.AlignmentGrid, ...
                 Title="3. Staged workflow and review", ...
                 Tag="ProjectionViewerAlignmentWorkflowPanel");
-            workflowPanel.Layout.Row = 3;
+            workflowPanel.Layout.Row = 4;
             workflowPanel.Layout.Column = [1 2];
             workflowGrid = uigridlayout(workflowPanel, [2 9]);
             workflowGrid.RowHeight = {"fit", "fit"};
@@ -1315,7 +1399,7 @@ classdef ProjectionViewerApp < handle
             pairPanel = uipanel(app.AlignmentGrid, ...
                 Title="Pair schedule — enable rows before Match", ...
                 Tag="ProjectionViewerAlignmentPairPanel");
-            pairPanel.Layout.Row = 4;
+            pairPanel.Layout.Row = 5;
             pairPanel.Layout.Column = [1 2];
             pairGrid = uigridlayout(pairPanel, [1 1]);
             pairGrid.Padding = [4 4 4 4];
@@ -1326,7 +1410,7 @@ classdef ProjectionViewerApp < handle
             matchPanel = uipanel(app.AlignmentGrid, ...
                 Title="Match ledger — Enabled controls the next Solve", ...
                 Tag="ProjectionViewerAlignmentMatchPanel");
-            matchPanel.Layout.Row = 5;
+            matchPanel.Layout.Row = 6;
             matchPanel.Layout.Column = [1 2];
             matchGrid = uigridlayout(matchPanel, [1 1]);
             matchGrid.Padding = [4 4 4 4];
@@ -1337,7 +1421,7 @@ classdef ProjectionViewerApp < handle
             diagnosticsPanel = uipanel(app.AlignmentGrid, ...
                 Title="Stage status and diagnostics", ...
                 Tag="ProjectionViewerAlignmentDiagnosticsPanel");
-            diagnosticsPanel.Layout.Row = 6;
+            diagnosticsPanel.Layout.Row = 7;
             diagnosticsPanel.Layout.Column = [1 2];
             diagnosticsGrid = uigridlayout(diagnosticsPanel, [1 1]);
             diagnosticsGrid.Padding = [4 4 4 4];
@@ -1354,31 +1438,193 @@ classdef ProjectionViewerApp < handle
 
             layerCount = numel(app.Scene.layers);
             layerItems = cellstr(app.layerDisplayNames());
-            referenceValue = app.validAlignmentLayerValue( ...
-                app.AlignmentReferenceDropDown.Value, ceil(layerCount / 2));
-            movingDefault = app.SelectedLayerIndex;
-            if layerCount > 1 && movingDefault == referenceValue
-                movingDefault = min(layerCount, referenceValue + 1);
-                if movingDefault == referenceValue
-                    movingDefault = max(1, referenceValue - 1);
-                end
-            end
-            movingValue = app.validAlignmentLayerValue( ...
-                app.AlignmentMovingDropDown.Value, movingDefault);
-            if layerCount > 1 && movingValue == referenceValue
-                movingValue = min(layerCount, referenceValue + 1);
-                if movingValue == referenceValue
-                    movingValue = max(1, referenceValue - 1);
-                end
-            end
-
             app.AlignmentReferenceDropDown.Items = layerItems;
             app.AlignmentReferenceDropDown.ItemsData = string(1:layerCount);
-            app.AlignmentReferenceDropDown.Value = string(referenceValue);
             app.AlignmentMovingDropDown.Items = layerItems;
             app.AlignmentMovingDropDown.ItemsData = string(1:layerCount);
-            app.AlignmentMovingDropDown.Value = string(movingValue);
+            app.AlignmentPairController.synchronizeScene(app.Scene);
+            pair = app.AlignmentPairController.currentPair();
+            if isfield(pair, "ViewsAvailable") && pair.ViewsAvailable
+                app.AlignmentReferenceDropDown.Value = ...
+                    string(pair.ReferenceLayerIndex);
+                app.AlignmentMovingDropDown.Value = ...
+                    string(pair.MovingLayerIndex);
+            elseif layerCount > 1
+                referenceValue = ceil(layerCount / 2);
+                movingValue = app.SelectedLayerIndex;
+                if movingValue == referenceValue
+                    movingValue = min(layerCount, referenceValue + 1);
+                end
+                viewIds = ProjectionViewMetadata.ids(app.Scene);
+                pair = app.AlignmentPairController.selectViews( ...
+                    viewIds(referenceValue), viewIds(movingValue));
+                app.AlignmentReferenceDropDown.Value = ...
+                    string(pair.ReferenceLayerIndex);
+                app.AlignmentMovingDropDown.Value = ...
+                    string(pair.MovingLayerIndex);
+            end
+            app.refreshAlignmentActivePairControls();
             app.refreshAlignmentPairTable();
+        end
+
+        function alignmentActivePairSelectorsChanged(app)
+            app.synchronizeAlignmentActivePairFromSelectors();
+        end
+
+        function selected = synchronizeAlignmentActivePairFromSelectors(app)
+            referenceIndex = app.validAlignmentLayerValue( ...
+                app.AlignmentReferenceDropDown.Value, 1);
+            movingIndex = app.validAlignmentLayerValue( ...
+                app.AlignmentMovingDropDown.Value, numel(app.Scene.layers));
+            if referenceIndex == movingIndex
+                app.refreshAlignmentActivePairControls();
+                app.setAlignmentStatus( ...
+                    "Reference and moving views must differ.");
+                selected = false;
+                return
+            end
+            viewIds = ProjectionViewMetadata.ids(app.Scene);
+            app.AlignmentPairController.selectViews( ...
+                viewIds(referenceIndex), viewIds(movingIndex));
+            app.activeAlignmentPairChanged();
+            selected = true;
+        end
+
+        function swapAlignmentActivePair(app)
+            app.AlignmentPairController.swapRoles();
+            app.activeAlignmentPairChanged();
+        end
+
+        function stepAlignmentActivePair(app, direction)
+            if direction > 0
+                [~, changed] = app.AlignmentPairController.stepNext();
+            else
+                [~, changed] = app.AlignmentPairController.stepPrevious();
+            end
+            if changed
+                app.activeAlignmentPairChanged();
+            else
+                app.refreshAlignmentActivePairControls();
+            end
+        end
+
+        function activeAlignmentPairChanged(app)
+            pair = app.AlignmentPairController.currentPair();
+            if ProjectionSoloPairVisibility.isActive(app.AlignmentSoloState)
+                app.AlignmentSoloState = ProjectionSoloPairVisibility.follow( ...
+                    app.AlignmentSoloState, app.Scene, ...
+                    pair.ReferenceViewId, pair.MovingViewId);
+                app.applyAlignmentSoloPresentation();
+            end
+            app.refreshAlignmentActivePairControls();
+            app.refreshAlignmentOverlays(true);
+            app.clearSelectedAlignmentMatchOverlay();
+        end
+
+        function refreshAlignmentActivePairControls(app)
+            if isempty(app.AlignmentPairStatusLabel) || ...
+                    ~isvalid(app.AlignmentPairStatusLabel)
+                return
+            end
+            pair = app.AlignmentPairController.currentPair();
+            if ~isfield(pair, "PairId") || strlength(pair.PairId) == 0
+                app.AlignmentPairStatusLabel.Text = "No active pair";
+                app.AlignmentPairEnabledCheckBox.Enable = "off";
+                app.AlignmentSoloPairCheckBox.Enable = "off";
+                return
+            end
+            if pair.ViewsAvailable
+                app.AlignmentReferenceDropDown.Value = ...
+                    string(pair.ReferenceLayerIndex);
+                app.AlignmentMovingDropDown.Value = ...
+                    string(pair.MovingLayerIndex);
+            end
+            app.AlignmentPairEnabledCheckBox.Value = logical(pair.Enabled);
+            app.AlignmentPairStatusLabel.Text = char( ...
+                string(pair.Category) + " | " + string(pair.Status));
+            pairIds = string({app.AlignmentPairController.Schedule.Pairs.PairId});
+            pairIndex = find(pairIds == pair.PairId, 1, "first");
+            enabled = [app.AlignmentPairController.Schedule.Pairs.Enabled];
+            app.AlignmentPreviousPairButton.Enable = app.onOff( ...
+                any(find(enabled) < pairIndex));
+            app.AlignmentNextPairButton.Enable = app.onOff( ...
+                any(find(enabled) > pairIndex));
+        end
+
+        function alignmentPairEnabledChanged(app)
+            pair = app.AlignmentPairController.currentPair();
+            app.AlignmentPairController.setPairEnabled(pair.PairId, ...
+                logical(app.AlignmentPairEnabledCheckBox.Value));
+            app.updateAlignmentPairTableEnabledState(pair);
+            app.refreshAlignmentActivePairControls();
+        end
+
+        function updateAlignmentPairTableEnabledState(app, pair)
+            if isempty(app.AlignmentPairTable) || ...
+                    ~isvalid(app.AlignmentPairTable)
+                return
+            end
+            data = app.AlignmentPairTable.Data;
+            requiredVariables = ["Enabled", "Moving", "Reference"];
+            if ~istable(data) || ~all(ismember(requiredVariables, ...
+                    string(data.Properties.VariableNames)))
+                return
+            end
+            activeIndices = sort([pair.MovingLayerIndex ...
+                pair.ReferenceLayerIndex]);
+            for rowIndex = 1:height(data)
+                rowIndices = sort([data.Moving(rowIndex) ...
+                    data.Reference(rowIndex)]);
+                if isequal(rowIndices, activeIndices)
+                    data.Enabled(rowIndex) = logical(pair.Enabled);
+                end
+            end
+            app.AlignmentPairTable.Data = data;
+        end
+
+        function alignmentSoloPairChanged(app)
+            if logical(app.AlignmentSoloPairCheckBox.Value)
+                pair = app.AlignmentPairController.currentPair();
+                app.AlignmentSoloState = ProjectionSoloPairVisibility.activate( ...
+                    app.Scene, pair.ReferenceViewId, pair.MovingViewId);
+                if ~isempty(app.VisibleCheckBox) && isvalid(app.VisibleCheckBox)
+                    app.VisibleCheckBox.Enable = "off";
+                end
+                app.applyAlignmentSoloPresentation();
+            else
+                app.exitAlignmentSoloPair();
+            end
+        end
+
+        function applyAlignmentSoloPresentation(app)
+            mask = ProjectionSoloPairVisibility.effectiveMask( ...
+                app.AlignmentSoloState, app.Scene);
+            for layerIndex = 1:numel(app.Scene.layers)
+                app.setLayerSurfaceVisible(layerIndex, mask(layerIndex));
+            end
+            app.raiseCrosshairOverlay();
+        end
+
+        function exitAlignmentSoloPair(app)
+            if ~ProjectionSoloPairVisibility.isActive(app.AlignmentSoloState)
+                return
+            end
+            app.Scene = ProjectionSoloPairVisibility.restore( ...
+                app.Scene, app.AlignmentSoloState);
+            app.AlignmentSoloState = struct();
+            if ~isempty(app.AlignmentSoloPairCheckBox) && ...
+                    isvalid(app.AlignmentSoloPairCheckBox)
+                app.AlignmentSoloPairCheckBox.Value = false;
+            end
+            if ~isempty(app.VisibleCheckBox) && isvalid(app.VisibleCheckBox)
+                app.VisibleCheckBox.Enable = "on";
+            end
+            for layerIndex = 1:numel(app.Scene.layers)
+                app.setLayerSurfaceVisible( ...
+                    layerIndex, app.Scene.layers(layerIndex).Visible);
+            end
+            app.updateAllSurfaceBlendAppearance();
+            app.raiseCrosshairOverlay();
         end
 
         function value = validAlignmentLayerValue(app, value, defaultValue)
@@ -1392,6 +1638,9 @@ classdef ProjectionViewerApp < handle
         end
 
         function matchAlignmentWorkflow(app)
+            if ~app.synchronizeAlignmentActivePairFromSelectors()
+                return
+            end
             app.AlignmentSession.clearCancel();
             app.clearAlignmentComputationState();
             app.clearAlignmentOverlays();
@@ -1937,6 +2186,11 @@ classdef ProjectionViewerApp < handle
             layerIndices = find(visibleMask);
         end
 
+        function mask = effectiveLayerVisibilityMask(app)
+            mask = ProjectionSoloPairVisibility.effectiveMask( ...
+                app.AlignmentSoloState, app.Scene);
+        end
+
         function options = alignmentRenderOptions(app)
             if app.alignmentPreset() == "quality"
                 outputSize = [768 768];
@@ -2289,6 +2543,20 @@ classdef ProjectionViewerApp < handle
                             enabled(pairIndex) = logical(data.Enabled(matchIndex));
                         end
                     end
+                end
+            end
+            viewIds = ProjectionViewMetadata.ids(app.Scene);
+            controllerPairs = app.AlignmentPairController.Schedule.Pairs;
+            controllerPairIds = string({controllerPairs.PairId});
+            for pairIndex = 1:size(pairs, 1)
+                identity = ProjectionViewMetadata.pairIdentity( ...
+                    viewIds(pairs(pairIndex, 1)), ...
+                    viewIds(pairs(pairIndex, 2)));
+                controllerIndex = find( ...
+                    controllerPairIds == identity.PairId, 1, "first");
+                if ~isempty(controllerIndex)
+                    enabled(pairIndex) = enabled(pairIndex) && ...
+                        logical(controllerPairs(controllerIndex).Enabled);
                 end
             end
             enabledPairs = pairs(enabled, :);
@@ -3288,8 +3556,38 @@ classdef ProjectionViewerApp < handle
         end
 
         function drawAlignmentMatchOverlays(app, matchResult)
-            result = struct(Matches=app.alignmentOverlayMatches(matchResult));
+            matches = app.alignmentOverlayMatches(matchResult);
+            matches = app.filterActiveAlignmentPairMatches(matches);
+            result = struct(Matches=matches);
             app.drawAlignmentOverlays(result);
+        end
+
+        function matches = filterActiveAlignmentPairMatches(app, matches)
+            if isempty(matches)
+                return
+            end
+            pair = app.activeAlignmentLayerPair();
+            if isempty(pair)
+                return
+            end
+            keep = false(1, numel(matches));
+            for matchIndex = 1:numel(matches)
+                resolvedPair = ProjectionAlignmentLayerResolver.pairIndices( ...
+                    app.Scene, matches(matchIndex));
+                keep(matchIndex) = isequal(sort(resolvedPair), sort(pair));
+            end
+            matches = matches(keep);
+        end
+
+        function pair = activeAlignmentLayerPair(app)
+            pairRecord = app.AlignmentPairController.currentPair();
+            if isfield(pairRecord, "ViewsAvailable") && ...
+                    pairRecord.ViewsAvailable
+                pair = [pairRecord.MovingLayerIndex ...
+                    pairRecord.ReferenceLayerIndex];
+            else
+                pair = zeros(1, 0);
+            end
         end
 
         function matches = alignmentOverlayMatches(app, matchResult)
@@ -3466,6 +3764,15 @@ classdef ProjectionViewerApp < handle
             end
 
             records = [acceptedRecords rejectedRecords];
+            activePair = app.activeAlignmentLayerPair();
+            if ~isempty(activePair) && ~isempty(records)
+                pairMask = false(1, numel(records));
+                for recordIndex = 1:numel(records)
+                    pairMask(recordIndex) = isequal( ...
+                        sort(records(recordIndex).Pair), sort(activePair));
+                end
+                records = records(pairMask);
+            end
             records = app.markWorstAlignmentOverlayRecords(records);
         end
 
@@ -4504,7 +4811,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function budget = previewLayerBudget(app, layerIndex)
-            visibleMask = [app.Scene.layers.Visible] & ...
+            visibleMask = app.effectiveLayerVisibilityMask() & ...
                 [app.Scene.layers.Alpha] > 0;
             visibleTiledMask = visibleMask & app.PreviewTiledLayerMask;
             tiledLayerCount = max(1, nnz(visibleTiledMask));
@@ -4729,7 +5036,8 @@ classdef ProjectionViewerApp < handle
             end
 
             tiledLayerIndices = find(app.PreviewTiledLayerMask & ...
-                [app.Scene.layers.Visible] & [app.Scene.layers.Alpha] > 0);
+                app.effectiveLayerVisibilityMask() & ...
+                [app.Scene.layers.Alpha] > 0);
             if isempty(tiledLayerIndices)
                 app.PerformanceMonitor.recordTiming( ...
                     "TileRefreshSeconds", toc(refreshTimer));
@@ -5052,8 +5360,9 @@ classdef ProjectionViewerApp < handle
                 return
             end
             faceAlpha = app.previewFaceAlphaForLayer(alpha, layerIndex);
+            visibleMask = app.effectiveLayerVisibilityMask();
             isVisible = app.previewSurfaceIsVisible( ...
-                app.Scene.layers(layerIndex).Visible, alpha);
+                visibleMask(layerIndex), alpha);
             currentVisibility = string(get(surfaceHandles, "Visible"));
             visibilityChanges = nnz( ...
                 (currentVisibility == "on") ~= isVisible);
@@ -6169,7 +6478,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function points = currentVisibleSurfacePoints(app)
-            layerIndices = find([app.Scene.layers.Visible]);
+            layerIndices = find(app.effectiveLayerVisibilityMask());
             if isempty(layerIndices)
                 layerIndices = app.SelectedLayerIndex;
             end
@@ -6515,6 +6824,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function updateAllSurfaceBlendAppearance(app)
+            visibleMask = app.effectiveLayerVisibilityMask();
             for layerIndex = 1:numel(app.Surfaces)
                 if app.usesTiledPreview(layerIndex)
                     app.updateTiledLayerSurfaceAppearance(layerIndex);
@@ -6532,7 +6842,7 @@ classdef ProjectionViewerApp < handle
                     layer.Alpha, layerIndex);
                 surfaceHandle.Visible = app.onOff( ...
                     app.previewSurfaceIsVisible( ...
-                    layer.Visible, layer.Alpha));
+                    visibleMask(layerIndex), layer.Alpha));
             end
         end
 
@@ -6544,6 +6854,7 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
+            visibleMask = app.effectiveLayerVisibilityMask();
             for tileIndex = 1:numel(tiles)
                 tileData = app.preparedPreviewTileData( ...
                     layerIndex, tiles(tileIndex), ...
@@ -6555,7 +6866,7 @@ classdef ProjectionViewerApp < handle
                     layer.Alpha, layerIndex);
                 surfaceHandles(tileIndex).Visible = app.onOff( ...
                     app.previewSurfaceIsVisible( ...
-                    layer.Visible, layer.Alpha));
+                    visibleMask(layerIndex), layer.Alpha));
             end
         end
 
@@ -6628,7 +6939,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function layerIndices = visibleAnaglyphLayerIndices(app)
-            layerIndices = find([app.Scene.layers.Visible] & ...
+            layerIndices = find(app.effectiveLayerVisibilityMask() & ...
                 lower(string([app.Scene.layers.BlendMode])) == ...
                 "redblueanaglyph");
         end
@@ -6946,8 +7257,10 @@ classdef ProjectionViewerApp < handle
         end
 
         function resetView(app)
+            app.exitAlignmentSoloPair();
             app.cancelCameraReconciliation();
             app.Scene = app.ResetScene;
+            app.AlignmentPairController.regenerate(app.Scene);
             app.SelectedLayerIndex = numel(app.Scene.layers);
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
@@ -7178,6 +7491,9 @@ classdef ProjectionViewerApp < handle
             app.updateLayerDropDownItems();
             app.updateControlsFromSelectedLayer();
             app.refreshAlignmentSessionViewsAfterLayerReorder();
+            if ProjectionSoloPairVisibility.isActive(app.AlignmentSoloState)
+                app.applyAlignmentSoloPresentation();
+            end
         end
 
         function [referenceLayerId, movingLayerId] = ...
@@ -7356,7 +7672,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function modes = visibleBlendModes(app)
-            visibleMask = [app.Scene.layers.Visible];
+            visibleMask = app.effectiveLayerVisibilityMask();
             if ~any(visibleMask)
                 visibleMask(app.SelectedLayerIndex) = true;
             end
