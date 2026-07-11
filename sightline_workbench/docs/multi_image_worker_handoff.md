@@ -1,5 +1,9 @@
 # Sightline Workbench Worker Handoff: Multi-Image Foundation
 
+Status: completed. MI-0 through MI-3 and the optional SDK audit were committed
+and pushed through `5a45b75`. Do not rerun this historical handoff; continue
+from `docs/multi_image_surface_reconstruction_workplan.md`.
+
 ## Mission
 
 Implement only the currently approved, unblocked foundation for the future

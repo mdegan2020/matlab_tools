@@ -114,16 +114,13 @@ dense-matcher extension interface, matcher registry, or new SDK schemas.
    surfaces, and runtime caches out of backend radiometric inputs and portable
    scientific correction state.
 
-## Deferred Decisions
+## Planning Resolution
 
-The following remain intentionally deferred to the ongoing planning work:
-
-- correction-result class/struct names and exact schema versions;
-- correction generation/history ownership and persistence;
-- operator acceptance and optional notification semantics;
-- geometry fingerprint definition;
-- exact covariance and selected-marginal representation;
-- dense matcher abstract-class versus strict functional-interface form;
-- progress/cancellation object shape;
-- registry ownership and matcher discovery policy; and
-- the complete dense no-match/occlusion/confidence/covariance result schema.
+The audit intentionally made no SDK design changes. The previously deferred
+correction lifecycle, immutable network result, OPK conventions, callbacks,
+dense matcher ownership/states/covariance, fusion/registration/screening base
+classes, explicit registry, persistence, and conformance policy are now
+approved in `docs/multi_image_surface_reconstruction_workplan.md`, especially
+sections 14, 18-20, and locked decisions 41, 47, 50-56, 68, and 75. Exact class
+names and schema version integers remain implementation details to finalize in
+their focused packs without changing those approved semantics.

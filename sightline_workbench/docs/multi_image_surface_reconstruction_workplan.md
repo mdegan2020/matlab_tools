@@ -1,10 +1,12 @@
 # Sightline Workbench Multi-Image And Surface Reconstruction Workplan
 
-Status: planning draft. The dense-surface synthetic expansion and Backend
-Performance Packs 2-5 are complete. This document is now backed up in the
-repository for safety, while continued planning remains in the `/private/tmp`
-working copy. Only explicitly dispatched packs are an active implementation
-queue; unresolved decisions remain planning gates.
+Status: approved consolidated workplan. Backend Performance Packs 0-5, the
+dense-surface synthetic expansion, and Multi-Image Foundation MI-0 through MI-3
+are complete. The read-only MATLAB SDK audit is also complete. The current
+fresh-class repository suite passes 496/496 tests. This `/private/tmp` file is
+the editing master; the synchronized committed copy is the implementation
+source of truth. Only explicitly dispatched packs are active implementation
+work, and hardware/evidence gates remain explicit.
 
 ## 1. Purpose
 
@@ -99,6 +101,22 @@ stable identity independent of moving/reference role. Every pass needs an
 explicit identifier rather than being inferred only from filenames or list
 adjacency.
 
+MI-0 implements this foundation through optional stable `ViewId`, explicit
+`PassId`, unordered pair identity, and optional timing metadata while
+preserving the legacy lightweight launch signature. Caller IDs are preserved;
+missing IDs are generated. Missing `PassId` places views in one pass and is
+never inferred from filenames.
+
+The preferred absolute acquisition-time input is strict UTC text in
+`DDMMYY_HHmmSS`, with optional fractional seconds. Also accept unambiguous
+`DDMMYYYY_HHmmSS` and numeric relative time for fixtures/headless workflows.
+Use the fixed two-digit-year pivot `80-99 -> 1980-1999` and
+`00-79 -> 2000-2079`, retain the original text for provenance, and normalize
+internally to timezone-aware UTC `datetime`. Per-image start time plus line
+rate and scan-axis/direction metadata derive per-line time. Missing timing does
+not block viewing or manual pair selection; time-dependent tools report an
+explicit fallback.
+
 ### 3.2 Same-pass and multi-pass error regimes
 
 The first global adjustment uses one constant OPK correction per image while
@@ -138,8 +156,10 @@ differential correction was estimated.
 
 ### 4.1 Active pair control
 
-Add a compact active-pair selector to the Alignment Workbench. It should
-support:
+MI-1 through MI-3 implement the GUI-independent runtime pair controller,
+active-pair controls, Solo-pair visibility, and physical stereo-eye
+separation. Preserve those completed contracts while extending the workbench.
+The compact active-pair selector supports:
 
 - selecting one scheduled pair;
 - assigning moving/reference roles independently of stereo eye assignment;
@@ -156,8 +176,8 @@ from the global solve unless the operator disables them.
 
 ### 4.2 Solo-pair visibility
 
-Provide a `Solo pair` action that temporarily shows only the two active layers.
-It must:
+The completed `Solo pair` action temporarily shows only the two active layers.
+It must continue to:
 
 - snapshot every layer's visibility state;
 - show both active-pair layers;
@@ -185,7 +205,9 @@ sensor origins projected onto the current viewer-camera horizontal axis:
 
 Near a degenerate head-on baseline, use hysteresis and retain the previous eye
 assignment instead of flickering. Show a small diagnostic warning when the
-current camera cannot establish a stable left/right ordering.
+current camera cannot establish a stable left/right ordering. The completed
+runtime controller also provides a visible resettable manual override that is
+never serialized.
 
 ### 4.4 Pairwise operations versus global solve
 
@@ -224,14 +246,19 @@ single global image-line approximation must not be labeled exact.
 ### 5.1 Midpoint pair camera
 
 Add a `View from pair midpoint` command. For time-dependent views, first choose
-a documented representative origin, normally the center-column origin or a
-robust mean over the overlapping acquisition interval. Then:
+a representative origin over the pair's shared temporal/spatial overlap,
+falling back to the center-column origin used by MI-3. Then:
 
 - place the viewer camera at the midpoint of the two representative origins;
 - aim at the centroid of the active pair's mutually visible footprint;
 - derive up from the current plane basis and pair geometry;
 - fit the pair footprint without changing scene geometry; and
 - preserve a one-step `Restore camera` action.
+
+Provide an opt-in runtime `Follow active pair` checkbox. It reapplies the
+viewpoint after scheduled or direct pair navigation, defaults off, and leaves
+the current camera unchanged when disabled. Manual camera movement suspends
+following for the current pair; navigating again resumes it.
 
 This command changes only presentation. It is useful for intuitive stereo
 ordering and baseline inspection but must not redefine the projection plane or
@@ -241,33 +268,23 @@ source geometry.
 
 If four supplied image corners all lie on one constant-elevation physical
 plane, that plane is already common to every image observing that surface. A
-different view does not require rotating the plane normal. Two distinct
-operations may nevertheless be useful:
+different view does not require rotating the plane normal or changing its
+serialized basis. Routine pair orientation is presentation-only: orient and
+frame the camera to the active pair while leaving plane origin, normal, basis,
+output grid, intersections, radiometry, and caches unchanged.
 
-1. **Reparameterize the same plane.** Keep the plane origin and normal on the
-   same geometric locus, but rotate its in-plane basis so its horizontal and
-   vertical axes align naturally with another image or active pair. This
-   changes plane coordinates and presentation orientation, not the physical
-   intersection surface.
-2. **Replace the master plane.** Fit a new origin/normal from a different
-   physical surface, local tangent plane, or curved-Earth approximation. This
-   changes intersections, footprints, working grids, overlays, caches, and
-   backend products and therefore requires a preview, explicit confirmation,
-   recomputation, and rollback.
-
-For reparameterization, project the selected view's ordered corner observations
-onto the existing physical plane and solve an orthonormal in-plane basis that
-best aligns with the average image-row and image-column directions. A small
-two-dimensional Procrustes fit or averaged-edge construction is appropriate.
-The lower-left/anticlockwise convention fixes handedness and prevents an
-unintended mirror.
+An advanced preview may show candidate in-plane axes and projected bounds for
+explanation, but the first implementation does not apply or serialize them.
+Actual basis reparameterization is a later scene-wide operation with explicit
+new grid/bounds calculation, complete reprojection, invalidation, and rollback.
+Physical plane replacement, which changes origin or normal, is a still stronger
+separately gated operation.
 
 ### 5.3 Pair-derived plane-basis command
 
-Consider a `Orient plane axes to active pair` command after the mathematical
-behavior is tested. It should preview old/new axes and explain that only the
-basis is changing. A separate, deliberately stronger `Replace master plane`
-workflow belongs in an advanced scene tool, not beside routine pair controls.
+Implement `Orient view to active pair`, not `Apply plane basis`, in the routine
+pair workflow. Keep any future basis reparameterization and `Replace master
+plane` tools in an advanced scene tool, not beside active-pair controls.
 
 ## 6. Motion-Imagery Presentation Mode
 
@@ -276,13 +293,32 @@ while retaining a fixed viewer camera and projection plane.
 
 ### 6.1 Interaction
 
-- Order frames by explicit acquisition time, with manual order as a fallback.
-- Left/right arrow keys select previous/next visible frame.
+- Motion sequences are explicit and independent of current visibility. Default
+  to all eligible image layers, permit pass filters and per-image inclusion,
+  and disable the mode when fewer than two frames remain.
+- Caller-supplied order is authoritative. Otherwise order by acquisition time
+  within pass, never interleave incomparable relative clocks, and use stable
+  pass/`ViewId` fallback ordering with visible diagnostics.
+- Previous/next does not wrap by default; a runtime `Loop` option enables it.
+- Enter from a viewer context-menu command. Snapshot visibility, active layer,
+  blend/anaglyph, stereo, and presentation state; show one currently applied
+  geometry at a time; restore exactly on exit/close.
+- Plain Left/Right select previous/next frame only in motion mode.
+- Outside motion mode, plain Left/Right select previous/next layer without
+  changing visibility and plain Up/Down reuse existing W/S vertical layer
+  nudges. Shift+Arrows adjust Tip/Tilt in both modes. Shortcuts apply only when
+  the viewport, not an editable/list control, has interaction focus.
+- Plain Up/Down do not mutate layers in motion mode.
 - Optional edge affordances appear only while the pointer is near the left or
   right viewport edge and disappear when it leaves.
-- A small transient label shows image name, time, pass, and sequence position.
-- Later additions may include play/pause, frame rate, ping-pong, and difference
-  modes.
+- A transient/pinnable label shows layer, sequence position, UTC acquisition
+  time, pass, and applied-correction status. Persistent warnings identify
+  fallback ordering, stale geometry, or load failure.
+- The first pack implements manual stepping. A separate measured playback pack
+  adds Play/Pause, 0.5-10 frames/second with 2 fps default, Loop, bounded
+  one-frame lookahead, no silent frame skipping, and no crossfade/interpolation.
+- In motion mode Space toggles Play/Pause; outside it retains hold-to-hide.
+  Escape stops/exits and restores state. Manual stepping pauses playback.
 
 ### 6.2 Main-view cleanliness and performance
 
@@ -300,7 +336,8 @@ tracking measurably degrades pan/zoom/crosshair interaction, retain keyboard
 navigation and use subtle persistent arrows instead.
 
 Motion mode temporarily solos the current frame but preserves/restores the
-operator's prior visibility and stereo state.
+operator's prior visibility and stereo state. Playback pauses on focus loss,
+sequence mutation, missing data, or load failure and reports the reason.
 
 ## 7. Global Multi-Image Alignment Solver
 
@@ -310,6 +347,19 @@ Start with one constant OPK vector per image. For accepted track observations,
 minimize a robust sum of pairwise epipolar/coplanarity residuals plus pass-aware
 priors. Sparse matrix structure should be preserved: each residual touches only
 the observations and image parameters involved in that track/pair.
+
+Parameterize effective OPK as a pass-common correction plus a per-image
+differential correction with a weighted zero-mean differential constraint.
+Different passes have independent common components joined by cross-pass
+tracks. Hold ray origins fixed in the first solver. Default to balanced
+covariance/prior gauge control; offer an explicit fixed-reference mode but never
+silently fix the first image.
+
+Use Huber loss initially with a robustly estimated, physically clamped scale
+that is frozen or cautiously updated within a solve. Keep priors outside image
+residual robustification. Retain final weights/rejection reasons and expose
+Cauchy only as an advanced comparison. Robust loss must not conceal gauge,
+rank, position-like, or systematic residual failures.
 
 Report:
 
@@ -348,18 +398,22 @@ adjacent images. Build a connected, cycle-rich, quality-aware pair graph using:
 - existing track support; and
 - operator overrides.
 
-The graph should retain enough nonsequential redundancy to close loops, detect
-bad edges, and improve long-baseline observability without paying the full
-quadratic pair cost. Useful policies to compare include minimum-degree graphs,
-maximum-spanning overlap/geometry trees augmented with the best loop-closing
-edges, and pass-aware chord selection. Diagnostics should show which cycles
-support or contradict each pair.
+Score all plausible pairs cheaply, start with a maximum-quality spanning forest,
+then add the best loop-closing chords until observable components have useful
+cycles, nonterminal views have two useful connections where feasible,
+cross-pass components have redundant bridges, or the selected budget is met.
+Penalize repeated near-equivalent baselines and reward complementary geometry.
+Expose workbench quality/speed, hard `Max pairs`, and explicit `All plausible
+pairs` controls with predicted cost. Preserve forced inclusions/exclusions and
+deterministic tie-breaking. Report tree edges, chords, components, degrees,
+cycle basis, rejections, and infeasible connectivity.
 
 ### 7.4 Cycle-aware solver structure
 
 Build the global objective from unique track observations and physical
 residuals, with cycle closure primarily serving data association, edge
-validation, and optional consistency penalties. Algebraically, a track seen in
+validation, and diagnostics in the first implementation—not a duplicated
+solver residual. Algebraically, a track seen in
 several images produces a compact dense Jacobian/normal block for those views;
 different tracks and disconnected neighborhoods preserve global sparsity.
 
@@ -376,20 +430,34 @@ project's physical ray and pass-correlation model.
 
 After constant OPK is stable, add a smooth correction field over image time:
 
-- an ideal per-column OPK model for analysis and upper-bound experiments;
-- a practical set of OPK control posts at configurable column intervals;
-- interpolation or spline basis between posts;
-- smoothness/IMU priors; and
-- observability-driven adaptive post spacing.
+- an ideal per-column model only for analysis/upper-bound experiments;
+- small rotation vectors in the local attitude tangent space, composed with
+  nominal attitude rather than interpolated Euler angles;
+- cubic B-spline control posts initially every 128 image columns;
+- second-difference smoothness/IMU priors;
+- a pass-common low-frequency component plus per-image variation; and
+- observability-driven automatic coarsening, with finer spacing allowed only
+  when dense support demonstrates local observability.
 
 Dense correspondence may supply enough observations, but parameter density
 must be limited by actual spatial/temporal support. The solver should coarsen
 posts automatically when a segment is weakly observed.
 
+Provide a discrete active-pair/full-network `Re-match` control after material
+correction. It creates a new ledger generation from fresh current geometry,
+preserves the prior generation, and invalidates downstream filter/solve state.
+Preview and apply global corrections atomically across all solved images with
+one network-level revert. Review common/differential/effective OPK, covariance,
+bounds, prior dominance, predicted displacement, rank, components, and
+sensitivity before Apply; changing evidence or gauge requires a re-solve.
+
 ## 8. Dense Correspondence Quality Program
 
 The existing MATLAB SGM path is a baseline to measure, not a presumed final
-algorithm.
+algorithm. Keep it as a supported built-in SDK adapter. The completed
+`ProjectionDenseSurfaceExtractor` remains compatible while a new abstract
+dense-correspondence class normalizes requests/results and allows SGM,
+classical template matching, and caller plugins.
 
 ### 8.1 Baseline audit
 
@@ -407,7 +475,8 @@ Use the truth-aware synthetic fixture to characterize SGM across:
 
 Record completeness, gross-outlier rate, subpixel error, height error,
 left/right consistency, occlusion behavior, runtime, and memory. Retain SGM
-only where the evidence supports it.
+only where the evidence supports it. Do not add an automatic `Best` method
+until deterministic selection rules are supported by truth.
 
 ### 8.2 Sparse-seeded dense search
 
@@ -418,7 +487,10 @@ disparity interval.
 
 Partition the image into regions with coherent predicted geometry, while
 allowing uncertainty to widen the search near depth discontinuities and areas
-without sparse support.
+without sparse support. Seeds constrain search rather than force matches onto a
+sparse surface; allow evidence-supported unseeded regions and retain explicit
+`no support` where extrapolation would be arbitrary. Compare seeded/unseeded
+truth to detect bias and record which sparse tracks shaped each search range.
 
 ### 8.3 Classical dense template matcher
 
@@ -443,6 +515,13 @@ Required quality controls include:
 Compare the matcher with SGM rather than replacing SGM by assertion. A hybrid
 may use SGM in well-rectified textured regions and template search elsewhere.
 
+Every result reports one explicit state: valid, occluded, ambiguous/repetitive,
+insufficient texture, outside overlap, geometry/search failure, masked, or
+algorithm failure. Normalize confidence from uniqueness, forward/backward
+consistency, texture/conditioning, geometric residual, and subpixel fit, but do
+not call it probability until calibrated against truth. Preserve raw scores,
+competing multimodal hypotheses, deterministic ties, and rejection reasons.
+
 ### 8.4 Spatially varying epipolar geometry
 
 General pushbroom pairs may not admit one global rectifying homography. Support
@@ -454,6 +533,13 @@ one of:
 
 The selected representation must preserve continuous mappings back to both
 full source images and must expose rectification residuals.
+
+Sparse-alignment and dense-reconstruction pair schedules are separate. Dense
+selection favors overlap, conditioning, complementary baselines, texture,
+radiometric compatibility, and visibility; it need not use every sparse edge.
+When four or more useful views exist, reserve an independent validation view
+where practical. Provide operator inclusion/exclusion and `All plausible
+pairs`, predicted cost/memory/geometry, and an explanation for every selection.
 
 ## 9. Multi-View Point Reconstruction And Fusion
 
@@ -469,6 +555,12 @@ Simple spatial clustering and averaging of pairwise points is an acceptable
 initial oracle, but the preferred model associates consistent pair matches into
 dense multi-view tracks and solves one point against all contributing rays with
 a robust loss.
+
+The provenance-rich 3-D point set is authoritative. Raw pairwise points remain
+distinct from robust multi-view points; meshes, voxel products, and grids are
+derived and retain contributing point IDs. Weight independent views/passes,
+not repeated pair multiplicity. Split competing depth/occlusion modes rather
+than forcing one point, and retain valid two-view tracks with explicit labels.
 
 For each reconstructed point, record:
 
@@ -502,11 +594,11 @@ direction, but several distinct ideas must not be conflated:
 4. **Signed-distance fusion.** Pair-derived depth maps contribute weighted
    signed-distance observations to a common volume.
 
-The first spike should use a small bounded ROI and a sparse voxel hash or
-multiresolution octree. Compare a hard count, uncertainty-weighted kernel
-density, and pass-balanced log-likelihood. Count independent views/passes, not
-raw pair multiplicity, so a dataset with many correlated pairs does not appear
-artificially certain.
+The first spike uses small truth-aware ROIs and a sparse voxel hash or
+multiresolution octree. Compare direct robust multi-ray reconstruction, hard
+voxel occupancy, and uncertainty-weighted Gaussian splats. Derive and sweep
+voxel scale from GSD/3-D uncertainty, preserve competing modes, and count
+independent views/passes rather than raw pair multiplicity.
 
 Potential uses include:
 
@@ -549,6 +641,11 @@ Keep these stages distinct:
 Do not smooth or grid away provenance. Urban vertical surfaces and overhangs
 cannot be represented faithfully by a single-valued DEM.
 
+Return results directly to MATLAB through a versioned SDK value. Near-term
+persistence is MAT (`-v7.3` when required) plus compact JSON metadata. LAS/LAZ,
+PLY, GeoTIFF, NITF, and other production exports are deferred and must not
+block reconstruction, fusion, visualization, or SDK delivery.
+
 ## 10. Surface Reconstruction Workbench
 
 Create a separate floating **Surface Workbench** rather than overloading the
@@ -576,6 +673,13 @@ The workbench should launch or control a 3-D surface/point viewer supporting:
 - raw versus fused versus registered comparison; and
 - bounded decimation for interaction without discarding the full result.
 
+The first release explicitly supports raw pairwise, robust multi-view,
+uncertainty-filtered, voxel/fusion, DEM, and DEM-difference products. Color by
+intensity, elevation, view/pass count, residual, uncertainty, conditioning,
+fusion method, or DEM difference. Link selected 3-D points back to contributing
+source observations; render uncertainty glyphs only for selected/bounded
+subsets. Defer production mesh editing and GIS cartography.
+
 Graphics handles remain runtime-only. Dense results should gain an explicit
 serializable product contract only after the data model and size policy are
 reviewed.
@@ -594,20 +698,32 @@ Eventually support covariance and correlation for:
 - projection/master-plane parameters where used; and
 - reference DEM height and horizontal registration.
 
+The initial contract uses one full 6x6 common pose covariance per pass and one
+6x6 differential pose covariance per image, including position/attitude cross
+terms, plus a 2x2 source-observation covariance. The observation vector is
+continuous full-source `[column,row]` in pixels and covariance units are
+pixels-squared. Working/pyramid/rectified covariance maps back through the same
+coordinate Jacobian. For pushbroom imagery column uncertainty maps to timing
+through line rate. Missing uncertainty is unavailable, not zero; every block
+records units, frame, ordering, and prior/posterior/calibrated/assumed status.
+
 Same-pass correlations are essential. Treating every ray independently would
 dramatically overstate the information gained from many images sharing one
 navigation bias.
 
 ### 11.2 Propagation
 
-For well-conditioned local cases, propagate covariance through ray formation
-and multi-ray triangulation with analytic or validated numerical Jacobians:
+For well-conditioned local cases, begin with carefully scaled central numerical
+Jacobians and propagate covariance through ray formation and multi-ray
+triangulation:
 
 ```text
 Sigma_point = J * Sigma_inputs * J^T
 ```
 
-For nonlinear, bounded, or weak geometry, compare linearized covariance with
+Validate against synthetic truth and Monte Carlo, then replace high-volume
+derivatives with analytic/automatic versions only after parity. For nonlinear,
+bounded, multimodal, or weak geometry, compare linearized covariance with
 sigma-point or Monte Carlo propagation. Report conditioning and non-Gaussian
 behavior rather than publishing a misleading ellipse.
 
@@ -622,7 +738,9 @@ variance.
 Provide per-point 3-D covariance, principal axes, horizontal/vertical
 uncertainty, view/pass contribution count, and dominant uncertainty source.
 Surface gridding must propagate or summarize point uncertainty rather than
-reporting only sample variance.
+reporting only sample variance. Store the 3x3 covariance in the authoritative
+world frame in meters-squared, validate symmetry/positive semidefiniteness, and
+mark unreliable nonlinear results instead of silently repairing them.
 
 ## 12. DEM Registration Without DEM-Forced Intersection
 
@@ -632,16 +750,27 @@ between it and the DEM.
 
 ### 12.1 Registration model
 
-Begin with a low-dimensional transform appropriate to the expected navigation
-error:
-
-- horizontal/vertical translation;
-- optional small rotation;
-- optional pass-level position correction; and
-- later low-order spatial/trajectory terms only when observable.
+Begin with one global 3-D translation in a scene-local ENU frame. Estimate it
+with robust point-to-local-DEM-surface-normal residuals weighted by
+reconstruction covariance, DEM uncertainty, slope, and conditioning. Defer
+small rotation, pass translation, and low-order trajectory terms until truth
+shows they are distinguishable.
 
 Use robust point-to-DEM or point-to-local-surface-normal residuals weighted by
 both reconstructed-point covariance and DEM uncertainty.
+
+The non-blocking initial DEM input is DTED Level 2 or an equivalent WGS84
+latitude/longitude elevation grid. Heights may be HAE or MSL; MSL defaults to
+EGM96. If DTED height reference is omitted, assume MSL/EGM96 and record the
+assumption. An optional no-data sentinel plus NaN/Inf defines validity; no
+separate mask is required. Caller CE90/LE90 wins, then valid dataset metadata,
+then DTED2 defaults CE90=23 m and LE90=18 m. Preserve those 90% metrics and
+state any Gaussian conversion assumptions; do not treat cells as independent.
+
+Normalize working heights to HAE, convert geodetic data to double-precision
+scene-local ENU, and preserve exact transforms to WGS84/ECEF and the project
+world frame. Never mix HAE and orthometric height silently. Richer per-cell
+uncertainty/classification masks remain optional enhancements.
 
 ### 12.2 Bias avoidance
 
@@ -656,6 +785,13 @@ both reconstructed-point covariance and DEM uncertainty.
 Urban mismatch is expected and scientifically useful; it must not be erased by
 forcing intersections onto the terrain model.
 
+Registration returns a proposed correction through the SDK and preview-only
+registered product; it never auto-applies. A later explicit atomic position-
+correction operation validates scope/frame, preserves rollback, updates
+compatible source origins, invalidates geometry-dependent matches/solves/dense
+products/registration, and requires rerunning alignment/reconstruction. Report
+gauge or datum confounding rather than claiming unique position knowledge.
+
 ## 13. Numerical Precision Policy And Validation
 
 Do not apply one blanket precision choice to the entire pipeline. Establish a
@@ -667,7 +803,8 @@ narrower type.
 
 1. Does the current single-precision interactive geometry retain acceptable
    screen position, layer registration, stereo ordering, and responsiveness at
-   a 100 km standoff range?
+   the 100 km required range and the `min(200 km, geometric horizon)` stretch
+   range?
 2. Is single precision acceptable only because viewer coordinates are shifted
    to a local render origin, and what happens when large absolute coordinates
    enter before that shift?
@@ -710,8 +847,9 @@ narrower type.
 
 Test double, single, and proposed mixed paths across:
 
-- near, nominal, and maximum intended standoff ranges, explicitly including
-  the 100 km case of concern;
+- near and nominal ranges, the required 100 km threshold, and the stretch
+  `min(200 km, geometric horizon)` using local WGS84 curvature and observer
+  HAE; primary tests use an unrefracted geometric horizon;
 - small local coordinates and large translated world coordinates representing
   the same relative geometry;
 - shallow plane incidence and nearly parallel ray intersections;
@@ -727,6 +865,14 @@ ray separation, height error, covariance eigenvalues, solver convergence,
 visual registration, memory, and runtime. Include catastrophic thresholds for
 NaN/Inf, sign/eye reversal, loss of positive semidefiniteness, and changes in
 accepted/rejected observations.
+
+Provisional scale-aware gates are under 0.1 screen pixel for display geometry
+and under 0.01 full-source pixel for well-conditioned backend mapping, with no
+material validity/eye/acceptance changes. Solver differences must be small
+relative to posterior uncertainty; point/fusion differences must be small
+relative to GSD and predicted uncertainty; covariance must preserve symmetry,
+PSD behavior, and principal structure. Mixed/CUDA paths must also demonstrate
+meaningful measured runtime or memory benefit before adoption.
 
 ### 13.4 Precision boundaries and provenance
 
@@ -752,11 +898,10 @@ rates enrich the SDK but do not make basic launch onerous.
 
 ### 14.1 Correction-result API
 
-Provide one stable, serializable result contract for accepted scientific
-corrections. The caller must be able to retrieve corrections after preview or
-application and use them independently of the viewer. The first result type
-reports OPK, but its envelope must allow future correction blocks without
-changing the meaning of existing fields.
+Provide one immutable network-level `CorrectionSet` for a solver/registration
+generation. Per-view records are keyed by stable `ViewId`/`PassId`; typed blocks
+cover pass-common, differential, and effective OPK, global/pass translation,
+and later timing, boresight, gimbal, or posted time-varying OPK.
 
 Each result should contain at least:
 
@@ -775,6 +920,19 @@ Each result should contain at least:
 - a versioned collection of named future correction blocks, such as position,
   timing, boresight, or smoothly posted OPK, each with its own units and frame.
 
+Authoritative angles/covariance are radians/radians-squared, with explicit
+degree/degree-squared convenience accessors. Never expose unitless `OPK`.
+Record `[omega,phi,kappa]` order, active/passive meaning, composition order,
+source/destination frames, multiplication side, increment sign, and
+incremental/absolute/common/differential/effective semantics. Existing public
+APIs retain their required units through adapters.
+
+Preserve immutable base geometry and exact generation lineage. Compose attitude
+through rotations, not OPK vector addition. Every result distinguishes an
+increment relative to its parent geometry from the effective correction
+relative to base. Reapply is idempotent or rejected; wrong-parent application
+fails; revert restores an exact generation rather than applying a negative.
+
 Expose narrow public operations to retrieve the current accepted results,
 retrieve a named historical generation, apply compatible results explicitly,
 and serialize/deserialize portable result data. Application must validate view
@@ -786,9 +944,16 @@ accepted correction generation exists, but event delivery is supplementary;
 the authoritative result remains queryable. The SDK must distinguish solver
 output from operator acceptance and actual application.
 
+Headless functions return `CorrectionSet` directly. Interactive launch may
+accept `CorrectionAcceptedFcn`, `CorrectionAppliedFcn`, and
+`CorrectionRevertedFcn`; callbacks receive immutable results, fire only on the
+named transition, run on the MATLAB client/UI thread, and cannot roll back a
+successful scientific operation when callback code fails. Expose queryable
+current/history APIs because callbacks are never authoritative storage.
+
 ### 14.2 Dense-correspondence extension API
 
-Provide an abstract MATLAB base class or similarly strict interface from which
+Provide an abstract MATLAB base class from which
 callers can implement custom dense correspondence algorithms. The workbench
 and backend should consume the interface, not branch on concrete algorithms.
 
@@ -815,6 +980,14 @@ algorithm-specific preparation and matching logic. No extension may return a
 display pyramid, preview coordinate, or dense surface as if it were a full
 source observation.
 
+Requests provide bounded read-only in-memory analysis arrays, masks, and
+continuous mappings to full source coordinates. File I/O/tiling is not required
+of plugins; an optional region-reader capability may come later. Plugins declare
+CPU/GPU, size/memory estimate, bands/types, rectification/epipolar support,
+determinism, and cancellation. They neither mutate nor retain caller arrays,
+and return continuous full-source observations even when working in pyramids or
+rectified/local grids.
+
 Begin with adapters for the existing SGM path and the planned classical dense
 template matcher. Provide a small documented example matcher and conformance
 tests so an external developer can validate a subclass without launching the
@@ -822,7 +995,45 @@ viewer. Registration should be explicit through a factory/registry supplied by
 the embedding application; do not scan arbitrary paths or instantiate classes
 from untrusted serialized names.
 
-### 14.3 SDK compatibility and documentation
+### 14.3 Surface-fusion extension API
+
+Provide a documented abstract `ProjectionSurfaceFusionAlgorithm`-style class.
+Its request carries stable view/pair/pass/track IDs, corrected rays/source
+observations, provisional pair/multi-ray points, covariance, visibility,
+bounded ROI/frame, scale/precision/seed, progress, and cancellation. Results may
+contain fused points, sparse voxel/octree evidence, competing modes, optional
+derived mesh/grid, uncertainty, contributor counts, rejection reasons, runtime,
+memory, precision, and provenance.
+
+The base class owns validation, units/frames/covariance, deterministic seed,
+cancellation, error classification, provenance, result conformance, and
+CPU/GPU reporting. Initial subclasses implement robust multi-ray fusion, hard
+voxel occupancy, and Gaussian splatting. Registration is explicit through a
+caller registry; serialized class names are never instantiated automatically.
+
+### 14.4 DEM-registration extension API
+
+Provide direct headless registration plus a derivable
+`ProjectionSurfaceRegistrationAlgorithm`-style class. Requests contain the
+imagery-only result, DEM/geodetic/datum/uncertainty/masks, ROI, allowed
+transform, robust/convergence/precision/seed/progress/cancellation. Results
+contain the proposed transform/covariance/direction/frame, support/rejections,
+residual/sensitivity/provenance, preview descriptor, correction block, and
+explicit success/ambiguity/degeneracy/failure. The first built-in implements
+robust global 3-D translation. The base class enforces datum/frame validation,
+uncertainty normalization, result validation, and no automatic application.
+
+### 14.5 Scene-suitability extension API
+
+Add an optional upstream screener that returns full-source masks/quality maps
+for invalid geometry, cloud/obscuration, water, low texture, saturation,
+repetition, and severe radiometric incompatibility. Begin with deterministic
+invalid/texture/saturation checks; cloud/water await suitable data. Preserve
+confidence/provenance/generation, report usable coverage, allow operator
+override, and distinguish unobservable input from matcher/solver failure.
+Expose a documented derivable class for domain-specific screeners.
+
+### 14.6 SDK compatibility and documentation
 
 - Version public request/result schemas independently from scene serialization.
 - Preserve existing `PlanarProjection` and `Projection*` API names.
@@ -833,12 +1044,21 @@ from untrusted serialized names.
   its source-coordinate result.
 - Add contract, round-trip, stale-result, convention, subclass-conformance,
   cancellation, and failure-path tests.
+- For every derivable class, document lifecycle, mathematical field meaning,
+  frames/axes/units/covariance, minimal and advanced examples, headless use,
+  determinism/cancellation/memory/tiling/GPU guidance, version compatibility,
+  and a third-party conformance suite plus deliberately simple example plugin.
+- Near-term scientific persistence is MAT plus compact JSON metadata. Rich
+  production export formats remain deferred and non-blocking.
 
 ## 15. Code-Independent Mathematical Specification
 
-Produce a standalone LaTeX document compiled to PDF using an IEEE journal-style
-template. It should read as a clear mathematical and algorithmic description,
-not as software documentation.
+Produce one self-contained LaTeX paper/PDF using the `IEEEtran` two-column
+journal format. Target technical stakeholders, photogrammetry/estimation
+reviewers, and MATLAB/C++ implementers. Keep the main narrative readable and
+put detailed derivations, Jacobians, degeneracies, and covariance expansions in
+appendices within the same PDF. It is a living technical specification, not
+software documentation.
 
 ### 15.1 Required content
 
@@ -854,7 +1074,9 @@ not as software documentation.
 8. Pairwise and global OPK objectives, robust losses, priors, gauge freedoms,
    bounds, and observability.
 9. Same-pass and multi-pass covariance structure.
-10. Pair-camera midpoint and plane-basis reorientation.
+10. Pair-camera midpoint, presentation-only pair orientation, and the
+    distinction between view orientation, plane-basis reparameterization, and
+    physical plane replacement.
 11. Stereo eye assignment, anaglyph formation, depth/separation controls, and
     the exact display-only stereo-exaggeration transform used by the viewer.
 12. Dense epipolar search, local rectification, template costs, subpixel
@@ -877,6 +1099,8 @@ not as software documentation.
 - Distinguish physical transforms from presentation transforms throughout.
 - Cite primary photogrammetry, multiple-view geometry, estimation, and image
   matching literature.
+- Describe SDK algorithm boundaries by mathematical inputs, outputs, and
+  invariants without discussing code-level classes.
 
 Build and visually inspect the PDF. Keep LaTeX source, bibliography, figures,
 and a reproducible build command together when this work is eventually added to
@@ -945,6 +1169,9 @@ translation is accepted solely because it compiles.
 - Stable C ABI or narrow language-neutral boundary for integration.
 - CMake build and reproducible dependency management.
 - MATLAB MEX/CUDA MEX and command-line harnesses during parity development.
+- Native 64-bit Windows/MSVC is the first MATLAB/CUDA target. WSL 2 supplies a
+  secondary GCC/Clang Linux CPU/CUDA command-line build; Linux binaries are not
+  loaded into Windows MATLAB. Keep a portable CPU core for later macOS/Linux.
 - CPU geometry/resampling/alignment/dense kernels first.
 - Optional GPU kernels behind capability and equivalence checks.
 - Streaming and in-memory execution policies selected by product context.
@@ -959,13 +1186,19 @@ than remaining generic placeholders:
 - **Eigen** for fixed/small dense geometry, transformations, Jacobian blocks,
   and selected sparse structures, with BLAS/LAPACK backends benchmarked for
   larger dense work;
+- **BLAS/LAPACK** as optional measured backends for sufficiently large dynamic
+  dense operations; Eigen remains the small fixed-size geometry layer and may
+  delegate supported large operations to MKL, OpenBLAS, Accelerate, or another
+  reviewed implementation;
 - **Ceres Solver** for robust nonlinear least squares, automatic/analytic
   differentiation comparisons, parameter bounds/manifolds, and bundle-style
   sparse solves;
 - Ceres linear-solver alternatives including Eigen, LAPACK/BLAS, SuiteSparse,
   and its supported CUDA/cuDSS paths, selected by measured problem structure;
-- established image-processing primitives for interpolation, pyramids,
-  descriptors, template costs, and morphology;
+- **OpenCV** as an optional provider for interpolation, pyramids, filters,
+  transforms, features/descriptors/matching, consensus geometry, morphology,
+  connected components, and selected CPU/CUDA primitives, always wrapped behind
+  Sightline coordinate/mask/provenance contracts;
 - TIFF/PNG libraries for prototype parity;
 - GDAL/PROJ or an equivalent reviewed stack for geospatial and eventual NITF
   needs;
@@ -976,6 +1209,12 @@ than remaining generic placeholders:
 Selection criteria are performance, numerical control, determinism, supported
 platforms, licensing/export constraints, maintenance health, API stability,
 and suitability for the eventual deployment environment.
+
+OpenCV 4.5+ is Apache-2.0; SIFT is a normal candidate, while SURF/nonfree
+modules remain disabled by default and require explicit legal/deployment
+review. Prefer permissive production-compatible dependencies, pin versions and
+CMake flags, and do not introduce GPL/copyleft constraints without approval.
+Evaluate vcpkg or Conan rather than choosing a dependency manager by assertion.
 
 Do not assume that one backend wins at every scale. Small cycle/track blocks may
 favor Eigen, while large global normal equations may favor SuiteSparse or a
@@ -990,8 +1229,10 @@ MathWorks supports CUDA MEX through `mexcuda` and direct `gpuArray` exchange
 through the GPU MEX API, so kernels can be invoked without first replacing the
 viewer or scene orchestration.
 
-Candidate first kernels are those with high arithmetic intensity and simple,
-explicit contracts:
+The first custom CUDA/MEX experiment is the dense template/correlation cost
+kernel (ZNCC and/or census/gradient cost over bounded epipolar strips). It has
+high arithmetic intensity, an isolated contract, and direct dense-matcher SDK
+value. Candidate later kernels are:
 
 - dense matching cost-volume or template-correlation evaluation;
 - epipolar-strip resampling;
@@ -1021,19 +1262,28 @@ and the [NVIDIA CUDA Programming Guide](https://docs.nvidia.com/cuda/cuda-progra
 
 ### 17.5 Staged C++ port
 
-1. Coordinate frames, planes, cameras, gimbals, and ray kernels.
-2. Output grids, inverse mapping, interpolation, masks, and two-view anaglyph.
-3. Source-geometry adapters and time-dependent scan models.
-4. Sparse feature observation contracts and pair/track graph.
-5. Global constant-OPK solver and pass-aware priors.
-6. Dense pair matcher and occlusion/confidence logic.
-7. Voxel/multi-ray reconstruction, uncertainty, and fusion.
-8. DEM registration and surface products.
-9. Production I/O, including NITF decision and metadata mapping.
-10. Optional GPU acceleration and system-level performance hardening.
+1. Freeze frames, units, scalar types, array layouts, masks, and error policy.
+2. Coordinate frames, planes, cameras, gimbals, and ray kernels.
+3. Procedural two-image inverse renderer/anaglyph plus MEX and CLI parity.
+4. Full-source interpolation, output grids, and prototype TIFF/PNG.
+5. Source-geometry adapters and time-dependent scan models.
+6. Sparse observations, pair/track graph, and constant-OPK global solver.
+7. Dense matcher contracts and selected CPU/OpenCV algorithms.
+8. CUDA dense costs after the MATLAB-hosted spike succeeds.
+9. Multi-ray reconstruction, uncertainty, and plugin-compatible fusion.
+10. DEM ingestion/registration and correction results.
+11. Surface Workbench acceleration hooks only after standalone parity.
+12. Production I/O/NITF, packaging, deployment, and broader GPU hardening.
 
 Each stage requires MATLAB/C++ parity, independent C++ tests, adversarial
 geometry tests, memory/error-policy review, and performance profiling.
+
+The validation matrix compares MATLAB double CPU; native Windows C++ CPU,
+CUDA, MEX, and CUDA MEX; WSL 2 Linux C++ CPU/CUDA; and later native Linux. Use
+identical public fixtures and record compiler/flags/dependencies, hardware,
+driver/runtime, precision, values/masks/source coordinates/corrections/
+covariance/error policy/determinism, and transfer/runtime breakdown. WSL is
+informative but never substitutes for native Windows MATLAB integration.
 
 ## 18. Ordered Feature Trees
 
@@ -1041,23 +1291,26 @@ These trees are coordinated but should remain separately reviewable.
 
 ### Tree A: Multi-Image Alignment And Viewer
 
-1. **A0 — Contract audit and network model.** Formalize views, pairs, passes,
-   tracks, stable identities, active-pair state, and pass-aware priors.
-2. **A1 — Active pair and solo visibility.** Add selection, swap, pair stepping,
-   solo/restore, and left/right invariants.
-3. **A2 — Pair viewpoint and plane basis.** Add midpoint camera, fit/restore,
-   and same-plane basis reorientation preview.
-4. **A3 — Motion-imagery mode.** Add time ordering, keyboard stepping, measured
-   edge-hover controls, and transient frame identity.
-5. **A4 — Multi-view tracks and pair graph.** Reconcile pair matches into
+1. **A0 — Multi-image foundation — complete as MI-0/MI-1.** Stable view/pass/
+   pair identity, optional timing, deterministic runtime pair schedule.
+2. **A1 — Active pair and stereo presentation — complete as MI-2/MI-3.**
+   Selection, swap, stepping, Solo/restore, physical eye invariants/override.
+3. **A2 — Pair viewpoint.** Add midpoint camera, fit/restore, optional follow,
+   and presentation-only active-pair orientation without plane mutation.
+4. **A3a — Keyboard and manual motion imagery.** Add focus-aware remapping,
+   explicit sequence/order, stepping, edge controls, labels, Loop, and restore.
+5. **A3b — Motion playback.** Add measured 0.5-10 fps playback, Space/Escape,
+   bounded lookahead, pause reasons, and performance evidence.
+6. **A4 — Multi-view tracks and pair graph.** Reconcile pair matches into
    tracks; build an explainable nonsequential, cycle-rich schedule; and add
    cycle/path-consistency diagnostics without requiring all-pairs matching.
-6. **A5 — Global constant-OPK solve.** Make robust epipolar network adjustment
+7. **A5 — Global constant-OPK solve.** Make robust epipolar network adjustment
    the primary solve when ray geometry is available.
-7. **A6 — Same-pass/multi-pass priors.** Add pass-common/differential reporting,
+8. **A6 — Same-pass/multi-pass priors.** Add pass-common/differential reporting,
    independent pass components, and conflict diagnostics.
-8. **A7 — Time-varying correction research.** Add configurable smooth OPK posts
-   only after dense support and observability are demonstrated.
+9. **A7 — Time-varying correction research.** Add tangent-space spline OPK
+   posts initially every 128 columns only after dense support and observability
+   are demonstrated.
 
 ### Tree B: Multi-View Dense Surface
 
@@ -1078,6 +1331,8 @@ These trees are coordinated but should remain separately reviewable.
    derived products without cluttering the main viewer.
 8. **B7 — DEM registration.** Add uncertainty-weighted robust alignment while
    preserving unconstrained points.
+9. **B8 — Explicit DEM position-correction apply.** Return proposed translation
+   through the SDK; add separately gated atomic geometry application/recompute.
 
 ### Tree C: Mathematical And Procedural References
 
@@ -1091,10 +1346,10 @@ These trees are coordinated but should remain separately reviewable.
 
 ### Tree S: MATLAB SDK
 
-1. **S0 — SDK inventory and public boundary.** Identify existing callable
-   launch, solve, apply, export, and dense entry points; define versioning,
-   headless behavior, conventions, and compatibility rules without changing
-   existing public API names.
+1. **S0 — SDK inventory and public boundary — complete.** Existing callable
+   launch, solve, apply, export, and dense entry points were inventoried with
+   versioning, headless behavior, conventions, and compatibility risks while
+   preserving existing public API names.
 2. **S1 — Correction-result contract.** Add stable per-view/pass result values,
    correction generations, OPK convention metadata, provenance, covariance and
    diagnostics, plus query and portable round-trip APIs.
@@ -1109,11 +1364,17 @@ These trees are coordinated but should remain separately reviewable.
    documented external-style matcher example.
 6. **S5 — SDK guide and compatibility suite.** Document end-to-end automation
    and extension examples and establish schema/API compatibility tests.
+7. **S6 — Surface-fusion extension.** Add abstract fusion request/result/base,
+   built-in multi-ray/voxel/Gaussian adapters, example, and conformance suite.
+8. **S7 — DEM-registration extension.** Add headless service, abstract
+   registration algorithm, robust translation adapter, and correction output.
+9. **S8 — Scene-suitability extension.** Add masks/quality results, deterministic
+   baseline screener, documented plugin interface, and operator override.
 
 ### Tree D: C++ Production Backend
 
-1. **D0 — Requirements, Eigen/Ceres/dependency, licensing, and benchmark
-   study.**
+1. **D0 — Requirements, Eigen/Ceres/BLAS/OpenCV/dependency, licensing,
+   Windows/WSL build, and benchmark study.**
 2. **D1 — MATLAB-hosted CUDA/MEX kernel spike on the target Windows GPU.**
 3. **D2 — Geometry and two-image procedural parity spike.**
 4. **D3 — Full inverse renderer and prototype TIFF/PNG output.**
@@ -1128,7 +1389,8 @@ These trees are coordinated but should remain separately reviewable.
    display, backend, solver, covariance, dense, and GPU array by role and
    current type.
 2. **P1 — Viewer long-range validation.** Compare double/single display
-   geometry with local and large world origins across the intended range.
+   geometry with local and large origins through required 100 km and stretch
+   `min(200 km, geometric horizon)`.
 3. **P2 — Scientific mixed-precision matrix.** Test backend mapping,
    triangulation, global OPK, covariance, dense refinement, and voxel fusion;
    select explicit boundaries.
@@ -1137,80 +1399,56 @@ These trees are coordinated but should remain separately reviewable.
 
 ## 19. Dependency And Recommended Order
 
-The synthetic-expansion and backend-performance queues are complete. The
-recommended order for explicitly dispatched work is:
+The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
+complete. The ordered implementation queue is:
 
-1. A0, S0, C0, and P0: freeze multi-image/SDK contracts, notation, and
-   precision boundaries/inventory.
-2. S1 alongside A0-A1 so solver results and active-view identities have one
-   stable programmatic representation.
-3. P1 alongside A1-A3: verify that viewer single precision remains safe at the
-   intended scale while pair and motion controls are developed.
-4. A1: active-pair/solo/left-right usability.
-5. S2 after the first global result generation is stable.
-6. A2: pair viewpoint and plane-basis behavior.
-7. A3: motion-imagery presentation.
-8. A4-A6: tracks, nonsequential cycle-rich pair graph, and global pass-aware
-   OPK solve.
-9. P2 before accepting A5/B3 numerical contracts: validate double and proposed
-   mixed scientific paths.
-10. B0 and S3: audit SGM while establishing the algorithm-neutral dense
-    correspondence extension boundary.
-11. S4 and B1-B3: built-in adapters, pair scheduling, improved dense matching,
-    and point uncertainty.
-12. B4: bounded voxel/volume fusion research spike with an explicit abandon
-   criterion.
-13. B5-B7: true multi-view fusion, Surface Workbench, and DEM registration.
-14. C1-C3 and S5 throughout stable checkpoints, with the first compiled manuscript
-   after A6 and a dense extension after B6.
-15. D0 may begin as a library/architecture study, and D1/P3 may use the MATLAB
-   harness for CUDA experiments once target hardware is available.
-16. C2 before D2 so the systematic C++ port has a transparent executable
-   oracle.
-17. Production transcoding should not begin until the relevant MATLAB
-   equations/contracts and golden fixtures are stable.
+1. Review the completed MI-0 through MI-3 baseline and preserve 496/496.
+2. A2 pair viewpoint/follow and presentation-only orientation.
+3. A3a focus-aware keyboard remapping.
+4. A3a manual motion imagery.
+5. A3b motion playback and performance evidence.
+6. S1 immutable `CorrectionSet`, MAT/JSON, stale protection, OPK adapter.
+7. S2 callbacks and explicit apply/revert/generation lineage.
+8. A4 multi-view tracks and cycle diagnostics.
+9. A4 explainable pair graph and quality/max/all-pair controls.
+10. A5/A6 global constant-OPK network solve and pass-aware priors.
+11. Multi-image synthetic acceptance matrix.
+12. P0/P1 precision inventory and required/stretch range validation.
+13. S3 dense-matcher base and current SGM adapter.
+14. B0 truth-aware SGM audit.
+15. B1/B2 sparse-seeded classical template matcher.
+16. B3/B5 multi-ray reconstruction and initial uncertainty.
+17. S6/B4 surface-fusion SDK and bounded voxel spike.
+18. B6 Surface Workbench.
+19. S7/B7 DEM ingestion, uncertainty, registration, preview translation.
+20. B8 explicit DEM-derived position-correction application.
+21. A7 time-varying OPK research.
+22. C0-C3 manuscript/procedural oracle at stable checkpoints.
+23. Windows MATLAB-managed GPU validation, then D1/P3 CUDA/MEX dense-cost spike.
+24. D0 and staged C++ port after corresponding MATLAB contracts/fixtures freeze.
 
 Time-varying OPK A7 begins only after constant global alignment and dense
 observation support have measurable evidence. The full C++ dense backend begins
 only after the MATLAB dense/fusion product contract is selected.
 
-## 20. Decision Gates
+## 20. Remaining Evidence, Hardware, And Later-Parameter Gates
 
-Before activating this workplan in the repository, resolve or validate:
+No unresolved design question blocks the ordered CPU/MATLAB queue. Remaining
+gates are deliberately resolved by implementation evidence or later user input:
 
-1. Whether acquisition timestamps and pass identifiers are always available or
-   require explicit user metadata.
-2. Default gauge policy for the global solver.
-3. Exact representative-origin rule for time-dependent pair viewpoint and eye
-   assignment.
-4. Whether plane-axis reorientation should alter serialized plane coordinates
-   or remain a presentation-only camera operation.
-5. Motion-mode order, wrap behavior, and whether playback belongs in the first
-   pack.
-6. Pair-graph scoring weights, minimum nonsequential redundancy, and cycle-basis
-   selection.
-7. Whether cycle closure is used only for track/edge validation or also as an
-   explicit solver penalty.
-8. Which dense matcher(s) survive the truth audit.
-9. Whether voxel occupancy/splatting adds value beyond multi-ray fusion and,
-   if so, whether it is a product, diagnostic, initializer, or solver objective.
-10. Primary surface product: provenance-rich point cloud, mesh/TIN, gridded
-   elevation, or a staged combination.
-11. Initial uncertainty input contract and which correlations are mandatory.
-12. DEM registration transform family and stable-terrain masking strategy.
-13. Scope and publication audience of the IEEE-style mathematical manuscript.
-14. Precision selected for viewer display geometry, authoritative geometry,
-    backend mapping, solvers, covariance, dense matching/fusion, and output;
-    plus the range/conditioning evidence required for each choice.
-15. Eigen/Ceres solver/backend choices for each problem scale.
-16. First MATLAB-hosted CUDA kernel and the required Windows/MATLAB/CUDA
-    compatibility matrix.
-17. C++ target platforms, licensing constraints, NITF profile, and GPU/runtime
-    requirements.
-18. Exact MATLAB correction-result type, callback policy, accepted-versus-
-    applied lifecycle, and portable serialization format.
-19. Dense-matcher base-class lifecycle, request ownership, tiling/streaming
-    boundary, registry policy, and minimum third-party conformance suite.
+1. Final numerical thresholds after the recorded precision and truth studies.
+2. Which dense matcher(s) and pair policies survive truth-aware audit.
+3. Whether voxel fusion adds value beyond multi-ray reconstruction and in what
+   role; abandon it if it does not.
+4. Cloud/water screening methods after suitable data exists.
+5. Per-pass position/rotation and time-varying OPK density after observability.
+6. Stop-sign/curved-orbit radii, leg counts, turns, and independent-pass
+   parameters in a separately approved fixture pack.
+7. MATLAB-managed GPU and CUDA behavior on the Windows RTX workstation.
+8. Eigen/Ceres/SuiteSparse/BLAS/OpenCV backend choices from measured problem
+   scale, license, and deployment evidence.
+9. vcpkg versus Conan and final production platforms/toolchains.
+10. Production LAS/LAZ/PLY/GeoTIFF/NITF mappings; MAT/JSON suffice meanwhile.
 
 ## 21. Acceptance Themes
 
@@ -1229,11 +1467,11 @@ Every pack should be judged on:
 - clean GUI presentation; and
 - focused commit/push boundaries with full validation where appropriate.
 
-## 22. Locked Planning Decisions Through Pair-UX Item 25
+## 22. Locked Planning Decisions 1-75
 
-The following decisions are approved and may be treated as implementation
-requirements. They are recorded here so the discussion state survives thread
-handoff. Item 26, physical-plane versus basis behavior, remains open.
+The following decisions are approved implementation requirements. They preserve
+the discussion state for handoff; the normative sections above consolidate the
+same requirements by subsystem.
 
 1. Every image has a stable `ViewId`; preserve caller IDs and generate missing
    IDs independently of filename, path, layer order, or display name.
@@ -1305,6 +1543,110 @@ handoff. Item 26, physical-plane versus basis behavior, remains open.
     fitting, and restore. It is one-shot by default. An opt-in runtime `Follow
     active pair` checkbox reapplies it during pair navigation; manual camera
     motion suspends following for the current pair and navigation resumes it.
+26. Routine pair orientation is presentation-only. Do not mutate/serialize the
+    plane basis; advanced basis/physical-plane changes require separate full
+    reprojection, invalidation, preview, and rollback.
+27. Motion order uses caller order, otherwise time within pass and stable
+    fallback; do not interleave incomparable clocks; no-wrap default plus Loop.
+28. Preferred UTC text is `DDMMYY_HHmmSS[.fraction]`, with four-digit-year and
+    numeric-relative alternatives, `80-99 -> 1980-1999` and
+    `00-79 -> 2000-2079`, strict parsing, and original-text provenance.
+29. Motion mode is context-launched, non-stereo, single-frame, uses applied
+    geometry only, snapshots/restores presentation exactly, and remains runtime.
+30. Shift+Arrows adjust Tip/Tilt. Normal plain Left/Right select layers without
+    visibility mutation; Up/Down reuse vertical nudges. Motion Left/Right step
+    frames and Up/Down do not mutate. Only viewport focus captures shortcuts.
+31. Manual motion ships first; measured playback follows at 0.5-10 fps (2 fps
+    default), no interpolation/skips, one-frame lookahead, and runtime Loop.
+32. Motion Space toggles play; outside it preserves hold-to-hide. Escape exits,
+    manual step pauses, focus/data/sequence changes pause with reason.
+33. Transient/pinnable frame identity reports layer, position, UTC time, pass,
+    applied-correction state, and persistent fallback/stale/load warnings.
+34. Motion membership is explicit and visibility-independent, defaults to all
+    eligible images, supports pass/include filters, and requires two frames.
+35. Provenance-rich 3-D points are authoritative; pairwise/multi-view stages
+    remain distinct and mesh/voxel/grid/registered products are derived.
+36. Associate dense observations into tracks and robustly solve all rays;
+    never average duplicated pair points as independent evidence.
+37. Sparse and dense pair schedules are separate; dense selection favors
+    complementary useful geometry and may reserve an independent validation view.
+38. SGM remains a supported baseline adapter; template/custom matchers share one
+    contract, no hidden automatic method/fallback before truth evidence.
+39. Sparse seeds create uncertainty-aware dense search priors, not forced
+    surfaces; allow supported unseeded matching and report no-support/bias.
+40. Dense results carry explicit valid/occluded/ambiguous/texture/overlap/
+    geometry/masked/algorithm states; confidence is not probability until calibrated.
+41. Initial uncertainty is pass-common 6x6 plus image-differential 6x6 pose
+    covariance and full-source `[column,row]` 2x2 pixels-squared observation covariance.
+42. Start covariance propagation with scaled central Jacobians, validate by
+    truth/Monte Carlo, use double, and label nonlinear/unreliable results.
+43. Initial DEM registration is robust global ENU 3-D translation using
+    surface-normal residuals; preserve raw and preview registered products.
+44. DEM input is non-blocking WGS84/DTED2 oriented: HAE or MSL/EGM96, optional
+    sentinel/masks/CE90/LE90, DTED2 defaults 23 m CE90/18 m LE90.
+45. Normalize DEM work to double scene-local ENU/HAE with reversible WGS84/ECEF/
+    project transforms and never silently mix height datums.
+46. First voxel spike compares multi-ray, hard occupancy, and Gaussian splats
+    on bounded truth ROIs/resolution sweeps with an explicit abandon criterion.
+47. Surface fusion is a fully documented derivable MATLAB SDK class with common
+    validation, provenance, cancellation, capability, examples, and conformance.
+48. The separate Surface Workbench inspects raw/fused/uncertain/voxel/DEM
+    products, links points to sources, and uses runtime decimation/glyph bounds.
+49. Dense ROIs live in world/plane space, map to full sources, support bounded
+    previews/chunk overlap, deterministic boundaries, and explicit uncovered area.
+50. Return surface results in memory; MAT plus compact JSON is sufficient.
+    LAS/LAZ/PLY/GeoTIFF/NITF cannot block near-term implementation.
+51. DEM registration returns a proposed SDK correction; explicit later apply is
+    atomic/revertible, updates origins, invalidates dependencies, and reruns.
+52. DEM registration has headless service plus a documented derivable SDK class;
+    the first built-in is robust translation and never auto-applies.
+53. One immutable network `CorrectionSet` holds typed per-view/pass correction
+    blocks, lifecycle, covariance, provenance, geometry fingerprints, and status.
+54. Authoritative OPK uses radians/radians-squared with explicit degree accessors
+    and complete order/frame/composition/sign/multiplication semantics.
+55. Headless calls return `CorrectionSet`; optional accepted/applied/reverted
+    callbacks supplement queryable history and cannot corrupt successful state.
+56. Matcher inputs are bounded read-only arrays/mappings; plugins declare
+    capabilities and return normalized full-source observations without retention.
+57. The math specification is one self-contained IEEEtran two-column living
+    paper with appendices for engineers, reviewers, and technical stakeholders.
+58. Authoritative geometry/solvers/covariance/backend mapping remain double;
+    single/mixed is limited to explicit discardable/intermediate boundaries.
+59. Precision acceptance uses scale-aware gates: 100 km required and
+    `min(200 km, geometric horizon)` stretch, with unrefracted primary horizon.
+60. First custom CUDA/MEX spike is bounded dense template/correlation cost;
+    standalone parity/performance precedes any viewer integration.
+61. C++ uses modern core plus stable C ABI, Eigen/Ceres prototypes, optional
+    CUDA, MATLAB/CLI harnesses, CPU reference, and no MATLAB-Coder architecture.
+62. OpenCV is optional behind Sightline contracts; Eigen covers small geometry,
+    optional BLAS/LAPACK large dense work, and nonfree SURF requires review.
+63. The procedural MATLAB two-image/anaglyph reference is direct double matrix
+    algebra, production-parity tested, SDK example, paper companion, C++ oracle.
+64. First accelerated target is Windows x64/MSVC/MATLAB-compatible CUDA; CMake
+    portable CPU core and WSL2 GCC/Clang/CUDA CLI are secondary build paths.
+65. One golden-fixture matrix covers MATLAB, Windows CPU/CUDA/MEX, WSL CPU/CUDA,
+    and later Linux, recording full toolchain/hardware/precision/runtime provenance.
+66. C++ port order freezes contracts, then geometry/procedural renderer,
+    adapters/alignment, dense/CUDA, uncertainty/fusion/DEM, and production I/O.
+67. Time-varying OPK uses tangent-space cubic splines, initial 128-column posts,
+    smoothness/pass-common priors, observability coarsening, and SDK output.
+68. Optional scene suitability produces full-source masks/quality/provenance and
+    a derivable SDK screener; it never silently deletes images/evidence.
+69. Future simulation uses a trajectory/pass provider: polygon stop-sign legs,
+    then curved paths, independent pass errors and optional shared calibration.
+70. Multi-image truth validation covers 2/3/4/6 views, graph variants, errors,
+    corruption, texture/occlusion/masks, baselines, repeatability, and uncertainty.
+71. Implement in the ordered queue in section 19; small validated commits/pushes
+    remain required and CPU work is not blocked by hardware-gated GPU work.
+72. Default pair graph is a quality spanning forest plus deterministic useful
+    loop chords under quality/max/all controls and explicit connectivity reports.
+73. Global solve defaults to interpretable Huber robustification with bounded
+    scale, separate priors, retained weights/rejections, and optional Cauchy study.
+74. Review the complete global generation and re-solve after evidence/gauge
+    edits; never edit numbers and label them solver output or partially apply.
+75. Preserve immutable base/parent geometry; compose rotations exactly, expose
+    incremental/effective corrections, reject stale/reapply, and revert exactly.
 
-This plan remains a planning draft. Repository backup does not activate every
-feature tree; only explicitly dispatched packs enter implementation.
+This consolidated workplan is active as the ordered source of truth. A feature
+tree enters implementation only when explicitly dispatched; evidence/hardware
+gates remain non-blocking for unrelated CPU work.

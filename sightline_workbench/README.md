@@ -58,9 +58,11 @@ docs/alignment_workflow_hardening_plan.md Completed reliability/usability record
 docs/alignment_operator_guide.md Staged workflow and failure-recovery guide
 docs/alignment_reliability_validation_report.md Pack 8 reference results and remaining gate
 docs/dense_surface_feature_pack.md Dense stereo surface scope, workflow, and limitations
-docs/dense_surface_synthetic_expansion_plan.md Active truth-aware synthetic fixture milestones
+docs/dense_surface_synthetic_expansion_plan.md Completed truth-aware synthetic fixture milestones
 docs/cross_system_acceleration_report.md Cross-system CPU/thread/GPU decision record
 docs/performance_optimization_workplan.md Viewer/backend optimization packs
+docs/multi_image_surface_reconstruction_workplan.md Active consolidated multi-image/SDK/surface roadmap
+docs/matlab_sdk_audit.md          Completed MATLAB public/headless API inventory
 docs/project_status.md           Current completion state and outstanding work
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
 artifacts/viewer_performance/ Ignored viewer benchmark output directory

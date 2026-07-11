@@ -97,9 +97,14 @@ graphics-free runtime controller.
 ## Current Implementation Queue
 
 The completed read-only MATLAB SDK entry-point inventory, proposed reuse points,
-and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The new
-correction-result lifecycle and dense-matcher extension contracts remain
-planning-only and are not implemented.
+and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The
+approved consolidated implementation queue is now
+`docs/multi_image_surface_reconstruction_workplan.md`. MI-0 through MI-3 and
+the SDK audit are complete; the next ordered packs are pair viewpoint,
+focus-aware keyboard remapping, manual motion imagery, and measured motion
+playback. Correction SDK, global multi-image solving, precision validation,
+dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow
+in the explicit dependency order recorded there.
 
 The cross-system pass retained CPU viewer/alignment paths, preserved the Pack 2
 prerequisite for backend threading, and added optional capability-checked GPU
@@ -184,10 +189,11 @@ The remaining external gates require target hardware:
 The Windows viewer/GPU gates remain explicitly unclaimed on the current macOS
 development system.
 
-## Deferred Or Decision-Gated Work
+## Later, Evidence-Gated, Or Hardware-Gated Work
 
-The following are documented possibilities, not an approved implementation
-queue:
+The consolidated multi-image workplan approves the architecture and order for
+many of these items, while their execution remains later, evidence-gated, or
+hardware-gated:
 
 - calibrated or spatially varying stereo rectification, confidence/uncertainty,
   consistency filtering, cleanup, smoothing, and export for dense surfaces;
@@ -213,6 +219,12 @@ queue:
   inputs/outputs in memory and perform one final TIFF/PNG write.
 
 ## Sources Of Truth
+
+- `docs/multi_image_surface_reconstruction_workplan.md` — active ordered
+  multi-image viewer/alignment, MATLAB SDK, dense reconstruction, uncertainty,
+  DEM registration, precision, mathematical-specification, CUDA, and C++ plan.
+- `docs/matlab_sdk_audit.md` — completed inventory of current public/headless
+  entry points, reuse candidates, and compatibility risks feeding the SDK plan.
 
 - `docs/viewer_development_plan.md` — architecture, historical viewer/backend
   milestones, and broader roadmap topics.
