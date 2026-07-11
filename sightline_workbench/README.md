@@ -79,9 +79,9 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete;
-- the latest fresh-class repository validation passes all 443 tests;
-- dense-surface synthetic Milestones 1-3 are complete, and navigation
-  error-state presets and reported-geometry variants are next; and
+- the latest fresh-class repository validation passes all 451 tests;
+- dense-surface synthetic Milestones 1-4 are complete, and truth-aware
+  alignment/dense-surface acceptance is next; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -201,7 +201,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 443 passing tests with no failures or incomplete tests.
+baseline is 451 passing tests with no failures or incomplete tests.
 
 ## Dense-Surface Synthetic Fixture
 
@@ -252,6 +252,16 @@ memory, visibility, and per-view diagnostics.
 result = ProjectionDenseSurfaceSyntheticGenerator.runFile( ...
     fullfile("config", "dense_surface_synthetic.local.json"));
 ```
+
+Milestone 4 adds `ProjectionDenseSurfaceSyntheticNavigation`. It propagates one
+correlated sortie error state with configured gyro/accelerometer bias, random
+walk, and nominal GNSS position/velocity aiding for generic Tactical Grade IMU
+and Navigation Grade IMU presets. Each preset exposes pointing-only and
+combined-navigation-error `SampleFcn`/continuous-ray geometry. All variants
+reference the same truth image set and contain no image payload. Their runtime
+closures capture reported trajectory models only, so terrain and truth
+structures do not enter viewer geometry. Compact ignored MAT/JSON artifacts
+record deterministic statistics and preset ordering.
 
 ## Viewer Performance Evaluation
 
@@ -870,9 +880,9 @@ provide `BackendSource=struct(Kind="tiff",Path=...)`; each serial output tile
 reads only the required source bounding region. Runtime provider images/caches
 remain in the render plan, never the serializable scene descriptor. MATLAB TIFF
 region reads are unsupported on thread workers, so file-backed sources
-currently require serial execution. Dense-surface synthetic navigation
-error-state variants are now the active queue; the private configuration and
-ordered public contract are described in
+currently require serial execution. Dense-surface synthetic alignment and
+dense-surface acceptance are now the active queue; the private configuration
+and ordered public contract are described in
 `docs/dense_surface_synthetic_expansion_plan.md`.
 See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output

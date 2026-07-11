@@ -1,6 +1,6 @@
 # Dense-Surface Synthetic Expansion Plan
 
-Status: approved for implementation. Milestones 1-3 are complete; Milestone 4
+Status: approved for implementation. Milestones 1-4 are complete; Milestone 5
 is the active queue after completion of Backend Performance Packs 0-5. Fixture
 inputs and modeling decisions remain in the local ignored configuration.
 
@@ -258,13 +258,21 @@ files are written only after image completion. The configured full-scale run
 completed with full valid coverage and exact readback; its ignored MAT/JSON
 artifacts are compact and contain no full image arrays.
 
-### Milestone 4: Navigation Presets And Scene Variants
+### Milestone 4: Navigation Presets And Scene Variants — Complete
 
 - Add the generic tactical- and navigation-grade error-state presets.
 - Add nominal non-RTK GNSS aiding and one-sortie error correlation.
 - Produce pointing-only and combined-error source-geometry variants without
   duplicating truth imagery.
 - Add deterministic statistics and grade-ordering tests.
+
+Implemented by `ProjectionDenseSurfaceSyntheticNavigation`. A compact
+single-sortie error state propagates configured inertial biases and random walks
+between correlated nominal GNSS position/velocity updates. Both generic IMU
+grades expose pointing-only and combined-navigation-error source geometry with
+grid and continuous observation samplers. The configured run preserves expected
+grade ordering. Variants contain only a shared image reference and reported
+trajectory closures; they neither duplicate imagery nor capture truth payloads.
 
 ### Milestone 5: Alignment And Dense-Surface Acceptance
 

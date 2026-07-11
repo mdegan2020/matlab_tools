@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 443/443 tests with zero
+- The latest fresh-class repository suite passes 451/451 tests with zero
   failures and zero incomplete tests.
 
 ## Completed Feature Trees
@@ -39,7 +39,7 @@ As of July 11, 2026:
 | Viewer Orientation and Anaglyph Presentation Pack | Complete |
 | Alignment Workbench Usability and Offset-Semantics Pack | Complete |
 | Cross-System Acceleration Pass | Complete |
-| Dense-Surface Synthetic Expansion Milestones 1-3 | Complete |
+| Dense-Surface Synthetic Expansion Milestones 1-4 | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -88,7 +88,7 @@ provenance summaries, and in-memory/file-backed numerical parity. MATLAB TIFF
 region reads require serial execution because their internal reader is not
 supported on thread workers.
 
-The remaining implementation queue is Milestones 4-5 of the approved
+The remaining implementation queue is Milestone 5 of the approved
 dense-surface synthetic expansion. Required fixture decisions are captured in
 an ignored local JSON configuration. Actual sensor and geometry values must
 remain out of committed documentation.
@@ -109,9 +109,12 @@ remain out of committed documentation.
    single-band images in bounded internal chunks, retains them in memory, and
    writes final TIFF/PNG plus compact image-free MAT/JSON artifacts. The
    configured run completed with full valid coverage and exact file readback.
-4. **Navigation presets and scene variants.** Add generic Tactical Grade IMU
-   and Navigation Grade IMU error-state presets with nominal non-RTK GNSS
-   aiding, plus pointing-only and combined-error acceptance variants.
+4. **Navigation presets and scene variants — complete.** One correlated sortie
+   timeline propagates configured inertial bias/random-walk terms with nominal
+   GNSS position/velocity aiding. Generic Tactical Grade IMU and Navigation
+   Grade IMU presets each provide pointing-only and combined-error reported
+   geometry. Variants share an image reference and contain no image payload or
+   truth structure; deterministic statistics preserve expected grade ordering.
 5. **Alignment and dense-surface acceptance.** Run the existing staged
    alignment and dense extraction against known truth, record the first
    full-scale evidence package, and propose numerical thresholds separately.
