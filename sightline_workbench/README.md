@@ -78,8 +78,8 @@ The current implementation baseline is summarized in
   0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the Viewer
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
-  are complete; Multi-Image Foundation MI-0 is also complete;
-- the latest fresh-class repository validation passes all 468 tests;
+  are complete; Multi-Image Foundation MI-0 and MI-1 are also complete;
+- the latest fresh-class repository validation passes all 477 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -202,7 +202,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 468 passing tests with no failures or incomplete tests.
+baseline is 477 passing tests with no failures or incomplete tests.
 
 ## Dense-Surface Synthetic Fixture
 
@@ -809,6 +809,13 @@ missing pass IDs place all views in `pass-default`. Timing remains optional and
 reports an explicit unavailable status until both acquisition start and line
 rate are present. `ProjectionViewMetadata.sampleLineTimes` supports relative
 numeric/duration starts and absolute `datetime` values with or without UTC.
+
+`ProjectionPairController` provides the runtime-only, graphics-independent pair
+schedule used by multi-image inspection. It keeps unordered pair identity
+separate from moving/reference roles, orders same-pass temporal neighbors before
+same-pass chords and cross-pass pairs, skips disabled pairs during ordinary
+stepping, and includes them only in explicit review mode. The schedule changes
+only when `regenerate` is called; layer reorder merely refreshes current indices.
 
 The viewer frame camera is placed at the arithmetic mean of the per-layer
 `NominalSceneCenter` vectors and looks toward the supplied projection plane.

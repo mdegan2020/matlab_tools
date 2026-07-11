@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 468/468 tests with zero
+- The latest fresh-class repository suite passes 477/477 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -46,6 +46,7 @@ As of July 11, 2026:
 | Dense-Surface Synthetic Milestone 5 implementation/evidence | Complete |
 | Dense-Surface Synthetic acceptance-threshold proposal | Complete |
 | Multi-Image Foundation MI-0 | Complete |
+| Multi-Image Foundation MI-1 | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,

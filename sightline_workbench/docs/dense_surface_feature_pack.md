@@ -147,5 +147,5 @@ results = runTests;
 ```
 
 The completed Pack 1 fresh-class run passed all 386 repository tests at that
-milestone. The current fresh-class repository baseline is 468/468 after
-multi-image foundation MI-0; the dense-surface contract remains unchanged.
+milestone. The current fresh-class repository baseline is 477/477 after
+multi-image foundation MI-1; the dense-surface contract remains unchanged.
