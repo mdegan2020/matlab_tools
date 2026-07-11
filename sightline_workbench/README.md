@@ -78,8 +78,8 @@ The current implementation baseline is summarized in
   0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the Viewer
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
-  are complete; Multi-Image Foundation MI-0 through MI-2 are also complete;
-- the latest fresh-class repository validation passes all 486 tests;
+  are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
+- the latest fresh-class repository validation passes all 496 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -202,7 +202,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 486 passing tests with no failures or incomplete tests.
+baseline is 496 passing tests with no failures or incomplete tests.
 
 ## Dense-Surface Synthetic Fixture
 
@@ -824,6 +824,14 @@ applying corrections, or rebuilding projection geometry. Solo mode is keyed by
 stable view IDs, follows pair changes, leaves serialized visibility untouched,
 and restores every surviving layer's prior visibility when disabled or when the
 workbench/viewer closes.
+
+Stereo-eye assignment is independent of moving/reference roles and layer order.
+For each rendered stereo pair, the viewer projects the existing center-column
+`ReferenceOrigin` samples onto camera horizontal, assigns red to the physical
+left eye, and retains the prior result inside a small head-on hysteresis band.
+The Workbench shows the current red/left view and offers pair-specific
+`Swap eyes` and `Reset eyes` controls; these overrides are runtime-only and
+never enter serialized viewer or backend state.
 
 The viewer frame camera is placed at the arithmetic mean of the per-layer
 `NominalSceneCenter` vectors and looks toward the supplied projection plane.

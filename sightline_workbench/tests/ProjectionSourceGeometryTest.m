@@ -61,6 +61,20 @@ classdef ProjectionSourceGeometryTest < matlab.unittest.TestCase
                 AbsTol=ProjectionSourceGeometryTest.Tol);
         end
 
+        function testReferenceOriginUsesCenterColumnSample(testCase)
+            [imageSize, rowPosts, columnPosts, origins, viewVectors] = ...
+                ProjectionSourceGeometryTest.makeGridInputs();
+
+            sourceGeometry = ProjectionSourceGeometry.fromGrid( ...
+                imageSize, rowPosts, columnPosts, origins, viewVectors);
+            centerColumn = (imageSize(2) + 1) / 2;
+            expectedOrigin = interp1(columnPosts, origins.', ...
+                centerColumn, "linear").';
+
+            testCase.verifyEqual(sourceGeometry.ReferenceOrigin, ...
+                expectedOrigin, AbsTol=ProjectionSourceGeometryTest.Tol);
+        end
+
         function testFromGridEstimatesPerPixelIfovFromPostSpacing(testCase)
             imageSize = [9 13];
             rowPosts = [1 5 9];

@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 486/486 tests with zero
+- The latest fresh-class repository suite passes 496/496 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -30,6 +30,9 @@ As of July 11, 2026:
   stable-ID runtime Solo-pair visibility without changing serialized scene
   visibility, matching state, corrections, or projection caches during pair
   navigation.
+- Multi-image foundation MI-3 separates physical stereo eyes from
+  moving/reference roles and layer order, preserves red-left assignment with
+  head-on hysteresis, and provides runtime-only manual swap/reset controls.
 
 ## Completed Feature Trees
 
@@ -52,6 +55,7 @@ As of July 11, 2026:
 | Multi-Image Foundation MI-0 | Complete |
 | Multi-Image Foundation MI-1 | Complete |
 | Multi-Image Foundation MI-2 | Complete |
+| Multi-Image Foundation MI-3 | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -83,6 +87,12 @@ Swap and deterministic schedule navigation, pair status/enablement, and Solo
 pair presentation. The Solo snapshot is runtime-only, follows the selected
 pair, retains overlays, and restores surviving layers by stable `ViewId` on
 explicit exit or workbench/viewer close.
+
+Multi-image MI-3 reuses the existing center-column `ReferenceOrigin` rule for
+representative sensor locations. Eye assignment projects those origins onto
+camera horizontal, keeps red on the physical left, retains prior identity near
+head-on degeneracy, and stores pair-specific manual overrides only in a
+graphics-free runtime controller.
 
 ## Current Implementation Queue
 

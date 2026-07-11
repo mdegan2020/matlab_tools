@@ -143,6 +143,9 @@ classdef ProjectionViewerApp < handle
         AlignmentPairStatusLabel matlab.ui.control.Label
         AlignmentPairEnabledCheckBox matlab.ui.control.StateButton
         AlignmentSoloPairCheckBox matlab.ui.control.StateButton
+        AlignmentSwapEyesButton matlab.ui.control.Button
+        AlignmentResetEyesButton matlab.ui.control.Button
+        AlignmentStereoEyeStatusLabel matlab.ui.control.Label
         AlignmentPresetDropDown matlab.ui.control.DropDown
         AlignmentScopeDropDown matlab.ui.control.DropDown
         AlignmentDetectorDropDown matlab.ui.control.DropDown
@@ -171,6 +174,7 @@ classdef ProjectionViewerApp < handle
         AlignmentMatchTable matlab.ui.control.Table
         AlignmentSession
         AlignmentPairController
+        StereoEyeController
         AlignmentSoloState struct = struct()
         AlignmentOverlayLines = gobjects(0)
         AlignmentSelectedMatchOverlay = gobjects(0)
@@ -234,6 +238,7 @@ classdef ProjectionViewerApp < handle
                 app.PreviewSampleCacheMaxBytes);
             app.SelectedLayerIndex = numel(app.Scene.layers);
             app.AlignmentPairController = ProjectionPairController(app.Scene);
+            app.StereoEyeController = ProjectionStereoEyeController();
             if numel(app.Scene.layers) > 1
                 referenceIndex = ceil(numel(app.Scene.layers) / 2);
                 movingIndex = app.SelectedLayerIndex;
@@ -391,6 +396,7 @@ classdef ProjectionViewerApp < handle
                 ProjectionSoloPairVisibility.isActive(app.AlignmentSoloState);
             diagnostics.EffectiveLayerVisibility = ...
                 app.effectiveLayerVisibilityMask();
+            diagnostics.StereoEyes = app.activeStereoEyeAssignment();
 
             try
                 request = app.currentAlignmentRequest();
@@ -1227,10 +1233,10 @@ classdef ProjectionViewerApp < handle
                 Tag="ProjectionViewerAlignmentActivePairPanel");
             activePairPanel.Layout.Row = 2;
             activePairPanel.Layout.Column = [1 2];
-            activePairGrid = uigridlayout(activePairPanel, [2 8]);
+            activePairGrid = uigridlayout(activePairPanel, [2 10]);
             activePairGrid.RowHeight = {"fit", "fit"};
-            activePairGrid.ColumnWidth = {70, "1x", "1x", 70, 70, ...
-                95, 95, "1.4x"};
+            activePairGrid.ColumnWidth = {65, "1x", "1x", 60, 60, ...
+                90, 80, 80, 80, "1.3x"};
             activePairGrid.Padding = [8 4 8 6];
             activePairGrid.ColumnSpacing = 8;
             app.AlignmentPreviousPairButton = uibutton(activePairGrid, ...
@@ -1273,11 +1279,30 @@ classdef ProjectionViewerApp < handle
                 ValueChangedFcn=@(~, ~) app.alignmentSoloPairChanged());
             app.AlignmentSoloPairCheckBox.Layout.Row = 2;
             app.AlignmentSoloPairCheckBox.Layout.Column = 7;
+            app.AlignmentSwapEyesButton = uibutton(activePairGrid, ...
+                Text="Swap eyes", ...
+                Tooltip="Manually swap left/right eyes for this pair", ...
+                Tag="ProjectionViewerAlignmentSwapEyesButton", ...
+                ButtonPushedFcn=@(~, ~) app.swapAlignmentStereoEyes());
+            app.AlignmentSwapEyesButton.Layout.Row = 2;
+            app.AlignmentSwapEyesButton.Layout.Column = 8;
+            app.AlignmentResetEyesButton = uibutton(activePairGrid, ...
+                Text="Reset eyes", ...
+                Tooltip="Restore automatic geometric eye assignment", ...
+                Tag="ProjectionViewerAlignmentResetEyesButton", ...
+                ButtonPushedFcn=@(~, ~) app.resetAlignmentStereoEyes());
+            app.AlignmentResetEyesButton.Layout.Row = 2;
+            app.AlignmentResetEyesButton.Layout.Column = 9;
             app.AlignmentPairStatusLabel = uilabel(activePairGrid, ...
                 Text="No active pair", ...
                 Tag="ProjectionViewerAlignmentPairStatusLabel");
-            app.AlignmentPairStatusLabel.Layout.Row = [1 2];
-            app.AlignmentPairStatusLabel.Layout.Column = 8;
+            app.AlignmentPairStatusLabel.Layout.Row = 1;
+            app.AlignmentPairStatusLabel.Layout.Column = 10;
+            app.AlignmentStereoEyeStatusLabel = uilabel(activePairGrid, ...
+                Text="Eyes unavailable", ...
+                Tag="ProjectionViewerAlignmentStereoEyeStatusLabel");
+            app.AlignmentStereoEyeStatusLabel.Layout.Row = 2;
+            app.AlignmentStereoEyeStatusLabel.Layout.Column = 10;
 
             setupPanel = uipanel(app.AlignmentGrid, ...
                 Title="1. Setup and matching inputs", ...
@@ -1484,37 +1509,48 @@ classdef ProjectionViewerApp < handle
                 return
             end
             viewIds = ProjectionViewMetadata.ids(app.Scene);
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
             app.AlignmentPairController.selectViews( ...
                 viewIds(referenceIndex), viewIds(movingIndex));
-            app.activeAlignmentPairChanged();
+            app.activeAlignmentPairChanged(oldPresentationOffsets);
             selected = true;
         end
 
         function swapAlignmentActivePair(app)
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
             app.AlignmentPairController.swapRoles();
-            app.activeAlignmentPairChanged();
+            app.activeAlignmentPairChanged(oldPresentationOffsets);
         end
 
         function stepAlignmentActivePair(app, direction)
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
             if direction > 0
                 [~, changed] = app.AlignmentPairController.stepNext();
             else
                 [~, changed] = app.AlignmentPairController.stepPrevious();
             end
             if changed
-                app.activeAlignmentPairChanged();
+                app.activeAlignmentPairChanged(oldPresentationOffsets);
             else
                 app.refreshAlignmentActivePairControls();
             end
         end
 
-        function activeAlignmentPairChanged(app)
+        function activeAlignmentPairChanged(app, oldPresentationOffsets)
+            if nargin < 2
+                oldPresentationOffsets = app.anaglyphPresentationOffsets();
+            end
             pair = app.AlignmentPairController.currentPair();
             if ProjectionSoloPairVisibility.isActive(app.AlignmentSoloState)
                 app.AlignmentSoloState = ProjectionSoloPairVisibility.follow( ...
                     app.AlignmentSoloState, app.Scene, ...
                     pair.ReferenceViewId, pair.MovingViewId);
                 app.applyAlignmentSoloPresentation();
+            end
+            if app.visibleAnaglyphLayerCount() == 2
+                app.updateAllSurfaceBlendAppearance();
+                app.applyAnaglyphPresentationOffsetDelta( ...
+                    oldPresentationOffsets);
             end
             app.refreshAlignmentActivePairControls();
             app.refreshAlignmentOverlays(true);
@@ -1531,6 +1567,8 @@ classdef ProjectionViewerApp < handle
                 app.AlignmentPairStatusLabel.Text = "No active pair";
                 app.AlignmentPairEnabledCheckBox.Enable = "off";
                 app.AlignmentSoloPairCheckBox.Enable = "off";
+                app.AlignmentSwapEyesButton.Enable = "off";
+                app.AlignmentResetEyesButton.Enable = "off";
                 return
             end
             if pair.ViewsAvailable
@@ -1549,6 +1587,60 @@ classdef ProjectionViewerApp < handle
                 any(find(enabled) < pairIndex));
             app.AlignmentNextPairButton.Enable = app.onOff( ...
                 any(find(enabled) > pairIndex));
+            app.refreshAlignmentStereoEyeStatus();
+        end
+
+        function refreshAlignmentStereoEyeStatus(app)
+            if isempty(app.AlignmentStereoEyeStatusLabel) || ...
+                    ~isvalid(app.AlignmentStereoEyeStatusLabel)
+                return
+            end
+            assignment = app.activeStereoEyeAssignment();
+            available = isfield(assignment, "LeftViewId") && ...
+                strlength(assignment.LeftViewId) > 0;
+            app.AlignmentSwapEyesButton.Enable = app.onOff(available);
+            app.AlignmentResetEyesButton.Enable = app.onOff( ...
+                available && assignment.ManualOverride);
+            if ~available
+                app.AlignmentStereoEyeStatusLabel.Text = "Eyes unavailable";
+                return
+            end
+            if assignment.ManualOverride
+                modeText = "manual override";
+            elseif assignment.IsDegenerate
+                modeText = "auto, hysteresis";
+            else
+                modeText = "automatic";
+            end
+            app.AlignmentStereoEyeStatusLabel.Text = char( ...
+                "Red/left: " + assignment.LeftViewId + " (" + ...
+                modeText + ")");
+        end
+
+        function swapAlignmentStereoEyes(app)
+            inputs = app.activeStereoEyeInputs();
+            if ~inputs.Available
+                return
+            end
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
+            app.StereoEyeController.swapManual(inputs.PairId, ...
+                inputs.ViewIds, inputs.Origins, inputs.CameraRightVector);
+            app.updateAllSurfaceBlendAppearance();
+            app.applyAnaglyphPresentationOffsetDelta(oldPresentationOffsets);
+            app.refreshAlignmentStereoEyeStatus();
+        end
+
+        function resetAlignmentStereoEyes(app)
+            inputs = app.activeStereoEyeInputs();
+            if ~inputs.Available
+                return
+            end
+            oldPresentationOffsets = app.anaglyphPresentationOffsets();
+            app.StereoEyeController.resetManual(inputs.PairId, ...
+                inputs.ViewIds, inputs.Origins, inputs.CameraRightVector);
+            app.updateAllSurfaceBlendAppearance();
+            app.applyAnaglyphPresentationOffsetDelta(oldPresentationOffsets);
+            app.refreshAlignmentStereoEyeStatus();
         end
 
         function alignmentPairEnabledChanged(app)
@@ -6915,23 +7007,62 @@ classdef ProjectionViewerApp < handle
             if numel(anaglyphLayers) ~= 2
                 return
             end
-
+            viewIds = ProjectionViewMetadata.ids(app.Scene);
+            visibleViewIds = viewIds(anaglyphLayers);
+            identity = ProjectionViewMetadata.pairIdentity( ...
+                visibleViewIds(1), visibleViewIds(2));
             origins = app.layerViewOrigins(anaglyphLayers);
             if any(~isfinite(origins), "all")
                 return
             end
-            baseline = origins(:, 2) - origins(:, 1);
-            projectedBaseline = ...
-                app.anaglyphPresentationRightVector().' * baseline;
-            tolerance = 1e-12 * max(1, norm(baseline));
-            if abs(projectedBaseline) <= tolerance
+            assignment = app.StereoEyeController.resolve( ...
+                identity.PairId, visibleViewIds, ...
+                origins, ...
+                app.anaglyphPresentationRightVector());
+            leftIndex = find(visibleViewIds == assignment.LeftViewId, ...
+                1, "first");
+            rightIndex = find(visibleViewIds == assignment.RightViewId, ...
+                1, "first");
+            channelAssignments(anaglyphLayers(leftIndex)) = 1;
+            channelAssignments(anaglyphLayers(rightIndex)) = 3;
+        end
+
+        function assignment = activeStereoEyeAssignment(app)
+            inputs = app.activeStereoEyeInputs();
+            if ~inputs.Available
+                assignment = struct( ...
+                    PairId="", LeftViewId="", RightViewId="", ...
+                    RedViewId="", CyanViewId="", Mode="unavailable", ...
+                    Status="unavailable", IsDegenerate=false, ...
+                    ProjectionRatio=NaN, ...
+                    HysteresisRatio=app.StereoEyeController.HysteresisRatio, ...
+                    ManualOverride=false);
                 return
             end
-            if projectedBaseline > 0
-                channelAssignments(anaglyphLayers) = [1 3];
-            else
-                channelAssignments(anaglyphLayers) = [3 1];
+            assignment = app.StereoEyeController.resolve( ...
+                inputs.PairId, inputs.ViewIds, inputs.Origins, ...
+                inputs.CameraRightVector);
+        end
+
+        function inputs = activeStereoEyeInputs(app)
+            inputs = struct(Available=false, PairId="", ...
+                ViewIds=strings(1, 0), Origins=zeros(3, 0), ...
+                CameraRightVector=zeros(3, 1));
+            pair = app.AlignmentPairController.currentPair();
+            if ~isfield(pair, "ViewsAvailable") || ~pair.ViewsAvailable
+                return
             end
+            layerIndices = [pair.ReferenceLayerIndex pair.MovingLayerIndex];
+            origins = app.layerViewOrigins(layerIndices);
+            if any(~isfinite(origins), "all")
+                return
+            end
+            inputs.Available = true;
+            inputs.PairId = pair.PairId;
+            inputs.ViewIds = [pair.ReferenceViewId pair.MovingViewId];
+            inputs.Origins = origins;
+            inputs.CameraRightVector = ...
+                app.anaglyphPresentationRightVector();
         end
 
         function count = visibleAnaglyphLayerCount(app)
@@ -7261,6 +7392,7 @@ classdef ProjectionViewerApp < handle
             app.cancelCameraReconciliation();
             app.Scene = app.ResetScene;
             app.AlignmentPairController.regenerate(app.Scene);
+            app.StereoEyeController = ProjectionStereoEyeController();
             app.SelectedLayerIndex = numel(app.Scene.layers);
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
