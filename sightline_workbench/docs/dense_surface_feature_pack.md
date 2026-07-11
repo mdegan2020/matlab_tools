@@ -1,9 +1,8 @@
 # Dense Surface Feature Pack
 
 Status: Pack 1 is complete. The representative synthetic image/geometry
-expansion implementation and first truth-aware evidence run are complete; its
-separate numerical-threshold proposal remains under review. The ordered,
-privacy-preserving milestones are defined in
+expansion, first truth-aware evidence run, and separate numerical-threshold
+proposal are complete. The ordered, privacy-preserving milestones are defined in
 `docs/dense_surface_synthetic_expansion_plan.md`. Other follow-up candidates
 below remain decision-gated; see `docs/project_status.md`.
 

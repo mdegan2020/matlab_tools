@@ -41,6 +41,7 @@ As of July 11, 2026:
 | Cross-System Acceleration Pass | Complete |
 | Dense-Surface Synthetic Expansion Milestones 1-4 | Complete |
 | Dense-Surface Synthetic Milestone 5 implementation/evidence | Complete |
+| Dense-Surface Synthetic acceptance-threshold proposal | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -67,7 +68,7 @@ records the projection-offset decision: offsets remain post-intersection
 projection-plane registration terms, affect plane-coordinate products, and do
 not alter source origins, forward-ray metrics, or coplanarity.
 
-## Active Implementation Queue
+## Current Implementation Queue
 
 The cross-system pass retained CPU viewer/alignment paths, preserved the Pack 2
 prerequisite for backend threading, and added optional capability-checked GPU
@@ -89,10 +90,11 @@ provenance summaries, and in-memory/file-backed numerical parity. MATLAB TIFF
 region reads require serial execution because their internal reader is not
 supported on thread workers.
 
-The remaining review item is the separate numerical-threshold proposal for
-Milestone 5 of the approved dense-surface synthetic expansion. Required fixture
-decisions are captured in an ignored local JSON configuration. Actual sensor
-and geometry values remain out of committed documentation.
+The approved dense-surface synthetic expansion has no remaining implementation
+milestone. Required fixture decisions are captured in an ignored local JSON
+configuration. Actual sensor and geometry values remain out of committed
+documentation. Proposed evidence thresholds are documented separately and are
+not yet enforced by code.
 
 1. **Configuration and feasibility — complete.** Strict schema/path validation,
    explicit body/world and roll-then-pitch gimbal transforms, full-ray projected
@@ -116,14 +118,14 @@ and geometry values remain out of committed documentation.
    Grade IMU presets each provide pointing-only and combined-error reported
    geometry. Variants share an image reference and contain no image payload or
    truth structure; deterministic statistics preserve expected grade ordering.
-5. **Alignment and dense-surface acceptance — implementation and first evidence
-   complete.** Reported-only scenes now run through the existing staged
+5. **Alignment and dense-surface acceptance — complete.** Reported-only scenes
+   now run through the existing staged
    alignment, fixed-reference differential OPK solve, safe-apply policy, and
    dense extraction. Truth diagnostics are computed afterward on mutually
    visible terrain. The configured evidence contains four completed alignment
    runs, four successful dense products, exact two-pass repeatability, and
-   compact ignored MAT/JSON artifacts. Numerical thresholds remain a separate
-   reviewable documentation change.
+   compact ignored MAT/JSON artifacts. Conservative numerical thresholds are
+   proposed in a separate reviewable document without changing runtime policy.
 
 See `docs/dense_surface_synthetic_expansion_plan.md` for the complete ordered
 contract.
@@ -196,4 +198,6 @@ queue:
   milestones.
 - `docs/dense_surface_synthetic_acceptance_report.md` — first full-scale
   privacy-preserving acceptance evidence and interpretation.
+- `docs/dense_surface_synthetic_acceptance_thresholds.md` — proposed primary
+  fixture gates derived from the first repeatable evidence package.
 - `docs/alignment_operator_guide.md` — current staged operator workflow.

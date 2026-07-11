@@ -1,9 +1,9 @@
 # Dense-Surface Synthetic Expansion Plan
 
-Status: approved for implementation. Milestones 1-4 and the Milestone 5
-implementation/first evidence run are complete. The separately reviewable
-numerical-threshold proposal remains. Fixture inputs and modeling decisions
-remain in the local ignored configuration.
+Status: complete. Milestones 1-5 and the separately reviewable numerical-
+threshold proposal are complete. Fixture inputs and modeling decisions remain
+in the local ignored configuration. Proposed thresholds remain documentation-
+only until explicitly adopted as an automated gate.
 
 ## Purpose
 
@@ -294,8 +294,9 @@ error statistics. The ignored configured evidence contains four completed
 alignment runs, four successful dense products, and exact two-pass
 repeatability. The compact MAT/JSON package records runtime and memory evidence
 without embedding image arrays. See
-`docs/dense_surface_synthetic_acceptance_report.md`; numerical thresholds are
-intentionally deferred to the next separate documentation change.
+`docs/dense_surface_synthetic_acceptance_report.md`. Conservative numerical
+thresholds are proposed separately in
+`docs/dense_surface_synthetic_acceptance_thresholds.md`.
 
 ## Deferred Expansion
 

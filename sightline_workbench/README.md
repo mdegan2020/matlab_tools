@@ -80,9 +80,9 @@ The current implementation baseline is summarized in
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete;
 - the latest fresh-class repository validation passes all 457 tests;
-- dense-surface synthetic Milestones 1-4 and the Milestone 5 implementation
-  and first evidence run are complete; the separate threshold proposal is the
-  remaining review item; and
+- all dense-surface synthetic milestones and the separate numerical-threshold
+  proposal are complete; proposed limits remain documentation-only until they
+  are explicitly adopted as an automated gate; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -273,7 +273,8 @@ Source-row/source-column maps retained by the dense extractor allow truth
 height and ray-separation checks on mutually visible terrain while reporting
 occlusion exclusions separately. `runRepeatable` executes two complete passes
 and records exact agreement before writing compact ignored MAT/JSON evidence.
-See `docs/dense_surface_synthetic_acceptance_report.md`.
+See `docs/dense_surface_synthetic_acceptance_report.md` and
+`docs/dense_surface_synthetic_acceptance_thresholds.md`.
 
 ## Viewer Performance Evaluation
 
@@ -893,9 +894,9 @@ reads only the required source bounding region. Runtime provider images/caches
 remain in the render plan, never the serializable scene descriptor. MATLAB TIFF
 region reads are unsupported on thread workers, so file-backed sources
 currently require serial execution. Dense-surface synthetic alignment and
-dense-surface acceptance evidence are complete; only the separate threshold
-proposal remains under review. The private configuration and ordered public
-contract are described in
+dense-surface acceptance evidence and the separate threshold proposal are
+complete. The private configuration and ordered public contract are described
+in
 `docs/dense_surface_synthetic_expansion_plan.md`.
 See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output

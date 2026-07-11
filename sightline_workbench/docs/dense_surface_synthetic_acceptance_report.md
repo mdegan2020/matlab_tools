@@ -1,7 +1,7 @@
 # Dense-Surface Synthetic Acceptance Report
 
-Status: first full-scale evidence complete. Numerical thresholds are deferred
-to a separate reviewable documentation change.
+Status: first full-scale evidence complete. Numerical thresholds are proposed
+in a separate reviewable documentation change.
 
 ## Scope And Privacy
 
@@ -76,5 +76,6 @@ The first run also confirms that dense error must be evaluated only after
 mapping retained dense samples back to both source images. Treating every
 disparity as visible truth would incorrectly penalize terrain occlusion.
 
-The next reviewable change proposes conservative thresholds derived from these
-results. It does not reveal or freeze the private fixture inputs.
+The separately committed threshold proposal derives conservative limits from
+these results without revealing or freezing private fixture inputs. See
+`docs/dense_surface_synthetic_acceptance_thresholds.md`.
