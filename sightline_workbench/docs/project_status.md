@@ -96,6 +96,11 @@ graphics-free runtime controller.
 
 ## Current Implementation Queue
 
+The completed read-only MATLAB SDK entry-point inventory, proposed reuse points,
+and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The new
+correction-result lifecycle and dense-matcher extension contracts remain
+planning-only and are not implemented.
+
 The cross-system pass retained CPU viewer/alignment paths, preserved the Pack 2
 prerequisite for backend threading, and added optional capability-checked GPU
 SGM with CPU fallback. See `docs/cross_system_acceleration_report.md`.
