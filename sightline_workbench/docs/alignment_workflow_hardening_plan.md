@@ -1411,6 +1411,15 @@ Decided:
 
 Deferred:
 
+- Alignment Workbench control grouping, labels, button order, and diagnostic
+  text layout should receive a usability pass. Preserve the staged Match,
+  Filter, Solve, Preview, Apply, Revert, and Clear semantics unless a separate
+  design decision changes them.
+- WASD/projection-offset semantics need a focused evaluation against
+  epipolar/coplanarity and forward-ray filtering. The current offset is a
+  post-intersection projection-plane translation; do not change it to a
+  source-origin adjustment without compatibility tests and an explicit
+  geometry-model decision.
 - DEM/terrain-constrained adjustment is out of scope for Reliability Packs
   0-8. It may be reconsidered later as an optional absolute constraint and
   must not be assumed available by the solver.

@@ -93,7 +93,9 @@ reported in Alignment Workbench status/diagnostics.
   backend jobs and cannot affect backend output.
 - Backend processing remains full-source inverse warp at its configured output
   resolution.
-- CPU support is mandatory; GPU support is neither required nor implemented.
+- CPU support is mandatory. Optional GPU support is a selected follow-up only
+  if target MATLAB `disparitySGM` behavior accepts `gpuArray` inputs and CPU
+  equivalence remains tested.
 - No process-based pool is created. If later profiling justifies parallelism,
   only `parpool("threads")` is permitted.
 
@@ -118,6 +120,10 @@ This is a starting point, not calibrated general stereo rectification.
   add rectification-quality diagnostics and adjustable options, and validate
   against representative oblique real data before promoting the product beyond
   exploratory visualization.
+- A representative synthetic image/geometry fixture expansion is queued at low
+  priority. The user will provide desired output dimensions and rough sensor
+  azimuth/elevation/range; the tooling should derive the remaining geometry
+  and radiometry details for better surface-extraction validation.
 
 ## Validation
 

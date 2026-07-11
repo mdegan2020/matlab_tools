@@ -52,21 +52,49 @@ scalar single-band textures, and the decision to keep raster preview optional.
 
 ## Active Implementation Queue
 
-The only ordered, explicitly selected implementation queue remaining in the
-committed workplans is Backend Performance Packs 2-5:
+The newly selected queue puts viewer orientation, stereo presentation, alignment
+usability, and cross-system acceleration ahead of the remaining backend
+performance packs where that is sensible. Backend thread/GPU work must still
+respect the bounded-streaming dependencies below.
 
-1. **Backend Performance Pack 2 — Bounded serial streaming.** Incrementally
+1. **Viewer orientation and anaglyph presentation pack.** Extend twist control
+   range to `+/-85` degrees; improve real-data default camera orientation so an
+   explicitly supplied oblique projection plane appears naturally "up" on the
+   monitor; infer two-image left/right eye assignment from the sensor baseline
+   projected into the current view, with left eye rendered red; add
+   display-only anaglyph stereo exaggeration and in/out presentation controls;
+   and brighten anaglyph mode without replacing the production render path.
+2. **Alignment workbench usability and offset-semantics pack.** Rearrange and
+   relabel Alignment Workbench controls and diagnostics while preserving staged
+   workflow semantics. Evaluate whether the current WASD/projection-offset
+   translation after planar intersection remains physically appropriate for
+   epipolar/ray filtering, or whether a source-origin adjustment model is
+   needed. Do not change this semantics without focused tests and an explicit
+   compatibility decision.
+3. **Cross-system acceleration pass.** Re-profile viewer, alignment, backend,
+   and dense-surface workflows. Use `parpool("threads")` only where work is
+   bounded and the CPU serial path remains complete. Add optional
+   capability-checked `gpuArray` acceleration where it is supported and proven
+   useful, including dense-surface SGM if `disparitySGM` accepts GPU inputs in
+   the target MATLAB environment. Backend thread work must not bypass Backend
+   Performance Pack 2's streaming prerequisite.
+4. **Backend Performance Pack 2 — Bounded serial streaming.** Incrementally
    write tiled TIFF/mask products, remove output-sized index temporaries, make
    in-memory return policy explicit, and close partial files safely.
-2. **Backend Performance Pack 3 — Bounded thread pipeline.** Submit a limited
+5. **Backend Performance Pack 3 — Bounded thread pipeline.** Submit a limited
    number of tiles through `parpool("threads")`, consume results
    incrementally, and keep deterministic writes and bounded in-flight memory.
-3. **Backend Performance Pack 4 — Radiometric and precision policy.** Define
+6. **Backend Performance Pack 4 — Radiometric and precision policy.** Define
    output class, scale/offset, fill, single-precision tolerances, and
    format-specific writing without repeated full-image normalization.
-4. **Backend Performance Pack 5 — File-backed source regions.** Add a backend
+7. **Backend Performance Pack 5 — File-backed source regions.** Add a backend
    source-region provider with in-memory compatibility and TIFF/`blockedImage`
    adapters so tiled jobs need not hold a complete source array.
+8. **Dense-surface synthetic data expansion.** Lowest priority until user
+   inputs are available. The user will provide desired output dimensions and
+   rough sensor geometry such as azimuth, elevation, and range; the tooling
+   should derive the remaining synthetic image/geometry details for more
+   representative surface-extraction validation fixtures.
 
 Until Pack 2 is complete, the tiled backend should not be described as
 bounded-memory end to end for very large outputs.
@@ -84,7 +112,8 @@ These require user data or target hardware rather than more synthetic claims:
   display tile sides and one, two, and four visible layers. The provisional
   default remains 1024.
 - Exercise optional MATLAB-managed GPU behavior and CPU equivalence on a
-  supported Windows GPU system before making any performance recommendation.
+  supported Windows GPU system before making any performance recommendation,
+  including dense-surface `disparitySGM` GPU behavior if available.
 
 No user real-data pair is currently available to the repository, so these
 gates remain explicitly unclaimed.
@@ -102,8 +131,9 @@ queue:
 - calibrated pointing covariance and native-displacement defaults;
 - a second/multi-anchor common-twist interaction;
 - optional DEM-constrained adjustment or an explicitly labeled plane-tie tool;
-- explicit anaglyph channel assignment and richer difference/flicker/swipe
-  comparison modes;
+- production export of screen-adjusted anaglyph presentation as a three-band
+  TIFF/PNG product after display-only controls are evaluated;
+- richer difference/flicker/swipe comparison modes;
 - a decision on signed-line versus forward-ray semantics for the legacy
   `PlanarProjection.intersectPlane` and
   `PlanarProjection.triangulateRays` APIs; and
@@ -117,7 +147,8 @@ queue:
 - `docs/alignment_workflow_hardening_plan.md` — completed alignment design
   and reliability packs plus deferred alignment scope.
 - `docs/performance_optimization_workplan.md` — completed viewer/backend
-  performance packs and active Backend Packs 2-5.
+  performance packs, cross-system acceleration constraints, and Backend Packs
+  2-5.
 - `docs/dense_surface_feature_pack.md` — exploratory dense-surface contract
   and limitations.
 - `docs/alignment_operator_guide.md` — current staged operator workflow.

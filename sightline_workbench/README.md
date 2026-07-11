@@ -70,8 +70,9 @@ The current implementation baseline is summarized in
   Milestones 1-13, Alignment Reliability Packs 0-8, Viewer Performance Packs
   0-8, Backend Performance Packs 0-1, and Dense Surface Pack 1 are complete;
 - the latest fresh-class repository validation passes all 386 tests;
-- the active implementation queue is Backend Performance Packs 2-5, beginning
-  with genuinely bounded serial streaming; and
+- the active implementation queue now starts with viewer orientation/anaglyph
+  presentation and Alignment Workbench usability, then continues through a
+  dependency-aware performance pass and Backend Performance Packs 2-5; and
 - representative 100-150 MP Windows/real-data validation remains external
   because no user real-data pair is available in this repository.
 
@@ -430,6 +431,11 @@ Core controls:
   to one estimated IFOV per key press; kappa defaults to 0.1 degrees.
 - Save and Load write/read a human-readable JSON viewer state containing camera,
   layer, alpha, blend, projection offset, OPK, tip, tilt, and twist settings.
+- The selected follow-up queue includes a wider `+/-85` degree twist range,
+  real-data default camera orientation that makes an explicitly supplied
+  oblique plane appear naturally upright, automatic two-image anaglyph
+  left/right assignment with left eye red, display-only stereo depth/exaggeration
+  controls, and anaglyph brightness improvements.
 - The alignment panel is hidden by default and can be shown from the image
   context menu. It is now a compact launcher/status strip for a separate lazy,
   nonmodal Alignment Workbench, leaving the image viewport available for
@@ -782,7 +788,10 @@ full-source inverse warp the default. The current tiled renderer is not yet
 bounded-memory end to end: large file writes still assemble full output arrays.
 Backend Performance Packs 2-5 cover bounded serial streaming, bounded thread
 submission, explicit radiometric/precision policy, and file-backed source
-regions. See `docs/project_status.md` and
+regions. The active queue puts viewer/anaglyph usability and a dependency-aware
+cross-system thread/GPU acceleration pass ahead of or alongside backend work as
+appropriate, but backend thread acceleration still follows bounded serial
+streaming. See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output
 production work.
 

@@ -367,6 +367,20 @@ Current controls:
 Omega and phi keyboard steps default to one estimated IFOV for the selected
 layer. Kappa defaults to `0.1` degrees.
 
+Selected follow-up viewer controls are queued but not yet implemented:
+
+- extend twist slider/control range to `+/-85` degrees;
+- for real-data launches with an explicit oblique projection plane and no
+  caller-specified camera pose, orient the default camera so the plane normal's
+  projection onto the monitor/glass points toward the top of the screen;
+- infer two-image anaglyph left/right roles from the sensor baseline projected
+  into the current view, with left eye rendered red;
+- add display-only stereo exaggeration and screen-depth offset controls for
+  anaglyph review; and
+- brighten anaglyph mode through lightweight presentation controls such as
+  channel gain/floor/alpha policy, without replacing the production surface
+  render path.
+
 ## Preview Versus Exact Rendering
 
 ### Interactive Preview
@@ -581,8 +595,11 @@ job.Output.Formats = ["tiff", "png"];
 - Include sidecar metadata describing inputs, output grid, render options,
   execution mode, timing, and state summary.
 
-Anaglyph channel assignment currently follows layer order. A future app control
-should allow explicit red/blue assignment or a stereo-channel swap operation.
+Anaglyph channel assignment currently follows layer order. The selected
+follow-up should infer two-image left/right assignment from geometry where
+possible, use left-eye-red channel mapping by default, and keep any stereo
+exaggeration or in/out screen-depth controls display-only until a later
+explicit backend/export product contract is designed.
 
 ### Backend Output Grid Decisions
 
@@ -1139,8 +1156,28 @@ Feedback checkpoint:
 
 ## Active Roadmap For Discussion
 
-The backend and auto-alignment feature trees are implemented. The items below
-remain broader design topics to prioritize with user guidance.
+The backend and auto-alignment feature trees are implemented. The currently
+selected follow-up queue is:
+
+1. Viewer orientation and anaglyph presentation improvements: wider twist
+   range, real-data upright default camera orientation, geometry-derived
+   left/right assignment with left eye red, display-only anaglyph depth
+   controls, and brightness improvements without a render-path rewrite.
+2. Alignment Workbench usability and projection-offset semantics: improve
+   grouping, labels, button order, and diagnostic text layout, then evaluate
+   whether post-intersection WASD offsets remain appropriate for ray/epipolar
+   filtering or should become a different, explicitly physical source-origin
+   adjustment.
+3. Cross-system acceleration pass: re-profile viewer, alignment, backend, and
+   dense surface extraction for bounded `parpool("threads")` opportunities and
+   optional capability-checked `gpuArray` support. Backend thread work remains
+   dependent on bounded serial streaming.
+4. Backend Performance Packs 2-5: bounded serial streaming, bounded threaded
+   execution, radiometric/precision policy, and file-backed source regions.
+5. Dense-surface synthetic data expansion after the user supplies desired
+   image dimensions and rough sensor azimuth/elevation/range.
+
+The items below remain broader design topics to prioritize with user guidance.
 
 ### Real Sensor Geometry Ingestion
 

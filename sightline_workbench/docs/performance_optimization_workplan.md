@@ -44,6 +44,14 @@ Backend Performance Pack 0 now compiles reusable per-job mesh/interpolation
 plans and resolves GPU capability once. Backend Performance Pack 1 makes
 full-source inverse-warp radiometry the backend default while retaining the old
 sparse path as an explicit comparison mode. Backend Performance Pack 2 is next.
+The July 10, 2026 follow-up queue also asks for a broader responsiveness and
+acceleration pass across viewer, alignment, backend, and dense-surface
+workflows. That pass should use `parpool("threads")` only for bounded work,
+should add optional capability-checked `gpuArray` paths only where CPU
+equivalence and fallback stay complete, and should evaluate dense-surface SGM
+on GPU-capable MATLAB installations if `disparitySGM` supports GPU inputs.
+Backend thread acceleration must still follow Backend Performance Pack 2 rather
+than bypass bounded serial streaming.
 The current fresh-class repository baseline is 386/386 passing tests. See
 `docs/project_status.md` for the concise cross-workstream status.
 
@@ -1642,9 +1650,13 @@ The completed viewer sequence was:
 9. Viewer Performance Pack 8: raster preview prototype and decision.
 
 Viewer Packs 0-8 and Backend Packs 0-1 are complete. The current active
-implementation queue is Backend Performance Packs 2-5 in order. The
-representative 100-150 MP Windows viewer/tile-size matrix remains an external
-validation gate rather than an additional viewer pack.
+implementation queue now begins with viewer orientation/anaglyph presentation
+and Alignment Workbench usability work, followed by a cross-system acceleration
+pass and Backend Performance Packs 2-5. Keep backend work dependency-aware:
+bounded serial streaming comes before bounded thread submission, and optional
+GPU work remains capability-checked with CPU equivalence. The representative
+100-150 MP Windows viewer/tile-size matrix remains an external validation gate
+rather than an additional viewer pack.
 
 Do not mix the viewer quick wins and backend renderer rewrite into one commit.
 Each pack should remain independently reviewable, validated, and reversible.
