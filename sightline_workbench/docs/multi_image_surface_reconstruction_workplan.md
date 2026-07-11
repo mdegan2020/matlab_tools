@@ -2,9 +2,9 @@
 
 Status: approved consolidated workplan. Backend Performance Packs 0-5, the
 dense-surface synthetic expansion, Multi-Image Foundation MI-0 through MI-3,
-A2 pair viewpoint, A3a-1 focus-aware keyboard mapping, and A3a-2 manual motion
-imagery are complete. The read-only MATLAB SDK audit is also complete. The
-current fresh-class repository suite passes 520/520 tests. This
+A2 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion
+imagery, and A3b measured motion playback are complete. The read-only MATLAB SDK audit is also complete. The
+current fresh-class repository suite passes 529/529 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -342,6 +342,18 @@ integrated pointer path, 100 callbacks measured 0.838 ms median / 2.154 ms p95
 (3.402 ms maximum) and triggered zero mesh builds, tile refreshes, or surface
 creations. These measurements characterize the development machine and are not
 portable acceptance thresholds.
+
+A3b's target-time, single-shot scheduler measured median/p95 delivered cadence
+of 1.990/2.016 s at 0.5 fps, 0.498/0.513 s at 2 fps, and 0.100/0.106 s at
+10 fps. Median/p95 direct frame-switch work was 24.7/26.9 ms, 21.9/22.4 ms,
+and 15.5/19.3 ms respectively, with no silent frame skips. A separate active-
+playback interaction sample recorded 30 pointer callbacks: crosshair work was
+1.129/3.365 ms median/p95, pan was 39.137/103.634 ms, and zoom was
+0.117/807.291 ms (including one observed long-tail callback). It retained one
+lookahead identity, 49,152 visible texture bytes, and 8,553 combined bounded
+cache bytes while causing zero mesh builds, tile refreshes, or surface
+creations. These development-machine observations are evidence, not portable
+acceptance thresholds.
 
 Pointer handling should update only when the hover state changes. If hover
 tracking measurably degrades pan/zoom/crosshair interaction, retain keyboard
@@ -1314,8 +1326,9 @@ These trees are coordinated but should remain separately reviewable.
    remapping shipped as A3a-1. A3a-2 adds explicit sequence/order, strict UTC
    parsing, manual stepping, measured edge controls with persistent fallback,
    identity labels, Loop, visible warnings, and exact runtime restore.
-5. **A3b — Motion playback.** Add measured 0.5-10 fps playback, Space/Escape,
-   bounded lookahead, pause reasons, and performance evidence.
+5. **A3b — Motion playback — complete.** Measured 0.5-10 fps playback adds
+   Space/Escape, sequential no-skip display, one-frame lookahead, explicit
+   pause reasons, bounded cache/memory diagnostics, and interaction evidence.
 6. **A4 — Multi-view tracks and pair graph.** Reconcile pair matches into
    tracks; build an explainable nonsequential, cycle-rich schedule; and add
    cycle/path-consistency diagnostics without requiring all-pairs matching.
@@ -1421,7 +1434,7 @@ complete. The ordered implementation queue is:
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
-5. A3b motion playback and performance evidence.
+5. A3b motion playback and performance evidence — complete.
 6. S1 immutable `CorrectionSet`, MAT/JSON, stale protection, OPK adapter.
 7. S2 callbacks and explicit apply/revert/generation lineage.
 8. A4 multi-view tracks and cycle diagnostics.

@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 520/520 tests with zero
+- The latest fresh-class repository suite passes 529/529 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -59,6 +59,7 @@ As of July 11, 2026:
 | Multi-Image A2 pair viewpoint | Complete |
 | Multi-Image A3a-1 focus-aware keyboard mapping | Complete |
 | Multi-Image A3a-2 manual motion imagery | Complete |
+| Multi-Image A3b measured motion playback | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -128,6 +129,17 @@ creation work; lightweight buttons and axes glyphs had equivalent p95
 visibility-toggle cost, so buttons were retained for clearer hit targets and a
 persistent fallback.
 
+Multi-image A3b adds direct Play/Pause at 0.5-10 fps with a 2 fps default,
+Space/Escape integration, sequential no-skip display, and a single-frame
+lookahead bound. Manual steps pause first; focus loss, layer/sequence mutation,
+missing/stale data, load failure, and the no-wrap boundary pause with a visible
+reason. Development-machine cadence medians were 1.990 s at 0.5 fps, 0.498 s at
+2 fps, and 0.100 s at 10 fps; corresponding frame-switch medians were 24.7,
+21.9, and 15.5 ms. Pointer/crosshair, pan, zoom, frame switching, cache bytes,
+and visible texture memory are exposed through bounded performance diagnostics.
+An interaction sample retained one lookahead, built no meshes/tiles/surfaces,
+and held caches to 8,553 bytes while recording 30 pointer callbacks.
+
 ## Current Implementation Queue
 
 The completed read-only MATLAB SDK entry-point inventory, proposed reuse points,
@@ -135,8 +147,9 @@ and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The
 approved consolidated implementation queue is now
 `docs/multi_image_surface_reconstruction_workplan.md`. MI-0 through MI-3, A2
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
-and the SDK audit are complete; the next ordered pack is measured motion
-playback. Correction SDK, global multi-image solving, precision validation,
+A3b motion playback, and the SDK audit are complete; the next ordered pack is
+S1 immutable CorrectionSet. Correction SDK, global multi-image solving,
+precision validation,
 dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow
 in the explicit dependency order recorded there.
 

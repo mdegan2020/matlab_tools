@@ -82,7 +82,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest fresh-class repository validation passes all 520 tests;
+- the latest fresh-class repository validation passes all 529 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -858,7 +858,16 @@ reserved, Shift+Arrows retains Tip/Tilt, and Loop is off by default. Edge
 buttons can be hover-activated or persistently visible; frame identity is
 transient or pinnable. Escape, Exit, or closing the window restores the prior
 camera, selected layer, visibility/blend/anaglyph/stereo presentation exactly.
-The manual pack intentionally provides no playback, interpolation, or crossfade.
+Play/Pause adds operator-selected 0.5-10 fps playback with a 2 fps default;
+acquisition time continues to control ordering and labels, not playback delay.
+Space toggles playback only in motion mode, a manual step pauses before moving
+once, and Escape stops/exits/restores. A self-rearming target-time scheduler
+displays every frame without silent skipping and retains at most one next-frame
+display lookahead. It pauses with a persistent reason on viewport-focus loss,
+sequence/layer mutation, stale or missing data, load failure, or the no-wrap
+boundary. Playback remains direct single-frame presentation: no interpolation,
+crossfade, or display-only cache product can enter viewer serialization or a
+backend/scientific input.
 
 Stereo-eye assignment is independent of moving/reference roles and layer order.
 For each rendered stereo pair, the viewer projects the existing center-column

@@ -192,12 +192,15 @@ classdef ProjectionViewerApp < handle
         MotionStartExitButton matlab.ui.control.Button
         MotionPreviousButton matlab.ui.control.Button
         MotionNextButton matlab.ui.control.Button
+        MotionPlayPauseButton matlab.ui.control.Button
+        MotionRateSpinner matlab.ui.control.Spinner
         MotionStatusLabel matlab.ui.control.Label
         MotionImageryMenuItem
         MotionLeftEdgeButton matlab.ui.control.Button
         MotionRightEdgeButton matlab.ui.control.Button
         MotionIdentityLabel matlab.ui.control.Label
         MotionIdentityTimer
+        MotionPlaybackTimer
         MotionEdgeWidthPixels double = 64
         MotionIdentitySeconds double = 2
         AlignmentOverlayLines = gobjects(0)
@@ -500,9 +503,17 @@ classdef ProjectionViewerApp < handle
                 isvalid(app.MotionFigure), Position=runtime.Position, ...
                 Loop=runtime.Loop, HoverEdges=runtime.HoverEdges, ...
                 IdentityPinned=runtime.IdentityPinned, ...
+                Playing=runtime.Playing, RateFps=runtime.RateFps, ...
+                PauseReason=runtime.PauseReason, ...
+                PlaybackFrameCount=runtime.PlaybackFrameCount, ...
                 Warning=runtime.Warning, Sequence=runtime.Sequence, ...
                 EffectiveVisibility=app.effectiveLayerVisibilityMask(), ...
                 KeyboardMode=app.ViewportKeyboardMode);
+            diagnostics.Lookahead = runtime.Lookahead;
+            diagnostics.LookaheadCount = double( ...
+                isstruct(runtime.Lookahead) && ...
+                isfield(runtime.Lookahead, "Available") && ...
+                runtime.Lookahead.Available);
             if runtime.Active && runtime.Position > 0
                 diagnostics.Frame = ...
                     runtime.Sequence.Frames(runtime.Position);
@@ -4735,6 +4746,22 @@ classdef ProjectionViewerApp < handle
                 Tag="ProjectionViewerMotionNextButton");
             app.MotionNextButton.Layout.Row = 3;
             app.MotionNextButton.Layout.Column = 2;
+            rateLabel = uilabel(grid, Text="Rate (fps)", ...
+                HorizontalAlignment="right");
+            rateLabel.Layout.Row = 3;
+            rateLabel.Layout.Column = 3;
+            app.MotionRateSpinner = uispinner(grid, Limits=[0.5 10], ...
+                Step=0.5, Value=ProjectionMotionPlayback.DefaultRateFps, ...
+                ValueChangedFcn=@(~, ~) app.motionControlChanged(), ...
+                Tag="ProjectionViewerMotionRateSpinner");
+            app.MotionRateSpinner.Layout.Row = 3;
+            app.MotionRateSpinner.Layout.Column = 4;
+            app.MotionPlayPauseButton = uibutton(grid, Text="Play", ...
+                Enable="off", ...
+                ButtonPushedFcn=@(~, ~) app.toggleMotionPlayback(), ...
+                Tag="ProjectionViewerMotionPlayPauseButton");
+            app.MotionPlayPauseButton.Layout.Row = 3;
+            app.MotionPlayPauseButton.Layout.Column = 5;
             app.MotionStartExitButton = uibutton(grid, Text="Start", ...
                 ButtonPushedFcn=@(~, ~) app.toggleMotionImagery(), ...
                 Tag="ProjectionViewerMotionStartExitButton");
@@ -4779,6 +4806,8 @@ classdef ProjectionViewerApp < handle
             end
             app.MotionStartExitButton.Enable = app.onOff( ...
                 sequence.Available || app.MotionRuntime.Active);
+            app.MotionPlayPauseButton.Enable = app.onOff( ...
+                app.MotionRuntime.Active);
             if app.MotionRuntime.Active
                 app.MotionStatusLabel.Text = char(app.motionStatusText());
             elseif sequence.Available
@@ -4831,7 +4860,17 @@ classdef ProjectionViewerApp < handle
             runtime.Loop = app.MotionLoopCheckBox.Value;
             runtime.HoverEdges = app.MotionHoverCheckBox.Value;
             runtime.IdentityPinned = app.MotionPinCheckBox.Value;
+            newRate = ProjectionMotionPlayback.rate( ...
+                app.MotionRateSpinner.Value);
+            if runtime.Playing && runtime.RateFps ~= newRate
+                runtime.NextPlaybackTickElapsed = ...
+                    toc(runtime.PlaybackClock) + ...
+                    ProjectionMotionPlayback.delay(newRate);
+            end
+            runtime.RateFps = newRate;
             runtime.Warning = strjoin(sequence.Warnings, " ");
+            runtime.PauseReason = "";
+            runtime.SceneSignature = app.motionSceneSignature();
             runtime.Snapshot = struct( ...
                 SelectedLayerIndex=app.SelectedLayerIndex, ...
                 Camera=app.exportCameraState(), ...
@@ -4842,7 +4881,11 @@ classdef ProjectionViewerApp < handle
                 app.AnaglyphScreenDepthOffsetMeters);
             app.MotionRuntime = runtime;
             app.ViewportKeyboardMode = "motion";
+            app.UIFigure.CurrentObject = app.Axes;
             app.MotionStartExitButton.Text = "Exit";
+            app.MotionPlayPauseButton.Enable = "on";
+            app.MotionPlayPauseButton.Text = "Play";
+            app.createMotionPlaybackTimer();
             app.createMotionViewportControls();
             app.applyMotionFrame();
             app.refreshPointerMotionCallback();
@@ -4852,8 +4895,10 @@ classdef ProjectionViewerApp < handle
             if ~app.MotionRuntime.Active
                 return
             end
+            app.pauseMotionPlayback("Motion imagery exited.");
             snapshot = app.MotionRuntime.Snapshot;
             app.stopMotionIdentityTimer();
+            app.deleteMotionPlaybackTimer();
             app.deleteMotionViewportControls();
             app.MotionRuntime = app.defaultMotionRuntime();
             app.SelectedLayerIndex = snapshot.SelectedLayerIndex;
@@ -4874,6 +4919,8 @@ classdef ProjectionViewerApp < handle
             if ~isempty(app.MotionStartExitButton) && ...
                     isvalid(app.MotionStartExitButton)
                 app.MotionStartExitButton.Text = "Start";
+                app.MotionPlayPauseButton.Text = "Play";
+                app.MotionPlayPauseButton.Enable = "off";
                 app.motionConfigurationChanged();
             end
             app.refreshPointerMotionCallback();
@@ -4893,17 +4940,32 @@ classdef ProjectionViewerApp < handle
             runtime.Loop = app.MotionLoopCheckBox.Value;
             runtime.HoverEdges = app.MotionHoverCheckBox.Value;
             runtime.IdentityPinned = app.MotionPinCheckBox.Value;
+            runtime.RateFps = ProjectionMotionPlayback.rate( ...
+                app.MotionRateSpinner.Value);
             app.MotionRuntime = runtime;
             if runtime.Active
                 app.showMotionIdentity();
                 app.updateMotionEdgeControls();
+                app.updateMotionNavigationControls();
                 app.refreshPointerMotionCallback();
+                if runtime.Playing
+                    if app.prepareMotionLookahead()
+                        app.scheduleMotionPlaybackTick();
+                    end
+                end
             end
         end
 
-        function stepMotion(app, delta)
+        function changed = stepMotion(app, delta, isPlaybackStep)
+            if nargin < 3
+                isPlaybackStep = false;
+            end
+            changed = false;
             if ~app.MotionRuntime.Active
                 return
+            end
+            if app.MotionRuntime.Playing && ~isPlaybackStep
+                app.pauseMotionPlayback("Paused for manual step.");
             end
             runtime = app.MotionRuntime;
             [position, changed, boundary] = ProjectionMotionSequence.step( ...
@@ -4912,15 +4974,20 @@ classdef ProjectionViewerApp < handle
             app.MotionRuntime = runtime;
             if changed
                 app.PerformanceMonitor.increment("MotionFrameSwitches");
-                app.applyMotionFrame();
+                changed = app.applyMotionFrame();
             elseif boundary
                 app.refreshMotionStatus();
             end
         end
 
-        function applyMotionFrame(app)
+        function success = applyMotionFrame(app)
+            success = false;
             layerIndex = app.currentMotionLayerIndex();
             if layerIndex == 0
+                if app.MotionRuntime.Playing
+                    app.pauseMotionPlayback( ...
+                        "Paused because the sequence contains a stale view.");
+                end
                 app.refreshMotionStatus();
                 return
             end
@@ -4936,6 +5003,10 @@ classdef ProjectionViewerApp < handle
                 runtime.Warning = "Motion frame load failed: " + ...
                     string(exception.message);
                 app.MotionRuntime = runtime;
+                if runtime.Playing
+                    app.pauseMotionPlayback( ...
+                        "Paused because a frame could not be loaded.");
+                end
                 app.refreshMotionStatus();
                 return
             end
@@ -4944,6 +5015,259 @@ classdef ProjectionViewerApp < handle
             app.updateMotionNavigationControls();
             app.updateMotionEdgeControls();
             app.refreshMotionStatus();
+            success = true;
+        end
+
+        function toggleMotionPlayback(app)
+            if app.MotionRuntime.Playing
+                app.pauseMotionPlayback("Playback paused by operator.");
+            else
+                app.startMotionPlayback();
+            end
+        end
+
+        function startMotionPlayback(app)
+            if ~app.MotionRuntime.Active
+                return
+            end
+            [available, reason] = app.motionPlaybackStateIsValid();
+            if ~available
+                app.pauseMotionPlayback(reason);
+                return
+            end
+            runtime = app.MotionRuntime;
+            runtime.Playing = true;
+            runtime.PauseReason = "";
+            runtime.PlaybackClock = tic;
+            runtime.LastPlaybackTickElapsed = 0;
+            runtime.RateFps = ProjectionMotionPlayback.rate( ...
+                app.MotionRateSpinner.Value);
+            runtime.NextPlaybackTickElapsed = ...
+                ProjectionMotionPlayback.delay(runtime.RateFps);
+            app.MotionRuntime = runtime;
+            app.MotionPlayPauseButton.Text = "Pause";
+            if ~app.prepareMotionLookahead()
+                if app.MotionRuntime.Playing
+                    app.pauseMotionPlayback( ...
+                        "Playback reached the end of the sequence.");
+                end
+                return
+            end
+            app.scheduleMotionPlaybackTick();
+            app.refreshMotionStatus();
+        end
+
+        function pauseMotionPlayback(app, reason)
+            runtime = app.MotionRuntime;
+            wasPlaying = runtime.Playing;
+            runtime.Playing = false;
+            runtime.PauseReason = string(reason);
+            runtime.Lookahead = struct();
+            app.MotionRuntime = runtime;
+            if ~isempty(app.MotionPlaybackTimer) && ...
+                    isvalid(app.MotionPlaybackTimer) && ...
+                    string(app.MotionPlaybackTimer.Running) == "on"
+                stop(app.MotionPlaybackTimer);
+            end
+            if wasPlaying
+                app.PerformanceMonitor.increment("MotionPlaybackPauses");
+            end
+            if ~isempty(app.MotionPlayPauseButton) && ...
+                    isvalid(app.MotionPlayPauseButton)
+                app.MotionPlayPauseButton.Text = "Play";
+            end
+            app.refreshMotionStatus();
+        end
+
+        function createMotionPlaybackTimer(app)
+            app.deleteMotionPlaybackTimer();
+            app.MotionPlaybackTimer = timer( ...
+                ExecutionMode="singleShot", BusyMode="queue", ...
+                StartDelay=ProjectionMotionPlayback.delay( ...
+                app.MotionRuntime.RateFps), ...
+                TimerFcn=@(~, ~) ...
+                ProjectionViewerApp.dispatchMotionPlaybackTick(app), ...
+                ErrorFcn=@(~, event) ...
+                ProjectionViewerApp.dispatchMotionPlaybackError(app, event), ...
+                Name="Sightline motion playback", ...
+                Tag="ProjectionViewerMotionPlaybackTimer");
+        end
+
+        function deleteMotionPlaybackTimer(app)
+            if ~isempty(app.MotionPlaybackTimer) && ...
+                    isvalid(app.MotionPlaybackTimer)
+                stop(app.MotionPlaybackTimer);
+                delete(app.MotionPlaybackTimer);
+            end
+            app.MotionPlaybackTimer = [];
+        end
+
+        function scheduleMotionPlaybackTick(app)
+            if ~app.MotionRuntime.Active || ~app.MotionRuntime.Playing || ...
+                    isempty(app.MotionPlaybackTimer) || ...
+                    ~isvalid(app.MotionPlaybackTimer)
+                return
+            end
+            if string(app.MotionPlaybackTimer.Running) == "on"
+                stop(app.MotionPlaybackTimer);
+            end
+            remainingSeconds = app.MotionRuntime.NextPlaybackTickElapsed - ...
+                toc(app.MotionRuntime.PlaybackClock);
+            app.MotionPlaybackTimer.StartDelay = max(0.001, ...
+                round(1000 * remainingSeconds) / 1000);
+            start(app.MotionPlaybackTimer);
+            app.PerformanceMonitor.increment("MotionPlaybackSchedules");
+        end
+
+        function motionPlaybackTick(app)
+            if ~app.MotionRuntime.Active || ~app.MotionRuntime.Playing
+                return
+            end
+            app.PerformanceMonitor.increment("MotionPlaybackTicks");
+            runtime = app.MotionRuntime;
+            elapsed = toc(runtime.PlaybackClock);
+            app.PerformanceMonitor.recordTiming( ...
+                "MotionPlaybackCadenceSeconds", ...
+                elapsed - runtime.LastPlaybackTickElapsed);
+            runtime.LastPlaybackTickElapsed = elapsed;
+            app.MotionRuntime = runtime;
+            [available, reason] = app.motionPlaybackStateIsValid();
+            if ~available
+                app.pauseMotionPlayback(reason);
+                return
+            end
+            lookahead = app.MotionRuntime.Lookahead;
+            if ~isstruct(lookahead) || ...
+                    ~isfield(lookahead, "Available") || ...
+                    ~lookahead.Available || ~lookahead.Ready
+                if ~app.prepareMotionLookahead()
+                    if app.MotionRuntime.Playing
+                        app.pauseMotionPlayback( ...
+                            "Playback reached the end of the sequence.");
+                    end
+                    return
+                end
+            end
+            frameTimer = tic;
+            changed = app.stepMotion(1, true);
+            app.PerformanceMonitor.recordTiming( ...
+                "MotionFrameSwitchSeconds", toc(frameTimer));
+            if ~changed || ~app.MotionRuntime.Playing
+                return
+            end
+            runtime = app.MotionRuntime;
+            runtime.PlaybackFrameCount = runtime.PlaybackFrameCount + 1;
+            nextTarget = runtime.NextPlaybackTickElapsed + ...
+                ProjectionMotionPlayback.delay(runtime.RateFps);
+            runtime.NextPlaybackTickElapsed = max(nextTarget, ...
+                toc(runtime.PlaybackClock) + 0.001);
+            app.MotionRuntime = runtime;
+            if app.prepareMotionLookahead()
+                app.scheduleMotionPlaybackTick();
+            elseif app.MotionRuntime.Playing
+                app.pauseMotionPlayback( ...
+                    "Playback reached the end of the sequence.");
+            end
+        end
+
+        function ready = prepareMotionLookahead(app)
+            ready = false;
+            if ~app.MotionRuntime.Active || ~app.MotionRuntime.Playing
+                return
+            end
+            runtime = app.MotionRuntime;
+            lookahead = ProjectionMotionPlayback.next( ...
+                runtime.Sequence, runtime.Position, runtime.Loop);
+            runtime.Lookahead = lookahead;
+            app.MotionRuntime = runtime;
+            if ~lookahead.Available
+                return
+            end
+            app.PerformanceMonitor.increment("MotionLookaheadPreparations");
+            try
+                layerIndex = ProjectionViewMetadata.indexForId( ...
+                    app.Scene, lookahead.ViewId);
+                if ~app.motionFrameDataIsAvailable(layerIndex)
+                    app.pauseMotionPlayback( ...
+                        "Playback paused because the next frame is missing data.");
+                    return
+                end
+                if app.usesTiledPreview(layerIndex) && ...
+                        isempty(app.validLayerSurfaces(layerIndex))
+                    app.refreshTiledLayerSurfaces(layerIndex);
+                end
+            catch exception
+                app.pauseMotionPlayback( ...
+                    "Playback paused because lookahead loading failed: " + ...
+                    string(exception.message));
+                return
+            end
+            runtime = app.MotionRuntime;
+            lookahead.LayerIndex = layerIndex;
+            lookahead.Ready = true;
+            runtime.Lookahead = lookahead;
+            app.MotionRuntime = runtime;
+            app.PerformanceMonitor.increment("MotionLookaheadReady");
+            ready = true;
+            app.refreshMotionStatus();
+        end
+
+        function [valid, reason] = motionPlaybackStateIsValid(app)
+            valid = false;
+            reason = "";
+            if ~app.MotionRuntime.Active
+                reason = "Playback requires active motion imagery.";
+                return
+            end
+            if ~app.viewportHasInteractionFocus()
+                reason = "Playback paused because viewport focus was lost.";
+                return
+            end
+            if ~isequaln(app.MotionRuntime.SceneSignature, ...
+                    app.motionSceneSignature())
+                reason = ...
+                    "Playback paused because the sequence or a layer changed.";
+                return
+            end
+            layerIndex = app.currentMotionLayerIndex();
+            if layerIndex == 0
+                reason = "Playback paused because the current frame is stale.";
+                return
+            end
+            if ~app.motionFrameDataIsAvailable(layerIndex)
+                reason = ...
+                    "Playback paused because the current frame is missing data.";
+                return
+            end
+            valid = true;
+        end
+
+        function signature = motionSceneSignature(app)
+            state = app.exportState();
+            signature = struct( ...
+                ViewIds=ProjectionViewMetadata.ids(app.Scene), ...
+                PassIds=string({app.Scene.layers.PassId}), ...
+                Projection=state.Projection, Layers=state.Layers);
+        end
+
+        function available = motionFrameDataIsAvailable(app, layerIndex)
+            layer = app.Scene.layers(layerIndex);
+            available = isfield(layer, "DisplayTexture") && ...
+                ~isempty(layer.DisplayTexture) && ...
+                isfield(layer, "SourceGeometry") && ...
+                isstruct(layer.SourceGeometry) && ...
+                isfield(layer.SourceGeometry, "SampleFcn") && ...
+                isa(layer.SourceGeometry.SampleFcn, "function_handle");
+        end
+
+        function motionPlaybackTimerFailed(app, event)
+            message = "unknown timer error";
+            if isobject(event) && isprop(event, "Data") && ...
+                    isa(event.Data, "MException")
+                message = string(event.Data.message);
+            end
+            app.pauseMotionPlayback( ...
+                "Playback paused because its timer failed: " + message);
         end
 
         function layerIndex = currentMotionLayerIndex(app)
@@ -5116,9 +5440,16 @@ classdef ProjectionViewerApp < handle
                 return
             end
             frame = runtime.Sequence.Frames(runtime.Position);
-            text = sprintf("Frame %d of %d: %s (%s).", ...
+            text = string(sprintf("Frame %d of %d: %s (%s).", ...
                 runtime.Position, numel(runtime.Sequence.Frames), ...
-                frame.LayerName, frame.ViewId);
+                frame.LayerName, frame.ViewId));
+            if runtime.Playing
+                text = text + sprintf(" Playing at %.1f fps.", runtime.RateFps);
+            elseif strlength(runtime.PauseReason) > 0
+                text = text + " " + runtime.PauseReason;
+            else
+                text = text + sprintf(" Ready at %.1f fps.", runtime.RateFps);
+            end
             if strlength(runtime.Warning) > 0
                 text = text + " Warning: " + runtime.Warning;
             end
@@ -5127,6 +5458,11 @@ classdef ProjectionViewerApp < handle
         function runtime = defaultMotionRuntime(~)
             runtime = struct(Active=false, Sequence=struct(), Position=0, ...
                 Loop=false, HoverEdges=true, IdentityPinned=false, ...
+                Playing=false, RateFps=ProjectionMotionPlayback.DefaultRateFps, ...
+                PauseReason="", Lookahead=struct(), ...
+                SceneSignature=struct(), PlaybackFrameCount=0, ...
+                PlaybackClock=[], LastPlaybackTickElapsed=0, ...
+                NextPlaybackTickElapsed=0, ...
                 Warning="", Snapshot=struct());
         end
 
@@ -6566,6 +6902,10 @@ classdef ProjectionViewerApp < handle
                 return
             end
             if app.eventKeyIs(event, "space")
+                if app.MotionRuntime.Active
+                    app.toggleMotionPlayback();
+                    return
+                end
                 app.setSelectedLayerVisible(false);
                 return
             end
@@ -6586,6 +6926,9 @@ classdef ProjectionViewerApp < handle
                 app.IsAltDown = false;
             end
             if app.eventKeyIs(event, "space")
+                if app.MotionRuntime.Active
+                    return
+                end
                 app.setSelectedLayerVisible(true);
             end
         end
@@ -8790,6 +9133,12 @@ classdef ProjectionViewerApp < handle
                 app.PreviewSampledGeometryCache.diagnostics();
             runtime.SurfacePoolCount = numel(app.validPreviewSurfacePool());
             runtime.SurfacePoolLimit = app.PreviewSurfacePoolMaxCount;
+            runtime.Motion = struct(Active=app.MotionRuntime.Active, ...
+                Playing=app.MotionRuntime.Playing, ...
+                LookaheadCount=double(isstruct(app.MotionRuntime.Lookahead) && ...
+                isfield(app.MotionRuntime.Lookahead, "Available") && ...
+                app.MotionRuntime.Lookahead.Available), ...
+                LookaheadLimit=1);
         end
 
         function bytes = arrayBytes(~, value)
@@ -8986,6 +9335,7 @@ classdef ProjectionViewerApp < handle
                 "Up/Down arrows: nudge the selected layer vertically"
                 "Arrow shortcuts require viewport interaction focus"
                 "Motion imagery: Left/Right step frames; Up/Down are reserved"
+                "Motion imagery: Space toggles 0.5-10 fps Play/Pause"
                 "Escape exits motion imagery and restores the prior view"
                 "W/A/S/D: nudge the selected layer"
                 "I/K: adjust phi"
@@ -9046,6 +9396,20 @@ classdef ProjectionViewerApp < handle
             end
 
             value = lower(string(rawValue));
+        end
+    end
+
+    methods (Static, Access = private)
+        function dispatchMotionPlaybackTick(app)
+            if ~isempty(app) && isvalid(app)
+                app.motionPlaybackTick();
+            end
+        end
+
+        function dispatchMotionPlaybackError(app, event)
+            if ~isempty(app) && isvalid(app)
+                app.motionPlaybackTimerFailed(event);
+            end
         end
     end
 end
