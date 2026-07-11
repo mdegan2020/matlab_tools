@@ -22,8 +22,8 @@ claims remain an external Windows/NVIDIA validation gate.
   representative multi-image workload and bounded-memory evidence.
 - **Backend:** retain the existing serial reference, optional thread-pool mode,
   and optional GPU compositing. Backend Performance Pack 2 subsequently made
-  serial TIFF output genuinely bounded; Pack 3 now owns bounded `parfeval`
-  submission and incremental consumption.
+  serial TIFF output genuinely bounded; Pack 3 subsequently added bounded
+  `parfeval` submission and incremental `fetchNext` consumption.
 - **Dense surface:** add optional capability-checked GPU execution for the SGM
   kernel. MathWorks documents full `gpuArray` support for `disparitySGM` in
   R2026a. Inputs move to the GPU only when `UseGPU=true` and a supported device

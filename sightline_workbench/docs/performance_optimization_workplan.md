@@ -48,8 +48,8 @@ Anaglyph Presentation Pack is also complete. The Cross-System Acceleration Pass
 retains CPU viewer/alignment execution, keeps new backend threading dependent
 on bounded serial streaming, and adds optional capability-checked GPU SGM with
 CPU fallback. Backend Performance Pack 2 now provides bounded serial tiled-TIFF
-output; Pack 3 is active. The current fresh-class repository baseline is
-403/403 passing tests. See
+output, and Pack 3 adds bounded thread submission/consumption. Pack 4 is active.
+The current fresh-class repository baseline is 405/405 passing tests. See
 `docs/project_status.md` for the concise cross-workstream status.
 
 Use the selected project queue and the backend dependency order in this
@@ -1400,8 +1400,24 @@ Backend Performance Pack 2: Stream serial tiled outputs
 
 ### Backend Performance Pack 3: Bounded Thread Pipeline
 
-Status: not started; this is the active backend pack and follows completed
-Pack 2.
+Status: complete on July 11, 2026.
+
+Implementation:
+
+- `Execution.MaximumInFlightTiles` defaults to four and is validated as a
+  positive integer.
+- Thread mode uses only `parpool("threads")`, submits no more than the configured
+  limit through `parfeval`, and consumes each completed result with `fetchNext`
+  before submitting/retaining further work.
+- In-memory assembly and Pack 2 TIFF streaming share the same incremental
+  consumer. TIFF writes remain on the client and use explicit tile indices, so
+  out-of-order completion does not change pixel placement.
+- Tile reports remain ordered by tile index and record completion ordinal.
+  Readback diagnostics expose both the configured limit and observed peak
+  in-flight future count.
+- Tile tasks return structured failure details so a worker-side failure reports
+  the tile index and row/column ranges; outstanding futures are cancelled and
+  the Pack 2 writer cleanup closes/removes partial products.
 
 Deliverables:
 
@@ -1669,14 +1685,14 @@ The completed viewer sequence was:
 8. Viewer Performance Pack 7: lazy UI and preview storage.
 9. Viewer Performance Pack 8: raster preview prototype and decision.
 
-Viewer Packs 0-8, Backend Packs 0-2, the Viewer Orientation and Anaglyph
+Viewer Packs 0-8, Backend Packs 0-3, the Viewer Orientation and Anaglyph
 Presentation Pack, and the Alignment Workbench Usability and Offset-Semantics
 Pack, and the Cross-System Acceleration Pass are complete. The remaining
-implementation queue is, in order: Backend Performance Packs 3-5; then
+implementation queue is, in order: Backend Performance Packs 4-5; then
 dense-surface synthetic expansion after the user supplies the requested
 fixture inputs. Keep backend
-work dependency-aware: bounded serial streaming is complete and bounded thread
-submission is next; optional GPU work remains capability-checked with CPU
+work dependency-aware: bounded serial and thread streaming are complete;
+optional GPU work remains capability-checked with CPU
 equivalence. The representative 100-150 MP Windows viewer/tile-size matrix
 remains an external validation gate rather than an additional viewer pack.
 

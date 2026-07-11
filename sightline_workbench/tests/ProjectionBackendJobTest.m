@@ -37,6 +37,7 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
             testCase.verifyEqual(job.Execution.Mode, "serial");
             testCase.verifyFalse(job.Execution.UseGPU);
             testCase.verifyFalse(job.Execution.UseCustomGpuKernels);
+            testCase.verifyEqual(job.Execution.MaximumInFlightTiles, 4);
             testCase.verifyFalse(job.Alignment.Enabled);
             testCase.verifyTrue(job.Alignment.WriteUpdatedViewerState);
             testCase.verifyTrue(job.Alignment.WriteDiagnostics);
@@ -63,12 +64,24 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
 
         function testValidationAcceptsThreadPoolExecution(testCase)
             scene = ProjectionBackendJobTest.makeScene();
-            job = struct(Scene=scene, Execution=struct(Mode="threads"));
+            job = struct(Scene=scene, ...
+                Execution=struct(Mode="threads", MaximumInFlightTiles=2));
 
             job = ProjectionBackendJob.validate(job);
 
             testCase.verifyEqual(job.Execution.Mode, "threads");
             testCase.verifyFalse(job.Execution.UseGPU);
+            testCase.verifyEqual(job.Execution.MaximumInFlightTiles, 2);
+        end
+
+        function testValidationRejectsInvalidInFlightLimit(testCase)
+            scene = ProjectionBackendJobTest.makeScene();
+            job = struct(Scene=scene, ...
+                Execution=struct(MaximumInFlightTiles=0));
+
+            testCase.verifyError( ...
+                @() ProjectionBackendJob.validate(job), ...
+                "ProjectionBackendJob:invalidExecution");
         end
 
         function testValidationAcceptsGpuRequests(testCase)

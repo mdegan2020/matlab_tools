@@ -1,5 +1,5 @@
 classdef ProjectionBackendTiledRenderer
-    %ProjectionBackendTiledRenderer Serial tiled CPU backend renderer.
+    %ProjectionBackendTiledRenderer Bounded serial/thread backend tile pipeline.
 
     methods (Static)
         function readback = renderScene(scene, options, execution, renderPlan)
@@ -28,12 +28,6 @@ classdef ProjectionBackendTiledRenderer
             outputSize = outputGrid.OutputSize;
             tiles = ProjectionBackendTiledRenderer.tileRanges( ...
                 outputSize, options.TileSize);
-            if options.ExecutionMode == "threads"
-                tileResults = ProjectionBackendTiledRenderer.renderTilesInThreads( ...
-                    renderPlan, options, outputGrid, tiles);
-            else
-                tileResults = {};
-            end
 
             compositeImage = [];
             validMask = false(outputSize);
@@ -42,45 +36,9 @@ classdef ProjectionBackendTiledRenderer
             layerIndices = renderPlan.LayerIndices;
             useGPU = renderPlan.UseGPU;
             gpuInfo = renderPlan.GpuInfo;
-            tileReports = ProjectionBackendTiledRenderer.emptyTileReports();
-            tileReportIndex = 0;
-
-            for tileIndex = 1:numel(tiles)
-                if options.ExecutionMode == "threads"
-                    tileResult = tileResults{tileIndex};
-                    tile = tileResult.Tile;
-                    tileReadback = tileResult.Readback;
-                    report = tileResult.Report;
-                else
-                    tile = tiles(tileIndex);
-                    [tileReadback, report] = ProjectionBackendTiledRenderer.renderTile( ...
-                        renderPlan, options, outputGrid, tile);
-                end
-
-                if isempty(compositeImage)
-                    compositeImage = ProjectionBackendTiledRenderer.allocateImage( ...
-                        outputSize, tileReadback.Image);
-                end
-                compositeImage = ProjectionBackendTiledRenderer.assignImageTile( ...
-                    compositeImage, tile.RowRange, tile.ColumnRange, tileReadback.Image);
-                validMask(tile.RowRange, tile.ColumnRange) = tileReadback.ValidMask;
-
-                if options.IncludeLayerReadbacks
-                    if isempty(layerReadbacks)
-                        layerReadbacks = ...
-                            ProjectionBackendTiledRenderer.initializeLayerReadbacks( ...
-                            tileReadback.LayerReadbacks, outputSize, ...
-                            options.IncludeQueryCoordinates);
-                    end
-                    layerReadbacks = ProjectionBackendTiledRenderer.assignLayerTiles( ...
-                        layerReadbacks, tileReadback.LayerReadbacks, ...
-                        tile.RowRange, tile.ColumnRange, ...
-                        options.IncludeQueryCoordinates);
-                end
-
-                tileReportIndex = tileReportIndex + 1;
-                tileReports(tileReportIndex) = report;
-            end
+            [tileReports, peakInFlightTiles] = ...
+                ProjectionBackendTiledRenderer.consumeTiles( ...
+                renderPlan, options, outputGrid, tiles, @consumeTile, false);
             layerReadbacks = ...
                 ProjectionBackendTiledRenderer.flattenQueryCoordinates( ...
                 layerReadbacks);
@@ -107,15 +65,40 @@ classdef ProjectionBackendTiledRenderer
             readback.TileSize = options.TileSize;
             readback.TileCount = numel(tileReports);
             readback.TileReports = tileReports;
+            readback.MaximumInFlightTiles = options.MaximumInFlightTiles;
+            readback.PeakInFlightTiles = peakInFlightTiles;
             readback.ReturnedInMemory = true;
             readback.Streaming = false;
             readback.StreamWriteSeconds = 0;
             readback.RenderPlan = ProjectionBackendRenderPlan.summary(renderPlan);
+
+            function consumeTile(tile, tileReadback)
+                if isempty(compositeImage)
+                    compositeImage = ProjectionBackendTiledRenderer.allocateImage( ...
+                        outputSize, tileReadback.Image);
+                end
+                compositeImage = ProjectionBackendTiledRenderer.assignImageTile( ...
+                    compositeImage, tile.RowRange, tile.ColumnRange, tileReadback.Image);
+                validMask(tile.RowRange, tile.ColumnRange) = tileReadback.ValidMask;
+
+                if options.IncludeLayerReadbacks
+                    if isempty(layerReadbacks)
+                        layerReadbacks = ...
+                            ProjectionBackendTiledRenderer.initializeLayerReadbacks( ...
+                            tileReadback.LayerReadbacks, outputSize, ...
+                            options.IncludeQueryCoordinates);
+                    end
+                    layerReadbacks = ProjectionBackendTiledRenderer.assignLayerTiles( ...
+                        layerReadbacks, tileReadback.LayerReadbacks, ...
+                        tile.RowRange, tile.ColumnRange, ...
+                        options.IncludeQueryCoordinates);
+                end
+            end
         end
 
         function readback = streamScene( ...
                 scene, options, execution, renderPlan, tileConsumer)
-            %streamScene Render serial tiles and release each after consumption.
+            %streamScene Render bounded tiles and release each after consumption.
             if nargin < 3
                 execution = struct();
             end
@@ -129,10 +112,6 @@ classdef ProjectionBackendTiledRenderer
             [options, preparedLayers] = ...
                 ProjectionBackendTiledRenderer.mergeOptions( ...
                 scene, options, execution);
-            if options.ExecutionMode ~= "serial"
-                error("ProjectionBackendTiledRenderer:streamingRequiresSerial", ...
-                    "Bounded streaming requires serial execution until Backend Performance Pack 3.");
-            end
             if isempty(renderPlan)
                 renderPlan = ProjectionBackendRenderPlan.compile( ...
                     scene, options, preparedLayers);
@@ -145,19 +124,10 @@ classdef ProjectionBackendTiledRenderer
             outputGrid = options.OutputGrid;
             tiles = ProjectionBackendTiledRenderer.tileRanges( ...
                 outputGrid.OutputSize, options.TileSize);
-            tileReports = ProjectionBackendTiledRenderer.emptyTileReports();
-            streamWriteSeconds = 0;
-            for tileIndex = 1:numel(tiles)
-                tile = tiles(tileIndex);
-                [tileReadback, report] = ...
-                    ProjectionBackendTiledRenderer.renderTile( ...
-                    renderPlan, options, outputGrid, tile);
-                writeTimer = tic;
-                tileConsumer(tile, tileReadback);
-                report.WriteSeconds = toc(writeTimer);
-                streamWriteSeconds = streamWriteSeconds + report.WriteSeconds;
-                tileReports(tileIndex) = report;
-            end
+            [tileReports, peakInFlightTiles] = ...
+                ProjectionBackendTiledRenderer.consumeTiles( ...
+                renderPlan, options, outputGrid, tiles, tileConsumer, true);
+            streamWriteSeconds = sum([tileReports.WriteSeconds]);
 
             readback = struct();
             readback.Image = [];
@@ -173,12 +143,14 @@ classdef ProjectionBackendTiledRenderer
             readback.LayerReadbacks = struct([]);
             readback.OutputGrid = outputGrid;
             readback.Tiled = true;
-            readback.ExecutionMode = "serial";
+            readback.ExecutionMode = options.ExecutionMode;
             readback.UseGPU = renderPlan.UseGPU;
             readback.GpuInfo = renderPlan.GpuInfo;
             readback.TileSize = options.TileSize;
             readback.TileCount = numel(tileReports);
             readback.TileReports = tileReports;
+            readback.MaximumInFlightTiles = options.MaximumInFlightTiles;
+            readback.PeakInFlightTiles = peakInFlightTiles;
             readback.ReturnedInMemory = false;
             readback.Streaming = true;
             readback.StreamWriteSeconds = streamWriteSeconds;
@@ -204,6 +176,7 @@ classdef ProjectionBackendTiledRenderer
             defaults.IncludeLayerReadbacks = true;
             defaults.IncludeQueryCoordinates = true;
             defaults.ExecutionMode = "serial";
+            defaults.MaximumInFlightTiles = 4;
             defaults.NumericalMode = "fullSourceInverseWarp";
 
             names = fieldnames(options);
@@ -215,6 +188,12 @@ classdef ProjectionBackendTiledRenderer
                 ProjectionBackendTiledRenderer.validateExecutionMode( ...
                 ProjectionBackendTiledRenderer.fieldOrDefault( ...
                 execution, "Mode", defaults.ExecutionMode));
+            defaults.MaximumInFlightTiles = ...
+                ProjectionBackendTiledRenderer.validatePositiveInteger( ...
+                ProjectionBackendTiledRenderer.fieldOrDefault( ...
+                execution, "MaximumInFlightTiles", ...
+                defaults.MaximumInFlightTiles), ...
+                "Execution.MaximumInFlightTiles");
             if isempty(defaults.TileSize)
                 defaults.TileSize = [256 256];
             end
@@ -246,16 +225,110 @@ classdef ProjectionBackendTiledRenderer
             options = defaults;
         end
 
-        function tileResults = renderTilesInThreads( ...
-                renderPlan, options, outputGrid, tiles)
-            ProjectionBackendTiledRenderer.ensureThreadPool();
-            tileResults = cell(1, numel(tiles));
-            parfor tileIndex = 1:numel(tiles)
+        function [tileReports, peakInFlightTiles] = consumeTiles( ...
+                renderPlan, options, outputGrid, tiles, tileConsumer, ...
+                measureConsumer)
+            if options.ExecutionMode == "threads"
+                [tileReports, peakInFlightTiles] = ...
+                    ProjectionBackendTiledRenderer.consumeTilesInThreads( ...
+                    renderPlan, options, outputGrid, tiles, tileConsumer, ...
+                    measureConsumer);
+                return
+            end
+            tileReports = ProjectionBackendTiledRenderer.emptyTileReports();
+            peakInFlightTiles = min(1, numel(tiles));
+            for tileIndex = 1:numel(tiles)
                 tile = tiles(tileIndex);
-                [tileReadback, report] = ProjectionBackendTiledRenderer.renderTile( ...
+                [tileReadback, report] = ...
+                    ProjectionBackendTiledRenderer.renderTile( ...
                     renderPlan, options, outputGrid, tile);
-                tileResults{tileIndex} = struct(Tile=tile, Readback=tileReadback, ...
-                    Report=report);
+                report.TileIndex = tileIndex;
+                report.CompletionOrdinal = tileIndex;
+                report = ProjectionBackendTiledRenderer.consumeTile( ...
+                    tileConsumer, tile, tileReadback, report, measureConsumer);
+                tileReports(tileIndex) = report;
+            end
+        end
+
+        function [tileReports, peakInFlightTiles] = consumeTilesInThreads( ...
+                renderPlan, options, outputGrid, tiles, tileConsumer, ...
+                measureConsumer)
+            pool = ProjectionBackendTiledRenderer.ensureThreadPool();
+            maximumInFlight = min(options.MaximumInFlightTiles, numel(tiles));
+            futures = parallel.FevalFuture.empty;
+            nextTileIndex = 1;
+            completionOrdinal = 0;
+            peakInFlightTiles = 0;
+            tileReports = ProjectionBackendTiledRenderer.emptyTileReports();
+            try
+                while nextTileIndex <= numel(tiles) || ~isempty(futures)
+                    while nextTileIndex <= numel(tiles) && ...
+                            numel(futures) < maximumInFlight
+                        tile = tiles(nextTileIndex);
+                        futures(end + 1) = parfeval(pool, ...
+                            @ProjectionBackendTiledRenderer.renderTileTask, 1, ...
+                            renderPlan, options, outputGrid, tile, ...
+                            nextTileIndex); %#ok<AGROW>
+                        nextTileIndex = nextTileIndex + 1;
+                    end
+                    peakInFlightTiles = max( ...
+                        peakInFlightTiles, numel(futures));
+                    [completedIndex, tileResult] = fetchNext(futures);
+                    futures(completedIndex) = [];
+                    if ~tileResult.Succeeded
+                        ProjectionBackendTiledRenderer.cancelFutures(futures);
+                        error("ProjectionBackendTiledRenderer:tileFailed", ...
+                            "Tile %d rows [%d %d] columns [%d %d] failed (%s): %s", ...
+                            tileResult.TileIndex, ...
+                            tileResult.Tile.RowRange([1 end]), ...
+                            tileResult.Tile.ColumnRange([1 end]), ...
+                            tileResult.ErrorIdentifier, tileResult.ErrorMessage);
+                    end
+                    completionOrdinal = completionOrdinal + 1;
+                    report = tileResult.Report;
+                    report.TileIndex = tileResult.TileIndex;
+                    report.CompletionOrdinal = completionOrdinal;
+                    report = ProjectionBackendTiledRenderer.consumeTile( ...
+                        tileConsumer, tileResult.Tile, tileResult.Readback, ...
+                        report, measureConsumer);
+                    tileReports(tileResult.TileIndex) = report;
+                end
+            catch exception
+                ProjectionBackendTiledRenderer.cancelFutures(futures);
+                rethrow(exception)
+            end
+        end
+
+        function result = renderTileTask( ...
+                renderPlan, options, outputGrid, tile, tileIndex)
+            result = struct(TileIndex=tileIndex, Tile=tile, ...
+                Succeeded=false, Readback=[], Report=[], ...
+                ErrorIdentifier="", ErrorMessage="");
+            try
+                [result.Readback, result.Report] = ...
+                    ProjectionBackendTiledRenderer.renderTile( ...
+                    renderPlan, options, outputGrid, tile);
+                result.Succeeded = true;
+            catch exception
+                result.ErrorIdentifier = string(exception.identifier);
+                result.ErrorMessage = string(exception.message);
+            end
+        end
+
+        function report = consumeTile( ...
+                tileConsumer, tile, tileReadback, report, measureConsumer)
+            if measureConsumer
+                writeTimer = tic;
+                tileConsumer(tile, tileReadback);
+                report.WriteSeconds = toc(writeTimer);
+            else
+                tileConsumer(tile, tileReadback);
+            end
+        end
+
+        function cancelFutures(futures)
+            if ~isempty(futures)
+                cancel(futures);
             end
         end
 
@@ -395,7 +468,8 @@ classdef ProjectionBackendTiledRenderer
         end
 
         function reports = emptyTileReports()
-            reports = struct(RowRange={}, ColumnRange={}, OutputSize={}, ...
+            reports = struct(TileIndex={}, CompletionOrdinal={}, ...
+                RowRange={}, ColumnRange={}, OutputSize={}, ...
                 PixelCount={}, RenderSeconds={}, WriteSeconds={}, ...
                 EstimatedMemoryBytes={});
         end
@@ -403,6 +477,8 @@ classdef ProjectionBackendTiledRenderer
         function report = tileReport(tile, tileReadback, renderSeconds)
             tileInfo = whos("tileReadback");
             report = struct();
+            report.TileIndex = [];
+            report.CompletionOrdinal = [];
             report.RowRange = [tile.RowRange(1), tile.RowRange(end)];
             report.ColumnRange = [tile.ColumnRange(1), tile.ColumnRange(end)];
             report.OutputSize = tileReadback.OutputSize;
@@ -473,6 +549,15 @@ classdef ProjectionBackendTiledRenderer
                     "%s must be a scalar logical value.", name);
             end
             value = logical(value);
+        end
+
+        function value = validatePositiveInteger(value, name)
+            if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || ...
+                    value < 1 || fix(value) ~= value
+                error("ProjectionBackendTiledRenderer:invalidOptions", ...
+                    "%s must be a finite positive integer.", name);
+            end
+            value = double(value);
         end
 
         function mode = validateExecutionMode(mode)

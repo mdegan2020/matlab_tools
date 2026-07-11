@@ -83,7 +83,7 @@ classdef ProjectionBackendTiledRendererTest < matlab.unittest.TestCase
                 RenderOptions=struct(OutputSize=[5 7], TileSize=[2 3]));
             threadsJob = struct(Scene=scene, ...
                 RenderOptions=struct(OutputSize=[5 7], TileSize=[2 3]), ...
-                Execution=struct(Mode="threads"));
+                Execution=struct(Mode="threads", MaximumInFlightTiles=2));
 
             serialResult = ProjectionBackendProcessor.run(serialJob);
             threadsResult = ProjectionBackendProcessor.run(threadsJob);
@@ -99,6 +99,13 @@ classdef ProjectionBackendTiledRendererTest < matlab.unittest.TestCase
                 serialResult.Readback.ValidMask);
             testCase.verifyEqual(threadsResult.Readback.TileCount, ...
                 serialResult.Readback.TileCount);
+            testCase.verifyEqual(threadsResult.Readback.MaximumInFlightTiles, 2);
+            testCase.verifyLessThanOrEqual( ...
+                threadsResult.Readback.PeakInFlightTiles, 2);
+            testCase.verifyEqual( ...
+                [threadsResult.Readback.TileReports.TileIndex], 1:9);
+            testCase.verifyEqual(sort( ...
+                [threadsResult.Readback.TileReports.CompletionOrdinal]), 1:9);
             testCase.verifyTrue(contains(string(class(pool)), "ThreadPool"));
         end
 

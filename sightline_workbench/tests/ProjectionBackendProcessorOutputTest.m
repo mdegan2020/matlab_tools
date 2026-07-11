@@ -174,6 +174,58 @@ classdef ProjectionBackendProcessorOutputTest < matlab.unittest.TestCase
             testCase.verifyTrue(result.Readback.Streaming);
         end
 
+        function testBoundedThreadStreamingMatchesSerialTiff(testCase)
+            testCase.addTeardown( ...
+                @ProjectionBackendProcessorOutputTest.deleteActiveThreadPool);
+            serialDirectory = string(tempname);
+            threadDirectory = string(tempname);
+            mkdir(serialDirectory);
+            mkdir(threadDirectory);
+            testCase.addTeardown(@() ...
+                ProjectionBackendProcessorOutputTest.removeFolder(serialDirectory));
+            testCase.addTeardown(@() ...
+                ProjectionBackendProcessorOutputTest.removeFolder(threadDirectory));
+            scene = ProjectionBackendProcessorOutputTest.makeTwoLayerScene();
+            renderOptions = struct(OutputSize=[33 35], TileSize=[16 16]);
+            baseOutput = struct(WriteFiles=true, Formats="tiff", ...
+                IncludeComposite=true, IncludeLayers=true, ...
+                InMemoryPolicy="never");
+            serialOutput = baseOutput;
+            serialOutput.Directory = serialDirectory;
+            threadOutput = baseOutput;
+            threadOutput.Directory = threadDirectory;
+
+            serialResult = ProjectionBackendProcessor.run( ...
+                struct(Scene=scene, RenderOptions=renderOptions, ...
+                Output=serialOutput));
+            threadResult = ProjectionBackendProcessor.run( ...
+                struct(Scene=scene, RenderOptions=renderOptions, ...
+                Output=threadOutput, Execution=struct( ...
+                Mode="threads", MaximumInFlightTiles=2)));
+
+            serialImage = imread(fullfile(serialDirectory, "composite.tif"));
+            threadImage = imread(fullfile(threadDirectory, "composite.tif"));
+            serialMask = imread(fullfile(serialDirectory, "composite_mask.tif"));
+            threadMask = imread(fullfile(threadDirectory, "composite_mask.tif"));
+
+            testCase.verifyEqual(threadImage, serialImage);
+            testCase.verifyEqual(threadMask, serialMask);
+            testCase.verifyEqual(threadResult.Readback.ExecutionMode, "threads");
+            testCase.verifyTrue(threadResult.Readback.Streaming);
+            testCase.verifyEqual( ...
+                threadResult.Readback.MaximumInFlightTiles, 2);
+            testCase.verifyLessThanOrEqual( ...
+                threadResult.Readback.PeakInFlightTiles, 2);
+            testCase.verifyEqual(threadResult.Readback.TileCount, ...
+                serialResult.Readback.TileCount);
+            testCase.verifyEqual( ...
+                [threadResult.Readback.TileReports.TileIndex], ...
+                1:threadResult.Readback.TileCount);
+            testCase.verifyEqual(sort( ...
+                [threadResult.Readback.TileReports.CompletionOrdinal]), ...
+                1:threadResult.Readback.TileCount);
+        end
+
         function testStreamingRejectsPng(testCase)
             outputDirectory = string(tempname);
             mkdir(outputDirectory);
@@ -257,6 +309,13 @@ classdef ProjectionBackendProcessorOutputTest < matlab.unittest.TestCase
         function removeFolder(folder)
             if isfolder(folder)
                 rmdir(folder, "s");
+            end
+        end
+
+        function deleteActiveThreadPool()
+            pool = gcp("nocreate");
+            if ~isempty(pool) && contains(string(class(pool)), "ThreadPool")
+                delete(pool);
             end
         end
     end

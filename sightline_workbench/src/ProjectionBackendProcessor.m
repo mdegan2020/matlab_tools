@@ -21,7 +21,7 @@ classdef ProjectionBackendProcessor
                 renderOptions, job.Execution);
             [renderOptions, returnInMemory] = ...
                 ProjectionBackendProcessor.configureOutputExecution( ...
-                renderOptions, job.Output, job.Execution, outputGrid);
+                renderOptions, job.Output, outputGrid);
             renderPlan = ProjectionBackendRenderPlan.compile( ...
                 job.Scene, renderOptions, preparedLayers);
             renderTimer = tic;
@@ -98,7 +98,7 @@ classdef ProjectionBackendProcessor
                 renderOptions, job.Execution);
             [renderOptions, ~] = ...
                 ProjectionBackendProcessor.configureOutputExecution( ...
-                renderOptions, job.Output, job.Execution, outputGrid);
+                renderOptions, job.Output, outputGrid);
             renderPlan = ProjectionBackendRenderPlan.compile( ...
                 job.Scene, renderOptions, preparedLayers);
 
@@ -146,7 +146,7 @@ classdef ProjectionBackendProcessor
         end
 
         function [renderOptions, returnInMemory] = configureOutputExecution( ...
-                renderOptions, output, execution, outputGrid)
+                renderOptions, output, outputGrid)
             pixelCount = double(outputGrid.PixelCount);
             maximumPixels = double(output.MaximumInMemoryPixels);
             policy = lower(string(output.InMemoryPolicy));
@@ -168,10 +168,6 @@ classdef ProjectionBackendProcessor
                 (policy == "auto" && pixelCount <= maximumPixels);
             if returnInMemory
                 return
-            end
-            if lower(string(execution.Mode)) ~= "serial"
-                error("ProjectionBackendProcessor:streamingRequiresSerial", ...
-                    "Bounded output streaming requires Execution.Mode=""serial"" until Backend Performance Pack 3.");
             end
             formats = reshape(lower(string(output.Formats)), 1, []);
             if ~isequal(formats, "tiff")

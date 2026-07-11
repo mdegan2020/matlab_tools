@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 403/403 tests with zero
+- The latest fresh-class repository suite passes 405/405 tests with zero
   failures and zero incomplete tests.
 
 ## Completed Feature Trees
@@ -34,7 +34,7 @@ As of July 11, 2026:
 | Initial Alignment Hardening Feature Packs 1-5 | Complete |
 | Alignment Reliability Packs 0-8 | Complete |
 | Viewer Performance Packs 0-8 | Complete |
-| Backend Performance Packs 0-2 | Complete |
+| Backend Performance Packs 0-3 | Complete |
 | Dense Surface Pack 1 | Complete |
 | Viewer Orientation and Anaglyph Presentation Pack | Complete |
 | Alignment Workbench Usability and Offset-Semantics Pack | Complete |
@@ -74,28 +74,28 @@ SGM with CPU fallback. See `docs/cross_system_acceleration_report.md`.
 Backend Performance Pack 2 adds bounded serial tiled-TIFF output, explicit
 in-memory retention policy/limits, optional query-coordinate omission,
 output-sized index-temporary removal, and partial-file cleanup.
+Backend Performance Pack 3 replaces retain-all `parfor` execution with bounded
+`parfeval` submission, immediate `fetchNext` consumption, indexed main-thread
+TIFF writes, deterministic tile reports, and explicit in-flight diagnostics.
 
-The remaining queue is Backend Performance Packs 3-5 followed by dense-surface
+The remaining queue is Backend Performance Packs 4-5 followed by dense-surface
 synthetic expansion.
 
-1. **Backend Performance Pack 3 — Bounded thread pipeline.** Submit a limited
-   number of tiles through `parpool("threads")`, consume results
-   incrementally, and keep deterministic writes and bounded in-flight memory.
-2. **Backend Performance Pack 4 — Radiometric and precision policy.** Define
+1. **Backend Performance Pack 4 — Radiometric and precision policy.** Define
    output class, scale/offset, fill, single-precision tolerances, and
    format-specific writing without repeated full-image normalization.
-3. **Backend Performance Pack 5 — File-backed source regions.** Add a backend
+2. **Backend Performance Pack 5 — File-backed source regions.** Add a backend
    source-region provider with in-memory compatibility and TIFF/`blockedImage`
    adapters so tiled jobs need not hold a complete source array.
-4. **Dense-surface synthetic data expansion.** Lowest priority until user
+3. **Dense-surface synthetic data expansion.** Lowest priority until user
    inputs are available. The user will provide desired output dimensions and
    rough sensor geometry such as azimuth, elevation, and range; the tooling
    should derive the remaining synthetic image/geometry details for more
    representative surface-extraction validation fixtures.
 
-The Pack 2 bounded claim applies to normalized serial TIFF output only. PNG,
-threaded streaming, general radiometric policy, and file-backed source imagery
-remain owned by Packs 3-5.
+The bounded claim applies to normalized serial/thread TIFF output only. PNG,
+general radiometric policy, and file-backed source imagery remain owned by
+Packs 4-5.
 
 ## External Validation Gates
 
@@ -147,7 +147,7 @@ queue:
   alignment scope.
 - `docs/performance_optimization_workplan.md` — completed viewer/backend
   performance packs, cross-system acceleration constraints, and Backend Packs
-  3-5.
+  4-5.
 - `docs/dense_surface_feature_pack.md` — exploratory dense-surface contract
   and limitations.
 - `docs/alignment_operator_guide.md` — current staged operator workflow.
