@@ -15,6 +15,11 @@ classdef ProjectionDenseSurfaceSyntheticTerrain
             span = [bounds(2) - bounds(1), bounds(4) - bounds(3)];
             bounds = bounds + 0.05 * [-span(1) span(1) -span(2) span(2)];
             center = [mean(bounds(1:2)) mean(bounds(3:4))];
+            intersectionStep = min( ...
+                config.terrain.characteristic_lengths_meters) / 6;
+            intersectionSamples = ...
+                ProjectionDenseSurfaceSyntheticTerrain.intersectionSampleCount( ...
+                config, plan, intersectionStep);
             terrain = struct( ...
                 Format=ProjectionDenseSurfaceSyntheticTerrain.Format, ...
                 Version=ProjectionDenseSurfaceSyntheticTerrain.Version, ...
@@ -25,8 +30,8 @@ classdef ProjectionDenseSurfaceSyntheticTerrain
                 config.terrain.characteristic_lengths_meters, ...
                 AsymmetryWeights=config.terrain.asymmetry_weights, ...
                 RawMinimum=0, RawMaximum=1, ...
-                IntersectionStepMeters= ...
-                min(config.terrain.characteristic_lengths_meters) / 8);
+                IntersectionStepMeters=intersectionStep, ...
+                IntersectionSampleCount=intersectionSamples);
 
             gridSize = 257;
             x = linspace(bounds(1), bounds(2), gridSize);
@@ -73,16 +78,7 @@ classdef ProjectionDenseSurfaceSyntheticTerrain
 
             lower = topRange;
             upper = bottomRange;
-            horizontalSpan = vecnorm(vectors(1:2, :), 2, 1) .* ...
-                max(bottomRange - topRange, 0);
-            finiteSpan = horizontalSpan(valid);
-            if isempty(finiteSpan)
-                sampleCount = 3;
-            else
-                sampleCount = max(3, ceil(max(finiteSpan) / ...
-                    terrain.IntersectionStepMeters) + 1);
-            end
-            sampleCount = min(sampleCount, 2049);
+            sampleCount = terrain.IntersectionSampleCount;
 
             previousRange = topRange;
             previousResidual = ...
@@ -105,7 +101,7 @@ classdef ProjectionDenseSurfaceSyntheticTerrain
                 previousResidual = currentResidual;
             end
 
-            for iteration = 1:35
+            for iteration = 1:15
                 midpoint = 0.5 * (lower + upper);
                 residual = ProjectionDenseSurfaceSyntheticTerrain.rayResidual( ...
                     terrain, origins, vectors, midpoint);
@@ -212,6 +208,28 @@ classdef ProjectionDenseSurfaceSyntheticTerrain
             end
         end
 
+        function sampleCount = intersectionSampleCount(config, plan, step)
+            halfFov = 0.5 * config.image.cross_track_fov_degrees;
+            maximumRatio = 0;
+            for viewIndex = 1:numel(plan.Views)
+                view = plan.Views(viewIndex);
+                rolls = view.RollDegrees + [-halfFov halfFov];
+                pitches = [view.PitchStartDegrees view.PitchEndDegrees];
+                for rollIndex = 1:2
+                    for pitchIndex = 1:2
+                        ray = ProjectionDenseSurfaceSyntheticPlanner.boresightRay( ...
+                            rolls(rollIndex), pitches(pitchIndex));
+                        ratio = norm(ray(1:2)) / abs(ray(3));
+                        maximumRatio = max(maximumRatio, ratio);
+                    end
+                end
+            end
+            heightSpan = config.terrain.maximum_height_meters - ...
+                config.terrain.minimum_height_meters;
+            maximumHorizontalSpan = 1.02 * heightSpan * maximumRatio;
+            sampleCount = max(3, ceil(maximumHorizontalSpan / step) + 1);
+        end
+
         function residual = rayResidual(terrain, origins, vectors, ranges)
             x = origins(1, :) + vectors(1, :) .* ranges;
             y = origins(2, :) + vectors(2, :) .* ranges;
@@ -303,7 +321,8 @@ classdef ProjectionDenseSurfaceSyntheticTerrain
             required = ["Format" "BoundsMeters" "CenterMeters" ...
                 "MinimumHeightMeters" "MaximumHeightMeters" ...
                 "CharacteristicLengthsMeters" "AsymmetryWeights" ...
-                "RawMinimum" "RawMaximum" "IntersectionStepMeters"];
+                "RawMinimum" "RawMaximum" "IntersectionStepMeters" ...
+                "IntersectionSampleCount"];
             if ~isstruct(terrain) || ~isscalar(terrain) || ...
                     ~all(isfield(terrain, required)) || ...
                     string(terrain.Format) ~= ...

@@ -97,5 +97,19 @@ classdef ProjectionDenseSurfaceSyntheticTestSupport
             plan = ProjectionDenseSurfaceSyntheticPlanner.plan( ...
                 config, sourceImageSize);
         end
+
+        function [config, plan, sourceImage] = generatorFixture()
+            %generatorFixture Return a small full-render public fixture.
+            config = ProjectionDenseSurfaceSyntheticTestSupport.config();
+            config.image.rows = 33;
+            config.image.columns = 49;
+            config.image.scan_rate_lines_per_second = 100;
+            [x, y] = meshgrid(1:36, 1:32);
+            sourceImage = cat(3, uint8(mod(x + 3 * y, 251)), ...
+                uint8(mod(2 * x + 5 * y, 251)), ...
+                uint8(mod(7 * x + y, 251)));
+            plan = ProjectionDenseSurfaceSyntheticPlanner.plan( ...
+                config, size(sourceImage));
+        end
     end
 end

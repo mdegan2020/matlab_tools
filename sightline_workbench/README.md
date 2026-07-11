@@ -79,9 +79,9 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete;
-- the latest fresh-class repository validation passes all 436 tests;
-- dense-surface synthetic Milestones 1-2 are complete, and full-scale truth
-  image generation and final output are next; and
+- the latest fresh-class repository validation passes all 443 tests;
+- dense-surface synthetic Milestones 1-3 are complete, and navigation
+  error-state presets and reported-geometry variants are next; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -201,7 +201,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 436 passing tests with no failures or incomplete tests.
+baseline is 443 passing tests with no failures or incomplete tests.
 
 ## Dense-Surface Synthetic Fixture
 
@@ -237,6 +237,21 @@ Gauss-Markov process supplies continuous on-demand position and attitude truth;
 full per-pixel XYZ arrays are not retained. Viewer-safe scene metadata contains
 only reported-geometry intent and never includes terrain, trajectory, or truth
 view payloads.
+
+Milestone 3 adds `ProjectionDenseSurfaceSyntheticGenerator`. `runFile` performs
+configuration and feasibility checks from source metadata before loading the
+full source image or allocating output imagery. It then loads source radiometry
+once, renders complete single-band truth views in bounded internal chunks,
+retains completed images in memory, and writes each final TIFF or PNG once.
+The configured full-scale run completed with full valid coverage and exact
+file readback. Its ignored artifact directory also contains a compact image-free
+truth/scene MAT file and JSON summary with configuration fingerprint, runtime,
+memory, visibility, and per-view diagnostics.
+
+```matlab
+result = ProjectionDenseSurfaceSyntheticGenerator.runFile( ...
+    fullfile("config", "dense_surface_synthetic.local.json"));
+```
 
 ## Viewer Performance Evaluation
 
@@ -855,9 +870,9 @@ provide `BackendSource=struct(Kind="tiff",Path=...)`; each serial output tile
 reads only the required source bounding region. Runtime provider images/caches
 remain in the render plan, never the serializable scene descriptor. MATLAB TIFF
 region reads are unsupported on thread workers, so file-backed sources
-currently require serial execution. Dense-surface synthetic full-scale image
-generation is now the active queue; its private configuration and ordered
-public contract are described in
+currently require serial execution. Dense-surface synthetic navigation
+error-state variants are now the active queue; the private configuration and
+ordered public contract are described in
 `docs/dense_surface_synthetic_expansion_plan.md`.
 See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output

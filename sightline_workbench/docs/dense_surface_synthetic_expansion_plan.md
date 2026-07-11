@@ -1,6 +1,6 @@
 # Dense-Surface Synthetic Expansion Plan
 
-Status: approved for implementation. Milestones 1-2 are complete; Milestone 3
+Status: approved for implementation. Milestones 1-3 are complete; Milestone 4
 is the active queue after completion of Backend Performance Packs 0-5. Fixture
 inputs and modeling decisions remain in the local ignored configuration.
 
@@ -240,7 +240,7 @@ terrain intersections, and cyclic source bands are sampled from compact truth
 parameters. The viewer-safe scene metadata contract explicitly excludes the
 terrain, trajectory, and truth-view payloads.
 
-### Milestone 3: Full-Scale Image Generation
+### Milestone 3: Full-Scale Image Generation — Complete
 
 - Render each configured single-band image from truth geometry and full source
   texture.
@@ -249,6 +249,14 @@ terrain, trajectory, and truth-view payloads.
 - Write the configured final image format only after an image completes.
 - Emit compact MAT truth/scene data and a JSON run summary under the ignored
   artifact directory.
+
+Implemented by `ProjectionDenseSurfaceSyntheticGenerator`. Feasibility is
+confirmed from source metadata before source-image loading or full-size output
+allocation. Full source radiometry is loaded once; complete truth images are
+rendered with bounded internal chunks and retained in memory. Final TIFF/PNG
+files are written only after image completion. The configured full-scale run
+completed with full valid coverage and exact readback; its ignored MAT/JSON
+artifacts are compact and contain no full image arrays.
 
 ### Milestone 4: Navigation Presets And Scene Variants
 

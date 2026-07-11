@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 436/436 tests with zero
+- The latest fresh-class repository suite passes 443/443 tests with zero
   failures and zero incomplete tests.
 
 ## Completed Feature Trees
@@ -39,7 +39,7 @@ As of July 11, 2026:
 | Viewer Orientation and Anaglyph Presentation Pack | Complete |
 | Alignment Workbench Usability and Offset-Semantics Pack | Complete |
 | Cross-System Acceleration Pass | Complete |
-| Dense-Surface Synthetic Expansion Milestones 1-2 | Complete |
+| Dense-Surface Synthetic Expansion Milestones 1-3 | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -88,7 +88,7 @@ provenance summaries, and in-memory/file-backed numerical parity. MATLAB TIFF
 region reads require serial execution because their internal reader is not
 supported on thread workers.
 
-The remaining implementation queue is Milestones 3-5 of the approved
+The remaining implementation queue is Milestones 4-5 of the approved
 dense-surface synthetic expansion. Required fixture decisions are captured in
 an ignored local JSON configuration. Actual sensor and geometry values must
 remain out of committed documentation.
@@ -104,9 +104,11 @@ remain out of committed documentation.
    compact deterministic terrain enforces configured extrema and uses first-hit
    intersections with explicit occlusion; fixture-local Gauss-Markov motion and
    truth rays are sampled on demand. Truth is absent from viewer-safe metadata.
-3. **Full-scale image generation.** Render the configured single-band views
-   from truth geometry and full in-memory texture, then write final TIFF/PNG
-   products and compact ignored diagnostics.
+3. **Full-scale image generation — complete.** The generator gates allocation
+   on feasibility, loads full source radiometry once, renders complete
+   single-band images in bounded internal chunks, retains them in memory, and
+   writes final TIFF/PNG plus compact image-free MAT/JSON artifacts. The
+   configured run completed with full valid coverage and exact file readback.
 4. **Navigation presets and scene variants.** Add generic Tactical Grade IMU
    and Navigation Grade IMU error-state presets with nominal non-RTK GNSS
    aiding, plus pointing-only and combined-error acceptance variants.
