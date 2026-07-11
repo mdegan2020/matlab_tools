@@ -220,6 +220,9 @@ hardware-gated:
 
 ## Sources Of Truth
 
+- `docs/software_requirements_specification.md` — project-wide normative
+  product, interface, scientific-integrity, quality, and verification
+  requirements. It does not replace the ordered workplan or this status index.
 - `docs/multi_image_surface_reconstruction_workplan.md` — active ordered
   multi-image viewer/alignment, MATLAB SDK, dense reconstruction, uncertainty,
   DEM registration, precision, mathematical-specification, CUDA, and C++ plan.

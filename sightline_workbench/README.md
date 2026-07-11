@@ -62,6 +62,7 @@ docs/dense_surface_synthetic_expansion_plan.md Completed truth-aware synthetic f
 docs/cross_system_acceleration_report.md Cross-system CPU/thread/GPU decision record
 docs/performance_optimization_workplan.md Viewer/backend optimization packs
 docs/multi_image_surface_reconstruction_workplan.md Active consolidated multi-image/SDK/surface roadmap
+docs/software_requirements_specification.md Project-wide normative software requirements
 docs/matlab_sdk_audit.md          Completed MATLAB public/headless API inventory
 docs/project_status.md           Current completion state and outstanding work
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
