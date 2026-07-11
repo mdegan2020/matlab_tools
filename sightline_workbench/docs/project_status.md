@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 416/416 tests with zero
+- The latest fresh-class repository suite passes 424/424 tests with zero
   failures and zero incomplete tests.
 
 ## Completed Feature Trees
@@ -39,6 +39,7 @@ As of July 11, 2026:
 | Viewer Orientation and Anaglyph Presentation Pack | Complete |
 | Alignment Workbench Usability and Offset-Semantics Pack | Complete |
 | Cross-System Acceleration Pass | Complete |
+| Dense-Surface Synthetic Expansion Milestone 1 | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -87,15 +88,17 @@ provenance summaries, and in-memory/file-backed numerical parity. MATLAB TIFF
 region reads require serial execution because their internal reader is not
 supported on thread workers.
 
-The remaining implementation queue is the approved dense-surface synthetic
-expansion. Required fixture decisions are captured in an ignored local JSON
-configuration; no user input currently blocks the first milestone. Actual
-sensor and geometry values must remain out of committed documentation.
+The remaining implementation queue is Milestones 2-5 of the approved
+dense-surface synthetic expansion. Required fixture decisions are captured in
+an ignored local JSON configuration. Actual sensor and geometry values must
+remain out of committed documentation.
 
-1. **Configuration and feasibility.** Validate the private configuration and
-   solve range, sampling, gimbal scan, constant-gap collection timing,
-   field-of-regard, footprint, and reflected-texture constraints before
-   allocating full-size imagery.
+1. **Configuration and feasibility — complete.** Strict schema/path validation,
+   explicit body/world and roll-then-pitch gimbal transforms, full-ray projected
+   GSD, pitch-scan and constant-gap schedule solves, footprint/tile planning,
+   per-axis oversampling, and ordered explainable feasibility checks are in
+   place. The ignored configured fixture passes every planner check before
+   full-scale allocation.
 2. **Terrain, texture, and truth geometry.** Add logical reflected texture
    addressing, asymmetric smooth terrain with real occlusion, continuous truth
    motion, and compact on-demand truth sampling.

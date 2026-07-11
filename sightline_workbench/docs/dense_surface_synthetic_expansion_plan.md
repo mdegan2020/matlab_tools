@@ -1,9 +1,8 @@
 # Dense-Surface Synthetic Expansion Plan
 
-Status: approved for implementation. This is the active implementation queue
-after completion of Backend Performance Packs 0-5. The fixture inputs and
-modeling decisions are available in the local ignored configuration; no user
-input is currently blocking Milestone 1.
+Status: approved for implementation. Milestone 1 is complete; Milestone 2 is
+the active queue after completion of Backend Performance Packs 0-5. Fixture
+inputs and modeling decisions remain in the local ignored configuration.
 
 ## Purpose
 
@@ -209,13 +208,20 @@ for this fixture to become the primary alignment acceptance gate.
 
 Each milestone is a small, validated commit and is pushed after completion.
 
-### Milestone 1: Configuration And Feasibility
+### Milestone 1: Configuration And Feasibility — Complete
 
 - Add strict private-config loading and validation.
 - Implement frame transforms, gimbal composition, projected-GSD calculation,
   scan-rate solution, constant-gap schedule solution, and feasibility report.
 - Add small public tests for feasible and infeasible schedules.
 - Do not render full-size imagery yet.
+
+Implemented by `ProjectionDenseSurfaceSyntheticConfig` and
+`ProjectionDenseSurfaceSyntheticPlanner`. The planner returns an ordered
+constraint ledger and first violation without changing private inputs. The
+configured fixture passes range, per-axis sampling, scan, constant-gap
+schedule, pitch field-of-regard, footprint, and reflected-texture growth checks.
+No full-size image allocation occurs in this milestone.
 
 ### Milestone 2: Terrain, Texture, And Truth Geometry
 

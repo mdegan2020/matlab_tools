@@ -33,6 +33,7 @@ src/ProjectionViewerPerformanceMonitor.m Bounded runtime viewer work metrics
 src/ProjectionViewerState.m     JSON-serializable viewer state and scene-apply helpers
 src/ProjectionAlignment*.m      Feature-based alignment models, matching, solving, and runner
 src/ProjectionDenseSurface*.m   Analysis-only SGM extraction and result viewers
+src/ProjectionDenseSurfaceSynthetic*.m Truth-aware fixture configuration and planning
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionGpuSupport.m      Shared optional gpuArray capability checks
 src/ProjectionBackendGpuSupport.m Backend optional gpuArray capability checks
@@ -78,9 +79,9 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete;
-- the latest fresh-class repository validation passes all 416 tests;
-- the remaining implementation queue is the approved, fully specified
-  dense-surface synthetic expansion; and
+- the latest fresh-class repository validation passes all 424 tests;
+- dense-surface synthetic Milestone 1 is complete, and terrain, reflected
+  texture, truth motion, and occlusion are next; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -200,7 +201,31 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 416 passing tests with no failures or incomplete tests.
+baseline is 424 passing tests with no failures or incomplete tests.
+
+## Dense-Surface Synthetic Feasibility
+
+Milestone 1 adds strict loading of the ignored local fixture configuration and
+a pure collection planner. The planner validates the complete committed schema,
+resolves runtime paths without changing the serializable configuration, and
+derives frame transforms, physical roll/pitch gimbal composition, projected
+per-axis GSD, pitch-scan rates, constant-gap timing, scene-center separation,
+terrain/texture bounds, reflected-tile counts, and oversampling ratios before
+any full-size image is allocated.
+
+Run the local feasibility gate from MATLAB with:
+
+```matlab
+addpath("src");
+report = ProjectionDenseSurfaceSyntheticPlanner.planFile( ...
+    fullfile("config", "dense_surface_synthetic.local.json"));
+assert(report.Feasible, report.Explanation);
+```
+
+Infeasible plans return an ordered check ledger, the first violated constraint,
+and the nearest computed schedule rather than changing configured image,
+platform, scan, range, texture, or field-of-regard inputs. Committed tests use
+independently selected small public values and never load the local fixture.
 
 ## Viewer Performance Evaluation
 
