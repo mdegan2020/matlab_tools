@@ -111,5 +111,26 @@ classdef ProjectionDenseSurfaceSyntheticTestSupport
             plan = ProjectionDenseSurfaceSyntheticPlanner.plan( ...
                 config, size(sourceImage));
         end
+
+        function [config, run, navigation] = acceptanceFixture()
+            %acceptanceFixture Return a textured public alignment fixture.
+            config = ProjectionDenseSurfaceSyntheticTestSupport.config();
+            config.image.rows = 160;
+            config.image.columns = 224;
+            config.image.scan_rate_lines_per_second = 200;
+            config.image.source_band_sequence = [1 1 1];
+            stream = RandStream("mt19937ar", Seed=91);
+            texture = imgaussfilt(rand(stream, 192, 208), 0.7);
+            texture = uint8(round(255 * mat2gray(texture)));
+            sourceImage = cat(3, texture, uint8(255 - texture), texture);
+            plan = ProjectionDenseSurfaceSyntheticPlanner.plan( ...
+                config, size(sourceImage));
+            run = ProjectionDenseSurfaceSyntheticGenerator.generate( ...
+                config, plan, sourceImage, struct(WriteFiles=false, ...
+                RowChunkSize=80, ColumnChunkSize=112));
+            navigation = ...
+                ProjectionDenseSurfaceSyntheticNavigation.createFromResult( ...
+                config, run);
+        end
     end
 end

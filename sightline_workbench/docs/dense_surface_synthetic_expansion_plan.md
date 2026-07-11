@@ -1,8 +1,9 @@
 # Dense-Surface Synthetic Expansion Plan
 
-Status: approved for implementation. Milestones 1-4 are complete; Milestone 5
-is the active queue after completion of Backend Performance Packs 0-5. Fixture
-inputs and modeling decisions remain in the local ignored configuration.
+Status: approved for implementation. Milestones 1-4 and the Milestone 5
+implementation/first evidence run are complete. The separately reviewable
+numerical-threshold proposal remains. Fixture inputs and modeling decisions
+remain in the local ignored configuration.
 
 ## Purpose
 
@@ -274,7 +275,7 @@ grid and continuous observation samplers. The configured run preserves expected
 grade ordering. Variants contain only a shared image reference and reported
 trajectory closures; they neither duplicate imagery nor capture truth payloads.
 
-### Milestone 5: Alignment And Dense-Surface Acceptance
+### Milestone 5: Alignment And Dense-Surface Acceptance — Evidence Complete
 
 - Launch the generated variants through the existing in-memory viewer scene
   contract.
@@ -282,6 +283,19 @@ trajectory closures; they neither duplicate imagery nor capture truth payloads.
 - Exercise dense extraction on selected mutually visible pairs.
 - Write the first full-scale evidence package and propose numerical thresholds
   in a separate reviewable documentation change.
+
+Implemented by `ProjectionDenseSurfaceSyntheticAcceptance`. It constructs
+ordinary in-memory viewer scenes from shared truth images and reported geometry
+without exposing truth to the viewer, then runs the existing render, match,
+filter, fixed-reference OPK solve, safe-apply, and dense extraction stages.
+Post-run diagnostics compare sparse observations and retained dense source
+coordinates with compact truth, explicitly excluding genuine occlusion from
+error statistics. The ignored configured evidence contains four completed
+alignment runs, four successful dense products, and exact two-pass
+repeatability. The compact MAT/JSON package records runtime and memory evidence
+without embedding image arrays. See
+`docs/dense_surface_synthetic_acceptance_report.md`; numerical thresholds are
+intentionally deferred to the next separate documentation change.
 
 ## Deferred Expansion
 

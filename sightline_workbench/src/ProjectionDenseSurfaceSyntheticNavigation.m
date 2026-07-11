@@ -313,7 +313,11 @@ classdef ProjectionDenseSurfaceSyntheticNavigation
                     RollDegrees=view.RollDegrees, ...
                     PitchStartDegrees=view.PitchStartDegrees, ...
                     PitchEndDegrees=view.PitchEndDegrees, ...
-                    ConstantAttitudeErrorDegrees=constants(:, viewIndex));
+                    ConstantOpkDegrees=zeros(3, 1), OpkAxes=eye(3));
+                viewModel.OpkAxes = ...
+                    ProjectionDenseSurfaceSyntheticNavigation.opkAxes( ...
+                    model, viewModel);
+                viewModel.ConstantOpkDegrees = constants(:, viewIndex);
                 geometries{viewIndex} = ...
                     ProjectionDenseSurfaceSyntheticNavigation.sourceGeometry( ...
                     model, viewModel, presetName, mode, viewIndex);
@@ -332,8 +336,7 @@ classdef ProjectionDenseSurfaceSyntheticNavigation
                 model, view.CenterTimeSeconds);
             platformDirection = centerState.Velocity(:, 1);
             platformDirection = platformDirection / norm(platformDirection);
-            rowAxis = cross(platformDirection, centerRay);
-            rowAxis = rowAxis / norm(rowAxis);
+            rowAxis = view.OpkAxes(:, 1);
             terrainScale = -centerOrigin(3) / centerRay(3);
             nominalSceneCenter = centerOrigin + terrainScale * centerRay;
             geometry = struct(ImageSize=model.ImageSize, ...
@@ -372,8 +375,9 @@ classdef ProjectionDenseSurfaceSyntheticNavigation
                 ProjectionDenseSurfaceSyntheticNavigation.bodyRayGrid( ...
                 model, view, rowIndices, columnIndices);
             vectors = ProjectionDenseSurfaceSyntheticNavigation.rotateBodyGrid( ...
-                xBody, yBody, zBody, state.AttitudeDegrees + ...
-                view.ConstantAttitudeErrorDegrees);
+                xBody, yBody, zBody, state.AttitudeDegrees);
+            vectors = ProjectionDenseSurfaceSyntheticNavigation.applyOpkGrid( ...
+                vectors, view.OpkAxes, view.ConstantOpkDegrees);
         end
 
         function [origins, vectors] = sampleReportedPairs( ...
@@ -406,8 +410,24 @@ classdef ProjectionDenseSurfaceSyntheticNavigation
             yBody = -sin(roll) .* cos(pitch);
             zBody = cos(roll) .* cos(pitch);
             vectors = ProjectionDenseSurfaceSyntheticNavigation.rotateBodyPairs( ...
-                xBody, yBody, zBody, state.AttitudeDegrees + ...
-                view.ConstantAttitudeErrorDegrees);
+                xBody, yBody, zBody, state.AttitudeDegrees);
+            vectors = ProjectionDenseSurfaceSyntheticNavigation.applyOpkPairs( ...
+                vectors, view.OpkAxes, view.ConstantOpkDegrees);
+        end
+
+        function axes = opkAxes(model, view)
+            centerRow = 0.5 * (model.ImageSize(1) + 1);
+            centerColumn = 0.5 * (model.ImageSize(2) + 1);
+            [~, ray] = ...
+                ProjectionDenseSurfaceSyntheticNavigation.sampleReportedPairs( ...
+                model, view, centerRow, centerColumn);
+            state = ProjectionDenseSurfaceSyntheticNavigation.reportedState( ...
+                model, view.CenterTimeSeconds);
+            platform = state.Velocity(:, 1);
+            platform = platform / norm(platform);
+            rowAxis = cross(platform, ray);
+            rowAxis = rowAxis / norm(rowAxis);
+            axes = [rowAxis platform ray];
         end
 
         function state = reportedState(model, times)
@@ -457,6 +477,44 @@ classdef ProjectionDenseSurfaceSyntheticNavigation
                 xBody .* transform.R31 + yBody .* transform.R32 + ...
                 zBody .* transform.R33];
             vectors = vectors ./ vecnorm(vectors, 2, 1);
+        end
+
+        function vectors = applyOpkGrid(vectors, axes, opkDegrees)
+            if all(abs(opkDegrees) <= eps)
+                return
+            end
+            originalSize = size(vectors);
+            vectors = reshape( ...
+                ProjectionDenseSurfaceSyntheticNavigation.opkRotation( ...
+                axes, opkDegrees) * reshape(vectors, 3, []), originalSize);
+            vectors = vectors ./ sqrt(sum(vectors.^2, 1));
+        end
+
+        function vectors = applyOpkPairs(vectors, axes, opkDegrees)
+            if all(abs(opkDegrees) <= eps)
+                return
+            end
+            vectors = ProjectionDenseSurfaceSyntheticNavigation.opkRotation( ...
+                axes, opkDegrees) * vectors;
+            vectors = vectors ./ vecnorm(vectors, 2, 1);
+        end
+
+        function rotation = opkRotation(axes, opkDegrees)
+            omega = ProjectionDenseSurfaceSyntheticNavigation.rotationAboutAxis( ...
+                axes(:, 1), deg2rad(opkDegrees(1)));
+            phi = ProjectionDenseSurfaceSyntheticNavigation.rotationAboutAxis( ...
+                axes(:, 2), deg2rad(opkDegrees(2)));
+            kappa = ProjectionDenseSurfaceSyntheticNavigation.rotationAboutAxis( ...
+                axes(:, 3), deg2rad(opkDegrees(3)));
+            rotation = kappa * phi * omega;
+        end
+
+        function rotation = rotationAboutAxis(axis, angle)
+            axis = axis / norm(axis);
+            skew = [0 -axis(3) axis(2); axis(3) 0 -axis(1); ...
+                -axis(2) axis(1) 0];
+            rotation = cos(angle) * eye(3) + (1 - cos(angle)) * ...
+                (axis * axis.') + sin(angle) * skew;
         end
 
         function transform = rotationCoefficients(attitude)

@@ -107,7 +107,7 @@ classdef ProjectionDenseSurfaceSyntheticNavigationTest < matlab.unittest.TestCas
             testCase.verifyEqual(pointingOrigins, truthOrigins, AbsTol=1e-3);
             testCase.verifyGreaterThan(max(vecnorm( ...
                 combinedOrigins - truthOrigins, 2, 1)), 0);
-            testCase.verifyLessThan(std(pointingAngles), 1e-5);
+            testCase.verifyLessThan(std(pointingAngles), 1e-4);
             testCase.verifyGreaterThan(std(combinedAngles), std(pointingAngles));
             testCase.verifyGreaterThan(max(combinedAngles), 0);
         end

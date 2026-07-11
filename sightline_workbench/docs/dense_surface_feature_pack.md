@@ -1,7 +1,8 @@
 # Dense Surface Feature Pack
 
 Status: Pack 1 is complete. The representative synthetic image/geometry
-expansion is approved and is the active implementation queue. Its ordered,
+expansion implementation and first truth-aware evidence run are complete; its
+separate numerical-threshold proposal remains under review. The ordered,
 privacy-preserving milestones are defined in
 `docs/dense_surface_synthetic_expansion_plan.md`. Other follow-up candidates
 below remain decision-gated; see `docs/project_status.md`.
@@ -147,5 +148,5 @@ results = runTests;
 ```
 
 The completed Pack 1 fresh-class run passed all 386 repository tests at that
-milestone. The current fresh-class repository baseline is 451/451 after
-synthetic-expansion Milestone 4.
+milestone. The current fresh-class repository baseline is 457/457 after the
+synthetic-expansion Milestone 5 implementation and first evidence run.

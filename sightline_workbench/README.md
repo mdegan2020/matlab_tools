@@ -79,9 +79,10 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete;
-- the latest fresh-class repository validation passes all 451 tests;
-- dense-surface synthetic Milestones 1-4 are complete, and truth-aware
-  alignment/dense-surface acceptance is next; and
+- the latest fresh-class repository validation passes all 457 tests;
+- dense-surface synthetic Milestones 1-4 and the Milestone 5 implementation
+  and first evidence run are complete; the separate threshold proposal is the
+  remaining review item; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -201,7 +202,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 451 passing tests with no failures or incomplete tests.
+baseline is 457 passing tests with no failures or incomplete tests.
 
 ## Dense-Surface Synthetic Fixture
 
@@ -262,6 +263,17 @@ reference the same truth image set and contain no image payload. Their runtime
 closures capture reported trajectory models only, so terrain and truth
 structures do not enter viewer geometry. Compact ignored MAT/JSON artifacts
 record deterministic statistics and preset ordering.
+
+Milestone 5 adds `ProjectionDenseSurfaceSyntheticAcceptance`. It builds the
+ordinary in-memory viewer scene from shared images and reported geometry only,
+runs the existing working-image, match, filter, solve, safe-apply, and dense
+stages, and evaluates sparse and dense results against compact truth afterward.
+The reference layer is fixed for an observable differential-OPK comparison.
+Source-row/source-column maps retained by the dense extractor allow truth
+height and ray-separation checks on mutually visible terrain while reporting
+occlusion exclusions separately. `runRepeatable` executes two complete passes
+and records exact agreement before writing compact ignored MAT/JSON evidence.
+See `docs/dense_surface_synthetic_acceptance_report.md`.
 
 ## Viewer Performance Evaluation
 
@@ -881,8 +893,9 @@ reads only the required source bounding region. Runtime provider images/caches
 remain in the render plan, never the serializable scene descriptor. MATLAB TIFF
 region reads are unsupported on thread workers, so file-backed sources
 currently require serial execution. Dense-surface synthetic alignment and
-dense-surface acceptance are now the active queue; the private configuration
-and ordered public contract are described in
+dense-surface acceptance evidence are complete; only the separate threshold
+proposal remains under review. The private configuration and ordered public
+contract are described in
 `docs/dense_surface_synthetic_expansion_plan.md`.
 See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output

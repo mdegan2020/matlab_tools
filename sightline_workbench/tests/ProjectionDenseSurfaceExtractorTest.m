@@ -45,6 +45,10 @@ classdef ProjectionDenseSurfaceExtractorTest < matlab.unittest.TestCase
             testCase.verifyFalse( ...
                 result.Diagnostics.ProjectionOffsetsAppliedToRays);
             testCase.verifyFalse(result.Diagnostics.GpuInfo.Requested);
+            testCase.verifyTrue(all(isfinite( ...
+                result.Surface.MovingSourceRows(result.Surface.ValidMask))));
+            testCase.verifyTrue(all(isfinite( ...
+                result.Surface.ReferenceSourceColumns(result.Surface.ValidMask))));
         end
 
         function testGpuRequestUsesCapabilityCheckedCpuEquivalentPath(testCase)
