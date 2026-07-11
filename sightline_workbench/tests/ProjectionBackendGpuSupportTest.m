@@ -32,6 +32,13 @@ classdef ProjectionBackendGpuSupportTest < matlab.unittest.TestCase
             testCase.verifyEqual(info.Enabled, capability.Available);
         end
 
+        function testBackendUsesSharedGpuCapabilityProbe(testCase)
+            testCase.verifyEqual(ProjectionBackendGpuSupport.capability(), ...
+                ProjectionGpuSupport.capability());
+            testCase.verifyEqual(ProjectionBackendGpuSupport.resolve(true), ...
+                ProjectionGpuSupport.resolve(true));
+        end
+
         function testGpuRequestedOutputMatchesCpuOutput(testCase)
             scene = ProjectionBackendGpuSupportTest.makeTwoLayerScene();
             cpuJob = struct(Scene=scene, ...

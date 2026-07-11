@@ -34,6 +34,7 @@ src/ProjectionViewerState.m     JSON-serializable viewer state and scene-apply h
 src/ProjectionAlignment*.m      Feature-based alignment models, matching, solving, and runner
 src/ProjectionDenseSurface*.m   Analysis-only SGM extraction and result viewers
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
+src/ProjectionGpuSupport.m      Shared optional gpuArray capability checks
 src/ProjectionBackendGpuSupport.m Backend optional gpuArray capability checks
 src/ProjectionBackendCustomGpuKernelPlan.m Backend custom GPU kernel assessment
 src/ProjectionBackendOutputGrid.m Backend full-extent output grid planner
@@ -49,10 +50,11 @@ validateProjectionBackendJob.m  Validate backend jobs without rendering
 scripts/backend_interactive_evaluation.m Sectioned backend evaluation script
 scripts/viewer_performance_evaluation.m Repeatable viewer interaction benchmark
 scripts/alignment_reliability_validation.m Consolidated synthetic alignment matrix
-docs/alignment_workflow_hardening_plan.md Completed reliability record and active usability follow-up
+docs/alignment_workflow_hardening_plan.md Completed reliability/usability record and remaining gate
 docs/alignment_operator_guide.md Staged workflow and failure-recovery guide
 docs/alignment_reliability_validation_report.md Pack 8 reference results and remaining gate
 docs/dense_surface_feature_pack.md Dense stereo surface scope, workflow, and limitations
+docs/cross_system_acceleration_report.md Cross-system CPU/thread/GPU decision record
 docs/performance_optimization_workplan.md Viewer/backend optimization packs
 docs/project_status.md           Current completion state and outstanding work
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
@@ -70,11 +72,12 @@ The current implementation baseline is summarized in
   Milestones 1-13, Alignment Reliability Packs 0-8, Viewer Performance Packs
   0-8, Backend Performance Packs 0-1, Dense Surface Pack 1, the Viewer
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
-  Usability and Offset-Semantics Pack are complete;
-- the latest fresh-class repository validation passes all 393 tests;
-- the remaining implementation queue is a cross-system thread/GPU acceleration
-  pass, Backend Performance Packs 2-5, and finally dense-surface synthetic
-  expansion after the requested fixture inputs are available; and
+  Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
+  are complete;
+- the latest fresh-class repository validation passes all 395 tests;
+- the remaining implementation queue is Backend Performance Packs 2-5,
+  followed by dense-surface synthetic expansion after the requested fixture
+  inputs are available; and
 - representative 100-150 MP Windows/real-data validation remains external
   because no user real-data pair is available in this repository.
 
@@ -788,23 +791,26 @@ job.Execution = struct(Mode="threads");
 
 GPU requests are optional. If compatible `gpuArray` support is unavailable, the
 backend records the fallback reason in `GpuInfo` and continues on CPU.
+Dense-surface extraction likewise defaults to CPU and can optionally request
+capability-checked GPU execution for only the `disparitySGM` kernel.
 
 Backend Performance Packs 0-1 compile one reusable render plan per job and make
 full-source inverse warp the default. The current tiled renderer is not yet
 bounded-memory end to end: large file writes still assemble full output arrays.
 Backend Performance Packs 2-5 cover bounded serial streaming, bounded thread
 submission, explicit radiometric/precision policy, and file-backed source
-regions. They follow the cross-system thread/GPU acceleration pass in the
-remaining queue. Dense-surface synthetic expansion follows the backend packs.
+regions. The completed cross-system acceleration pass keeps Pack 2 as the
+prerequisite for new backend thread work. Dense-surface synthetic expansion
+follows the backend packs.
 Backend thread acceleration still depends on bounded serial streaming.
 See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output
 production work.
 
 See `docs/backend_app_workflow.md` for the complete app-to-backend workflow,
-`docs/alignment_workflow_hardening_plan.md` for the completed reliability
-record, active usability/offset-semantics follow-up, and remaining external
-acceptance gate, and
+`docs/alignment_workflow_hardening_plan.md` for the completed reliability and
+usability/offset-semantics work plus the remaining external acceptance gate,
+and
 `docs/backend_milestone_9_custom_gpu_kernel_assessment.md` for the current
 custom GPU kernel decision record.
 

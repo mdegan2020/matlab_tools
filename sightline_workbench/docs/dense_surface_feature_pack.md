@@ -66,6 +66,7 @@ The default options are intentionally conservative and caller-overridable:
 | `MinimumSparseParallaxPixels` | 0.1 | Minimum usable dominant displacement |
 | `MaximumSurfacePoints` | 250000 | Approximate triangulation/display budget |
 | `MaximumRaySeparationMeters` | `Inf` | Optional physical rejection gate |
+| `UseGPU` | `false` | Request capability-checked GPU SGM with CPU fallback |
 
 The result records the sparse and dense counts, common rectification angle,
 requested and actual disparity ranges, sparse vertical RMS, sampling stride,
@@ -77,8 +78,10 @@ plane display and do not mutate its source ray origins or directions.
 ## Required Products and Execution
 
 The feature requires MATLAB, Image Processing Toolbox, and Computer Vision
-Toolbox. `disparitySGM` is the first implementation. The required path is CPU;
-no GPU is requested or assumed, and the feature creates no parallel pool.
+Toolbox. `disparitySGM` is the first implementation. The required and default
+path is CPU. `UseGPU=true` optionally sends only the SGM inputs to a supported
+`gpuArray` device, gathers disparity immediately, and otherwise records a clean
+CPU fallback. The feature creates no parallel pool.
 
 The button remains disabled when `disparitySGM` is unavailable, before a
 preview/apply/manual aligned state exists, or when the selected pair has fewer
@@ -95,9 +98,9 @@ reported in Alignment Workbench status/diagnostics.
   backend jobs and cannot affect backend output.
 - Backend processing remains full-source inverse warp at its configured output
   resolution.
-- CPU support is mandatory. Optional GPU support is a selected follow-up only
-  if target MATLAB `disparitySGM` behavior accepts `gpuArray` inputs and CPU
-  equivalence remains tested.
+- CPU support is mandatory. Optional GPU SGM is capability-checked and retains
+  CPU equivalence/fallback; target-Windows performance validation remains
+  external.
 - No process-based pool is created. If later profiling justifies parallelism,
   only `parpool("threads")` is permitted.
 

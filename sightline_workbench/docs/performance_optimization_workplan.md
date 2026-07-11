@@ -44,16 +44,11 @@ Backend Performance Pack 0 now compiles reusable per-job mesh/interpolation
 plans and resolves GPU capability once. Backend Performance Pack 1 makes
 full-source inverse-warp radiometry the backend default while retaining the old
 sparse path as an explicit comparison mode. The Viewer Orientation and
-Anaglyph Presentation Pack is also complete. Backend Performance Pack 2 is the
-next backend pack, after the cross-system acceleration priority in the
-remaining project queue. The cross-system pass
-covers viewer, alignment, backend, and dense-surface
-workflows. It should use `parpool("threads")` only for bounded work, add optional
-capability-checked `gpuArray` paths only where CPU equivalence and fallback stay
-complete, and evaluate dense-surface SGM on GPU-capable MATLAB installations if
-`disparitySGM` supports GPU inputs. Backend thread acceleration must still
-follow Backend Performance Pack 2 rather than bypass bounded serial streaming.
-The current fresh-class repository baseline is 393/393 passing tests. See
+Anaglyph Presentation Pack is also complete. The Cross-System Acceleration Pass
+retains CPU viewer/alignment execution, keeps new backend threading dependent
+on bounded serial streaming, and adds optional capability-checked GPU SGM with
+CPU fallback. Backend Performance Pack 2 is now the active pack. The current
+fresh-class repository baseline is 395/395 passing tests. See
 `docs/project_status.md` for the concise cross-workstream status.
 
 Use the selected project queue and the backend dependency order in this
@@ -1654,8 +1649,8 @@ The completed viewer sequence was:
 
 Viewer Packs 0-8, Backend Packs 0-1, the Viewer Orientation and Anaglyph
 Presentation Pack, and the Alignment Workbench Usability and Offset-Semantics
-Pack are complete. The remaining implementation queue is, in order: a
-cross-system thread/GPU acceleration pass; Backend Performance Packs 2-5; and
+Pack, and the Cross-System Acceleration Pass are complete. The remaining
+implementation queue is, in order: Backend Performance Packs 2-5; then
 dense-surface synthetic expansion after the user supplies the requested
 fixture inputs. Keep backend
 work dependency-aware: bounded serial streaming comes before bounded thread

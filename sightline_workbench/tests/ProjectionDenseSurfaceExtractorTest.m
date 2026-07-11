@@ -44,6 +44,36 @@ classdef ProjectionDenseSurfaceExtractorTest < matlab.unittest.TestCase
                 HeightToleranceMeters);
             testCase.verifyFalse( ...
                 result.Diagnostics.ProjectionOffsetsAppliedToRays);
+            testCase.verifyFalse(result.Diagnostics.GpuInfo.Requested);
+        end
+
+        function testGpuRequestUsesCapabilityCheckedCpuEquivalentPath(testCase)
+            testCase.assumeTrue(exist("disparitySGM", "file") == 2);
+            [scene, working, matches] = ...
+                ProjectionDenseSurfaceExtractorTest.stereoFixture();
+            baseOptions = struct(DisparityRange=[0 16], ...
+                UniquenessThreshold=0, MaximumSurfacePoints=20000);
+            gpuOptions = baseOptions;
+            gpuOptions.UseGPU = true;
+            cpu = ProjectionDenseSurfaceExtractor.extract( ...
+                scene, working, matches, baseOptions);
+            gpuRequested = ProjectionDenseSurfaceExtractor.extract( ...
+                scene, working, matches, gpuOptions);
+            expectedGpuInfo = ProjectionGpuSupport.resolve(true);
+            expectedExecution = ...
+                ProjectionDenseSurfaceExtractorTest.expectedExecution( ...
+                expectedGpuInfo);
+            commonFinite = isfinite(cpu.Disparity) & ...
+                isfinite(gpuRequested.Disparity);
+
+            testCase.verifyEqual(gpuRequested.Diagnostics.GpuInfo, ...
+                expectedGpuInfo);
+            testCase.verifyEqual(gpuRequested.Diagnostics.Execution, ...
+                expectedExecution);
+            testCase.verifyEqual(gpuRequested.ValidDisparityMask, ...
+                cpu.ValidDisparityMask);
+            testCase.verifyEqual(gpuRequested.Disparity(commonFinite), ...
+                cpu.Disparity(commonFinite), AbsTol=1e-5);
         end
 
         function testRejectsTooFewAcceptedMatches(testCase)
@@ -198,6 +228,13 @@ classdef ProjectionDenseSurfaceExtractorTest < matlab.unittest.TestCase
                 "ProjectionViewerDenseSurfaceIntensityViewer"));
             delete(findall(groot, "Tag", ...
                 "ProjectionViewerDenseSurfaceFigure"));
+        end
+
+        function execution = expectedExecution(gpuInfo)
+            execution = "cpu";
+            if gpuInfo.Enabled
+                execution = "gpu";
+            end
         end
     end
 end

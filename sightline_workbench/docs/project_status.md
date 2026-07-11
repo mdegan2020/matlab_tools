@@ -6,7 +6,7 @@ should not be mistaken for unfinished implementation.
 
 ## Current Baseline
 
-As of July 10, 2026:
+As of July 11, 2026:
 
 - The project directory and main application title are `sightline_workbench`
   and **Sightline Workbench**.
@@ -21,7 +21,7 @@ As of July 10, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 393/393 tests with zero
+- The latest fresh-class repository suite passes 395/395 tests with zero
   failures and zero incomplete tests.
 
 ## Completed Feature Trees
@@ -38,6 +38,7 @@ As of July 10, 2026:
 | Dense Surface Pack 1 | Complete |
 | Viewer Orientation and Anaglyph Presentation Pack | Complete |
 | Alignment Workbench Usability and Offset-Semantics Pack | Complete |
+| Cross-System Acceleration Pass | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -66,31 +67,27 @@ not alter source origins, forward-ray metrics, or coplanarity.
 
 ## Active Implementation Queue
 
-The remaining queue is ordered as written below: cross-system acceleration
-first, Backend Performance Packs 2-5 second through fifth, and dense-surface
-synthetic expansion last. Backend thread/GPU work must still respect the
+The cross-system pass retained CPU viewer/alignment paths, preserved the Pack 2
+prerequisite for backend threading, and added optional capability-checked GPU
+SGM with CPU fallback. See `docs/cross_system_acceleration_report.md`.
+
+The remaining queue is Backend Performance Packs 2-5 followed by dense-surface
+synthetic expansion. Backend thread/GPU work must still respect the
 bounded-streaming dependencies below.
 
-1. **Cross-system acceleration pass.** Re-profile viewer, alignment, backend,
-   and dense-surface workflows. Use `parpool("threads")` only where work is
-   bounded and the CPU serial path remains complete. Add optional
-   capability-checked `gpuArray` acceleration where it is supported and proven
-   useful, including dense-surface SGM if `disparitySGM` accepts GPU inputs in
-   the target MATLAB environment. Backend thread work must not bypass Backend
-   Performance Pack 2's streaming prerequisite.
-2. **Backend Performance Pack 2 — Bounded serial streaming.** Incrementally
+1. **Backend Performance Pack 2 — Bounded serial streaming.** Incrementally
    write tiled TIFF/mask products, remove output-sized index temporaries, make
    in-memory return policy explicit, and close partial files safely.
-3. **Backend Performance Pack 3 — Bounded thread pipeline.** Submit a limited
+2. **Backend Performance Pack 3 — Bounded thread pipeline.** Submit a limited
    number of tiles through `parpool("threads")`, consume results
    incrementally, and keep deterministic writes and bounded in-flight memory.
-4. **Backend Performance Pack 4 — Radiometric and precision policy.** Define
+3. **Backend Performance Pack 4 — Radiometric and precision policy.** Define
    output class, scale/offset, fill, single-precision tolerances, and
    format-specific writing without repeated full-image normalization.
-5. **Backend Performance Pack 5 — File-backed source regions.** Add a backend
+4. **Backend Performance Pack 5 — File-backed source regions.** Add a backend
    source-region provider with in-memory compatibility and TIFF/`blockedImage`
    adapters so tiled jobs need not hold a complete source array.
-6. **Dense-surface synthetic data expansion.** Lowest priority until user
+5. **Dense-surface synthetic data expansion.** Lowest priority until user
    inputs are available. The user will provide desired output dimensions and
    rough sensor geometry such as azimuth, elevation, and range; the tooling
    should derive the remaining synthetic image/geometry details for more
@@ -145,8 +142,8 @@ queue:
 - `docs/viewer_development_plan.md` — architecture, historical viewer/backend
   milestones, and broader roadmap topics.
 - `docs/alignment_workflow_hardening_plan.md` — completed alignment design and
-  reliability packs, the active usability/offset-semantics follow-up, and
-  deferred alignment scope.
+  reliability/usability packs, offset-semantics decision, and deferred
+  alignment scope.
 - `docs/performance_optimization_workplan.md` — completed viewer/backend
   performance packs, cross-system acceleration constraints, and Backend Packs
   2-5.

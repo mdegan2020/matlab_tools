@@ -539,7 +539,7 @@ buildtool test
 
 The current suite exercises pure geometry, scene construction, sparse geometry,
 mesh building, readback, layer workflows, state serialization, and app
-interactions. The current fresh-class baseline is 393/393 passing tests with no
+interactions. The current fresh-class baseline is 395/395 passing tests with no
 failures or incomplete tests.
 
 ## Backend Processor Work Plan
@@ -1155,8 +1155,8 @@ Deliverables:
 - per-pair enable/disable controls for multi-image alignment.
 - alignment presets for fast preview versus high-quality solve.
 - documentation for recommended workflows and failure modes.
-- see `docs/alignment_workflow_hardening_plan.md` for the active follow-up
-  feature tree driven by real-data testing.
+- see `docs/alignment_workflow_hardening_plan.md` for the completed follow-up
+  feature tree and remaining external real-data acceptance gate.
 
 Feedback checkpoint:
 
@@ -1167,15 +1167,12 @@ Feedback checkpoint:
 
 The backend and auto-alignment feature trees, Viewer Orientation and Anaglyph
 Presentation Pack, and Alignment Workbench Usability and Offset-Semantics Pack
-are implemented. The remaining queue is:
+are implemented. The Cross-System Acceleration Pass is also complete. The
+remaining queue is:
 
-1. Cross-system acceleration pass: re-profile viewer, alignment, backend, and
-   dense surface extraction for bounded `parpool("threads")` opportunities and
-   optional capability-checked `gpuArray` support. Backend thread work remains
-   dependent on bounded serial streaming.
-2. Backend Performance Packs 2-5: bounded serial streaming, bounded threaded
+1. Backend Performance Packs 2-5: bounded serial streaming, bounded threaded
    execution, radiometric/precision policy, and file-backed source regions.
-3. Dense-surface synthetic data expansion after the user supplies desired
+2. Dense-surface synthetic data expansion after the user supplies desired
    image dimensions and rough sensor azimuth/elevation/range.
 
 The items below remain broader design topics to prioritize with user guidance.
