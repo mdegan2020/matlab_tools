@@ -1,5 +1,8 @@
 # Viewer Performance Pack 8 Raster Preview Decision
 
+Status: complete. The optional raster diagnostic remains available, while
+differential tiled surfaces remain the Sightline Workbench production default.
+
 ## Decision
 
 Retain the CPU single-raster path as an optional diagnostic and architecture

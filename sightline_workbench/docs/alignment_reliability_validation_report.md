@@ -82,10 +82,12 @@ degenerate baseline, behind-origin and invalid endpoints, oblique relief, and
 serialized backend alignment.
 
 After the durable matrix and documentation were finalized, all 15 named
-regressions passed, the alignment-focused suite passed 141/141, and the fresh
-repository suite passed 383/383 with no failures or incomplete tests.
+regressions passed, the alignment-focused suite passed 141/141, and the Pack 8
+fresh repository suite passed 383/383 with no failures or incomplete tests.
+Dense Surface Pack 1 subsequently raised the current repository baseline to
+386/386 without changing the alignment results or acceptance policy.
 
-## Conclusions and remaining gate
+## Conclusions And Remaining External Gate
 
 - The staged workflow, balanced solver, epipolar option, safe policy, overlay
   identity, common-anchor interaction, and backend application contracts are

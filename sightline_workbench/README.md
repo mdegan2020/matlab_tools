@@ -49,16 +49,31 @@ validateProjectionBackendJob.m  Validate backend jobs without rendering
 scripts/backend_interactive_evaluation.m Sectioned backend evaluation script
 scripts/viewer_performance_evaluation.m Repeatable viewer interaction benchmark
 scripts/alignment_reliability_validation.m Consolidated synthetic alignment matrix
-docs/alignment_workflow_hardening_plan.md Real-data GUI alignment hardening plan
+docs/alignment_workflow_hardening_plan.md Completed alignment hardening record
 docs/alignment_operator_guide.md Staged workflow and failure-recovery guide
 docs/alignment_reliability_validation_report.md Pack 8 reference results and remaining gate
 docs/dense_surface_feature_pack.md Dense stereo surface scope, workflow, and limitations
 docs/performance_optimization_workplan.md Viewer/backend optimization packs
+docs/project_status.md           Current completion state and outstanding work
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
 artifacts/viewer_performance/ Ignored viewer benchmark output directory
 runTests.m                      Simple test runner
 buildfile.m                     MATLAB buildtool tasks
 ```
+
+## Current Project Status
+
+The current implementation baseline is summarized in
+`docs/project_status.md`. In brief:
+
+- the original viewer milestones, Backend Milestones 1-10, Auto Alignment
+  Milestones 1-13, Alignment Reliability Packs 0-8, Viewer Performance Packs
+  0-8, Backend Performance Packs 0-1, and Dense Surface Pack 1 are complete;
+- the latest fresh-class repository validation passes all 386 tests;
+- the active implementation queue is Backend Performance Packs 2-5, beginning
+  with genuinely bounded serial streaming; and
+- representative 100-150 MP Windows/real-data validation remains external
+  because no user real-data pair is available in this repository.
 
 ## Naming And Shape Conventions
 
@@ -153,7 +168,9 @@ tf = PlanarProjection.validateCamera(camera);
 
 The first MATLAB implementation throws errors for invalid geometry instead of returning `NaN` or `Inf`. This includes zero-length vectors, malformed array sizes, degenerate plane definitions, rays parallel to planes, and camera points behind the optical center.
 
-This is intentional for early development. A future CUDA-oriented path may choose `NaN`/`Inf` signaling for throughput-friendly kernels.
+This remains intentional. Any future throughput-oriented kernel that uses
+`NaN`/`Inf` signaling would need an explicit, separately tested error-policy
+contract.
 
 ## Running Tests
 
@@ -170,7 +187,9 @@ buildtool test
 buildtool coverage
 ```
 
-The tests use MATLAB's class-based `matlab.unittest` framework and exercise the public API with deterministic numeric examples.
+The tests use MATLAB's class-based `matlab.unittest` framework and exercise
+the public API with deterministic numeric examples. The current fresh-class
+baseline is 386 passing tests with no failures or incomplete tests.
 
 ## Viewer Performance Evaluation
 
@@ -188,9 +207,9 @@ surfaces are hidden:
 
 ```matlab
 fig = findall(groot, Type="figure", Name="Sightline Workbench");
-assert(~isempty(fig), "Projection Viewer figure not found.");
+assert(~isempty(fig), "Sightline Workbench figure not found.");
 ax = findall(fig(1), Type="axes");
-assert(~isempty(ax), "Projection Viewer axes not found.");
+assert(~isempty(ax), "Sightline Workbench axes not found.");
 
 surfaces = findall(ax(1), Type="surface");
 wantedTags = ["ProjectionViewerPreviewTileSurface", ...
@@ -362,14 +381,15 @@ comparison with `viewer_raster_preview_evaluation`.
 
 ## Sightline Workbench Viewer
 
-The interactive prototype is programmatic MATLAB app code, not an `.mlapp` file. From MATLAB:
+The interactive application is programmatic MATLAB app code, not an `.mlapp`
+file. From MATLAB:
 
 ```matlab
 app = runProjectionViewerPrototype;
 ```
 
-The default launcher expects the local ignored prototype image at `test_data/10.tif`.
-To launch the prototype with two local dummy textures:
+The default launcher expects the local ignored fixture image at
+`test_data/10.tif`. To launch with two local textures:
 
 ```matlab
 app = runProjectionViewerPrototype(["test_data/10.tif", "test_data/102.tif"]);
@@ -757,9 +777,18 @@ job.Execution = struct(Mode="threads");
 GPU requests are optional. If compatible `gpuArray` support is unavailable, the
 backend records the fallback reason in `GpuInfo` and continues on CPU.
 
+Backend Performance Packs 0-1 compile one reusable render plan per job and make
+full-source inverse warp the default. The current tiled renderer is not yet
+bounded-memory end to end: large file writes still assemble full output arrays.
+Backend Performance Packs 2-5 cover bounded serial streaming, bounded thread
+submission, explicit radiometric/precision policy, and file-backed source
+regions. See `docs/project_status.md` and
+`docs/performance_optimization_workplan.md` before scheduling large-output
+production work.
+
 See `docs/backend_app_workflow.md` for the complete app-to-backend workflow,
-`docs/alignment_workflow_hardening_plan.md` for the current GUI alignment
-hardening plan, and
+`docs/alignment_workflow_hardening_plan.md` for the completed GUI alignment
+hardening record and remaining external acceptance gate, and
 `docs/backend_milestone_9_custom_gpu_kernel_assessment.md` for the current
 custom GPU kernel decision record.
 

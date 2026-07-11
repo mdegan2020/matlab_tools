@@ -1,5 +1,8 @@
 # Dense Surface Feature Pack
 
+Status: Pack 1 is complete. Follow-up candidates below are decision-gated and
+are not part of the active implementation queue; see `docs/project_status.md`.
+
 ## Purpose
 
 Dense Surface Pack 1 adds a deliberately small first-pass dense stereo product

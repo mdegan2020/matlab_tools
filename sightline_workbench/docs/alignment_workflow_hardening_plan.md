@@ -1,14 +1,17 @@
 # Alignment Workflow Hardening Plan
 
-This document anchors the next follow-up work for GUI auto-alignment quality,
-operator review, and real-data workflow control.
+This document records the completed GUI auto-alignment hardening and
+Reliability Packs 0-8, together with their design rationale and deferred scope.
+For the concise current queue, see `docs/project_status.md`. The only remaining
+alignment acceptance item is an external representative Windows/real-data run;
+no user real-data pair is currently available to the repository.
 
-The current auto-alignment pipeline is fast enough to run on large real imagery
-after the matched-ray solver optimization, but the default workflow can still
-produce implausible OPK corrections when bad feature matches survive filtering.
-This plan focuses on alignment quality and workflow transparency. It should not
-change backend rendering semantics: backend output remains full-resolution,
-1:1-oriented processing of the source image data.
+At plan inception, the auto-alignment pipeline was fast enough to run on large
+real imagery after the matched-ray solver optimization, but the default
+workflow could still produce implausible OPK corrections when bad feature
+matches survived filtering. The completed work focused on alignment quality and
+workflow transparency without changing backend rendering semantics: backend
+output remains full-source, configured-grid processing of the source imagery.
 
 ## Triggering Observation
 
@@ -110,8 +113,11 @@ Acceptance criteria:
 Implementation note:
 
 - The shared filter pipeline now has a `nativeDisplacement` stage. The GUI
-  default enables the MAD-based native-pixel displacement filter while the
-  engine default keeps the method disabled unless requested.
+  initially enabled the MAD-based native-pixel displacement filter while the
+  engine default kept it disabled unless requested. Reliability Pack 4
+  superseded that GUI choice: independent oblique sensors need not share one
+  native-pixel displacement field, so current GUI presets leave the stage off
+  unless the operator explicitly enables it.
 
 ### 1.3 Rename and report match states precisely
 
@@ -247,7 +253,8 @@ Acceptance criteria:
 
 ## Feature Pack 3: Match Review And Manual Curation
 
-This is a future workflow layer after filtering and staged solving are stable.
+This workflow layer was implemented after filtering and staged solving became
+stable.
 
 ### 3.1 Draw raw, rejected, accepted, and worst matches differently
 
@@ -302,7 +309,7 @@ Implementation note:
 
 ### 3.3 Add interactive match editing
 
-Future interaction model:
+Implemented interaction model:
 
 - click a match overlay to select it.
 - delete or disable selected matches.
@@ -324,8 +331,8 @@ Implementation note:
 
 ## Feature Pack 4: Overlay State Correctness
 
-Current overlays are diagnostic drawings tied to the state at draw time. Future
-overlays should stay attached to their source observations as the viewer state
+The original overlays were diagnostic drawings tied to draw-time state. The
+implemented overlays now stay attached to source observations as viewer state
 changes.
 
 ### 4.1 Reproject overlays on viewer state changes
@@ -596,7 +603,10 @@ Reliability Pack 1: complete
 Reliability Pack 2: complete
 Reliability Pack 3: complete
 Reliability Pack 4: complete
-Reliability Packs 5-8: pending
+Reliability Pack 5: complete
+Reliability Pack 6: complete
+Reliability Pack 7: complete
+Reliability Pack 8: complete
 ```
 
 ### Reliability Pack 0: Observable records, units, and layer identity
@@ -996,10 +1006,10 @@ Implementation note:
   coplanarity alone `49`, and combined filtering `48`; every variant was
   exactly repeatable. Affine provided no benefit on this case and remains an
   advanced option.
-- The default preset remains similarity-only pending Workbench controls.
-  Coplanarity is available through reusable options now and becomes an exposed
-  operator choice in the staged Workbench. Its solver loss is implemented in
-  Reliability Pack 6, not conflated with this pre-solve filter.
+- The default preset remains similarity-only. The staged Workbench exposes
+  robust coplanarity as an optional filter, and Reliability Pack 6 separately
+  implements the coplanarity solver loss rather than conflating it with the
+  pre-solve filter.
 - Pack 4 final validation passes with 360 tests after
   `close all force; clear classes; rehash; results = runTests;`.
 
@@ -1064,9 +1074,9 @@ UI contracts:
   are preserved at both the raw and filtered stages. Raw-stage overlays now
   also refresh correctly after layer reorder, projection edits, and layer
   nudges.
-- The Workbench exposes the Pack 4 coplanarity filter as Off/Robust. The Pack 6
-  epipolar solver loss remains intentionally absent until the balanced solver
-  implements it.
+- At the Pack 5 boundary, the Workbench exposed the Pack 4 coplanarity filter
+  as Off/Robust while the solver loss remained intentionally absent. Pack 6
+  subsequently added the epipolar/coplanarity solver loss.
 - Optimizer cancellation is now checked through a runtime-only
   `CancellationFcn` passed to `ProjectionAlignmentOpkSolver.solve`; it is never
   serialized into requests or backend state. MATLAB feature-detector and
@@ -1341,18 +1351,20 @@ may route them into backend output.
   result. All 15 named matrix regressions pass, the alignment-focused suite
   passes 141 tests, and Pack 8 final validation passes all 383 tests after
   `close all force; clear all; clear classes; rehash; results = runTests;`.
+  Dense Surface Pack 1 subsequently raised the current full repository baseline
+  to 386/386 passing tests without changing alignment semantics.
 
-## Required Implementation Order
+## Completed Implementation Order
 
-Implement and validate one small coherent sub-pack at a time:
+The reliability workstream was implemented and validated in this order:
 
-1. Reliability Pack 0: records, units, and stable layer identity.
-2. Reliability Pack 1: overlay, reorder, and ROI correctness.
-3. Reliability Pack 2: stable working images and the sparse-versus-full-source
-   decision gate.
-4. Reliability Pack 3: deterministic mask-aware feature extraction and
-   matching.
-5. Reliability Pack 4: truthful 2D models and coplanarity filtering.
+1. Reliability Pack 0: complete — records, units, and stable layer identity.
+2. Reliability Pack 1: complete — overlay, reorder, and ROI correctness.
+3. Reliability Pack 2: complete — stable working images and the
+   sparse-versus-full-source decision gate.
+4. Reliability Pack 3: complete — deterministic mask-aware feature extraction
+   and matching.
+5. Reliability Pack 4: complete — truthful 2D models and coplanarity filtering.
 6. Reliability Pack 5: complete — separate staged Alignment Workbench/session.
 7. Reliability Pack 6: complete — balanced network solver, epipolar loss,
    observability, and unified safety.
@@ -1362,10 +1374,10 @@ Implement and validate one small coherent sub-pack at a time:
    reference report, and operator documentation; representative Windows
    real-data acceptance remains an external manual gate.
 
-For each sub-pack: inspect the relevant source/tests, implement only that scope,
-add focused tests, run targeted tests, run `runTests`, update documentation,
-commit with a clear `Alignment Reliability Pack N: ...` message, and push only
-after validation. Stop for user judgment if real data contradicts the selected
+Each sub-pack inspected the relevant source/tests, added focused coverage, ran
+targeted and full validation, updated documentation, and used an
+`Alignment Reliability Pack N: ...` commit. Future follow-up should preserve
+that cadence and stop for user judgment if real data contradicts the selected
 model or a new design choice materially changes these contracts.
 
 ## Decisions And Deferred Scope
@@ -1376,7 +1388,7 @@ Decided:
 - Equal-confidence differential correction is split halfway; covariance priors
   generalize the split.
 - Direction is moving-to-reference.
-- `epipolarCoplanarity` will be an additional loss and optional filter stage.
+- `epipolarCoplanarity` is an additional loss and optional filter stage.
 - The common-anchor gesture is Shift+left drag and adjusts both images' OPK.
 - The one-anchor gesture preserves differential correction/disparity and does
   not solve common kappa.
@@ -1391,10 +1403,11 @@ Decided:
   disables the match for re-solve.
 - Solved/applied OPK is serialized. Match history, curation history, anchor-drag
   history, and filter provenance are session-only for now.
-- A separate Alignment Workbench is approved, with the compact main panel
-  retained as launcher/status during migration.
-- Sparse versus full-source inverse-warp working images will be evaluated in
-  Reliability Pack 2 before the alignment renderer default changes.
+- A separate Alignment Workbench is implemented, with the compact main panel
+  retained as launcher/status.
+- Reliability Pack 2 selected full-source inverse-warp alignment working images
+  through the truth-aware oblique-terrain decision fixture. Sparse radiometry
+  remains an explicit comparison oracle.
 
 Deferred:
 

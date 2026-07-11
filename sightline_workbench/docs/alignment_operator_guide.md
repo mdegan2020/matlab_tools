@@ -41,6 +41,11 @@ retain full source imagery and the ordinary source-ray inverse warp.
    OPK is serialized normally and is therefore available to background jobs.
    Match history, filter provenance, and manual-drag history remain session
    diagnostics and are not serialized.
+9. For an exploratory dense product, keep the desired pair selected after
+   Preview or Apply and press **Dense surface**. The CPU SGM path opens a
+   masked intensity view and a metric surface whose height is measured along
+   the current projection-plane normal. Treat this as runtime analysis only:
+   it is not serialized, exported as a DEM, or used by backend rendering.
 
 ## Choosing the loss
 
@@ -103,6 +108,16 @@ Windows benchmark supports changing it. Neither display tiles nor alignment
 working images enter backend output. CPU execution remains required; GPU is
 optional, and any backend parallel pool must be `parpool("threads")`.
 
+## Dense-surface interpretation
+
+Dense Surface Pack 1 uses a common rotation inferred from accepted sparse
+parallax, not a fully calibrated rectifier for arbitrary curved pushbroom
+epipolar geometry. Inspect sparse vertical RMS, valid point count, ray
+separation, disparity support, and the plausibility of height before using the
+surface diagnostically. Low texture, occlusion, repetitive content, weak
+baseline, or an incomplete sparse disparity range can produce holes or unstable
+height. See `docs/dense_surface_feature_pack.md`.
+
 ## Reproducible validation report
 
 Run the synthetic Pack 8 matrix from the repository root:
@@ -118,4 +133,3 @@ JSON, MAT, and CSV reports under the ignored
 `artifacts/alignment_reliability_validation` directory. See
 `docs/alignment_reliability_validation_report.md` for the committed reference
 run and the remaining Windows/manual validation gate.
-

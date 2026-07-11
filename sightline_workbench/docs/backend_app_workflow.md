@@ -104,3 +104,17 @@ backend falls back to CPU and records the effective GPU status in `GpuInfo`.
 ```matlab
 jobOptions.RenderOptions.UseGPU = true;
 ```
+
+## Large-output status
+
+Backend Performance Packs 0-1 are complete: one runtime render plan is compiled
+per job and backend radiometry defaults to full-source inverse warp. The current
+tiled renderer is not yet bounded-memory end to end because file output still
+assembles complete composite/per-layer arrays and thread mode can retain
+completed tile results before assembly.
+
+Do not assume that setting `TileSize` alone makes a 100-600 MP output safe for
+bounded-memory production. Backend Performance Packs 2-5 remain in order:
+bounded serial streaming, bounded thread submission, explicit
+radiometric/precision policy, and file-backed source regions. See
+`docs/project_status.md` and `docs/performance_optimization_workplan.md`.

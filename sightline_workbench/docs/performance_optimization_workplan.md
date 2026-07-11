@@ -1,7 +1,7 @@
 # Viewer And Backend Performance Optimization Workplan
 
 This document captures the July 2026 performance and scalability audit of the
-MATLAB planar projection viewer and backend and tracks the resulting
+Sightline Workbench viewer and backend and tracks the resulting
 implementation packs.
 
 The immediate motivation was unexpectedly chunky interaction when changing
@@ -44,6 +44,8 @@ Backend Performance Pack 0 now compiles reusable per-job mesh/interpolation
 plans and resolves GPU capability once. Backend Performance Pack 1 makes
 full-source inverse-warp radiometry the backend default while retaining the old
 sparse path as an explicit comparison mode. Backend Performance Pack 2 is next.
+The current fresh-class repository baseline is 386/386 passing tests. See
+`docs/project_status.md` for the concise cross-workstream status.
 
 Use the pack order in this document and commit and push each coherent, validated
 pack separately.
@@ -116,10 +118,11 @@ unrelated to the viewer/backend bottlenecks. The important issues are runtime
 architecture and invalidation scope rather than ordinary static-analysis
 warnings.
 
-## Current Viewer Dependency And Invalidation Model
+## Audit-Time Viewer Dependency And Invalidation Model
 
-The app currently routes many different interactions through broad refresh
-helpers. A more precise dependency model is required:
+At audit time the app routed many interactions through broad refresh helpers.
+The table below is the dependency model used to design Viewer Packs 1-7; those
+packs are now complete:
 
 | Interaction | State that truly changes | Required immediate work | Work that can wait until settle |
 | --- | --- | --- | --- |
@@ -136,11 +139,13 @@ helpers. A more precise dependency model is required:
 | Layer order | Stack/depth presentation | Update order/depth bias | None |
 | Alignment preview/apply/revert | OPK for solved layers | Reproject only affected layers | Overlay refresh |
 
-A future implementation should make these invalidation categories explicit.
-The event handler should request a category of work instead of calling one
-monolithic projection refresh.
+The completed viewer packs implement this narrower invalidation model.
 
 ## Detailed Viewer Findings
+
+The findings and candidate solutions in this section are the audit-time
+snapshot. Viewer Packs 1-8 below record which changes were implemented and the
+resulting measurements.
 
 ### 1. Crosshair Restacking And Always-On Motion Handling
 
@@ -298,8 +303,8 @@ Candidate solution:
 
 ### 5. Tile Surface Replacement Is All-Or-Nothing
 
-The current reuse test requires the complete tile struct vector to be equal. If
-one tile enters or leaves the view, every surface in that layer is deleted and
+The audit-time reuse test required the complete tile struct vector to be equal.
+If one tile entered or left the view, every surface in that layer was deleted and
 recreated. This causes graphics-object churn, texture preparation/upload, and
 crosshair-order maintenance.
 
@@ -1246,8 +1251,10 @@ and is included in validation results, render results, readbacks, and output
 metadata. Runtime plans themselves contain interpolation objects and are never
 serialized into jobs, metadata, scenes, layers, or sources.
 
-The numerical mode remains `sparseIntensityScatteredInterpolant`: this pack
-changes preparation lifetime, not radiometric semantics. Existing nearest and
+At the Pack 0 boundary the numerical mode remained
+`sparseIntensityScatteredInterpolant`: Pack 0 changed preparation lifetime,
+not radiometric semantics. Pack 1 subsequently made full-source inverse warp
+the default. Existing nearest and
 bilinear readback tests, tiled/untiled equivalence, optional GPU fallback, and
 `parpool("threads")` execution remain numerically unchanged. Focused tests also
 render one compiled plan with different tile counts and verify that mesh and
@@ -1295,10 +1302,12 @@ existing zero-background blend behavior.
 
 `RenderOptions.NumericalMode` now defaults to `fullSourceInverseWarp`.
 `sparseIntensityScatteredInterpolant` remains an explicit compatibility mode
-for backend jobs and is never selected implicitly. The alignment working-image
-renderer explicitly retains its historical sparse mode so Pack 1 does not alter
-GUI matching or safe-solve outcomes; those images remain alignment-only and are
-never backend inputs. Neither mode reads `DisplayTexture`, preview pyramids, or
+for backend jobs and is never selected implicitly. Backend Pack 1 did not alter
+alignment working-image policy. Reliability Pack 2 later selected full-source
+inverse warp independently for bounded alignment working images using the
+truth-aware oblique-terrain fixture; sparse remains an explicit comparison
+oracle. Alignment products remain analysis-only and never become backend
+inputs. Neither backend mode reads `DisplayTexture`, preview pyramids, or
 display tiles. Plan/readback/metadata summaries record the selected numerical
 mode.
 
@@ -1337,6 +1346,8 @@ Backend Performance Pack 1: Render full-source inverse warps
 
 ### Backend Performance Pack 2: Bounded Serial Streaming
 
+Status: not started; this is the next implementation pack.
+
 Deliverables:
 
 - Incremental tiled TIFF/mask writer.
@@ -1362,6 +1373,8 @@ Backend Performance Pack 2: Stream serial tiled outputs
 
 ### Backend Performance Pack 3: Bounded Thread Pipeline
 
+Status: not started; follows Pack 2.
+
 Deliverables:
 
 - Bounded `parfeval` submission on `parpool("threads")`.
@@ -1384,6 +1397,8 @@ Backend Performance Pack 3: Bound threaded tile execution
 
 ### Backend Performance Pack 4: Radiometric And Precision Policy
 
+Status: not started; follows Pack 3.
+
 Deliverables:
 
 - Explicit output class and scale/offset contract.
@@ -1405,6 +1420,8 @@ Backend Performance Pack 4: Define output radiometric policy
 ```
 
 ### Backend Performance Pack 5: File-Backed Source Regions
+
+Status: not started; follows Pack 4.
 
 Deliverables:
 
@@ -1612,8 +1629,7 @@ practical, and explicit failure metadata/logging.
 
 ## Recommended Decision And Execution Order
 
-If performance work is prioritized before the remaining alignment terminology
-work, the recommended first sequence is:
+The completed viewer sequence was:
 
 1. Viewer Performance Pack 0: measurement harness.
 2. Viewer Performance Pack 1: crosshair event path.
@@ -1625,8 +1641,10 @@ work, the recommended first sequence is:
 8. Viewer Performance Pack 7: lazy UI and preview storage.
 9. Viewer Performance Pack 8: raster preview prototype and decision.
 
-Viewer Packs 0-8 and Backend Packs 0-1 are complete. Continue with Backend
-Performance Packs 2-5 in order.
+Viewer Packs 0-8 and Backend Packs 0-1 are complete. The current active
+implementation queue is Backend Performance Packs 2-5 in order. The
+representative 100-150 MP Windows viewer/tile-size matrix remains an external
+validation gate rather than an additional viewer pack.
 
 Do not mix the viewer quick wins and backend renderer rewrite into one commit.
 Each pack should remain independently reviewable, validated, and reversible.

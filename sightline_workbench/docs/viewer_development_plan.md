@@ -1,8 +1,9 @@
-# Projection Viewer Development Plan
+# Sightline Workbench Development Plan
 
-This document tracks the current MATLAB projection viewer prototype and the
-remaining roadmap. It supersedes the original first-cut milestone plan: the
-initial harness, mesh builder, app, responsiveness work, exact readback
+This document tracks the Sightline Workbench architecture, completed feature
+trees, and broader roadmap. For the concise current implementation queue, see
+`docs/project_status.md`. It supersedes the original first-cut milestone plan:
+the initial harness, mesh builder, app, responsiveness work, exact readback
 prototype, multi-layer support, backend processor, auto-alignment tree, and
 display-preview pyramid work have all been implemented.
 
@@ -27,11 +28,14 @@ src/ProjectionViewerState.m        JSON viewer-state serialization
 src/ProjectionViewerApp.m          Programmatic interactive preview app
 src/ProjectionPreviewPyramid.m     Display-only preview pyramid/tile helper
 src/ProjectionAlignment*.m         Alignment request/options/result, matching, scheduling, solving, and runner
+src/ProjectionDenseSurface*.m      Analysis-only dense SGM extraction and result viewers
 src/ProjectionBackendJob.m         Backend job contract/serialization helpers
 src/ProjectionBackendOutputGrid.m  Backend full-extent output-grid planner
 src/ProjectionBackendOutputWriter.m Backend TIFF/PNG/mask/metadata writer
 src/ProjectionBackendTiledRenderer.m Backend serial/threaded tiled renderer
 src/ProjectionBackendGpuSupport.m  Optional MATLAB-managed GPU checks
+src/ProjectionBackendRenderPlan.m  Runtime-only reusable backend render plan
+src/ProjectionFullSourceInverseWarp.m Full-source backend mapping and sampling
 src/ProjectionBackendProcessor.m   Backend validation/render facade
 
 tests/PlanarProjectionTest.m
@@ -55,6 +59,9 @@ scripts/backend_interactive_evaluation.m
 docs/backend_app_workflow.md
 docs/alignment_workflow_hardening_plan.md
 docs/backend_milestone_9_custom_gpu_kernel_assessment.md
+docs/dense_surface_feature_pack.md
+docs/performance_optimization_workplan.md
+docs/project_status.md
 ```
 
 Local prototype TIFFs live under `test_data/` and are intentionally ignored by
@@ -63,8 +70,8 @@ testing commonly uses `test_data/10.tif` and `test_data/102.tif`.
 
 Development is currently on macOS. MATLAB GPU acceleration through Parallel
 Computing Toolbox is not available in this macOS configuration, so the CPU path
-is required and remains the tested reference path. Future GPU support should be
-optional, guarded by capability checks, and limited to pure numeric work.
+is required and remains the tested reference path. The backend's optional GPU
+path is capability-checked and limited to pure numeric work.
 
 Real data may be RGB or single-band. Typical real image sizes are expected to be
 around `15000 x 10000`, with possible growth to roughly `30000 x 20000`. The
@@ -73,7 +80,7 @@ storage and avoid unnecessary full-size temporary arrays.
 
 ## Current High-Level Capability
 
-The current prototype can:
+Sightline Workbench can:
 
 1. Load one or more image layers.
 2. Generate synthetic linear-array-style source geometry for each layer.
@@ -98,6 +105,13 @@ The current prototype can:
    configurable interpolation, tiled CPU execution, optional thread execution,
    optional MATLAB-managed GPU acceleration, masks, metadata, and basic
    multi-layer blending.
+13. Run exploratory CPU semi-global matching after selected-pair alignment and
+    triangulate dense correspondences from current corrected source rays into a
+    runtime-only metric height surface.
+14. Instrument and structurally optimize viewer interaction with latest-state
+    camera scheduling, LOD hysteresis, cached/vectorized tile visibility,
+    differential surface reuse, bounded runtime caches, coalesced alpha
+    rendering, lazy preview/UI storage, and scalar single-band textures.
 
 ## Core Design Principles
 
@@ -335,10 +349,14 @@ Current controls:
 - Visible checkbox in the layer header changes selected-layer visibility.
 - right-click context menu on the image contains Save, Load, Cycle, Reset, Help,
   Crosshair, Alignment Panel, and Blend mode controls.
-- alignment controls are hidden by default and can run selected-pair or
-  visible-layer alignment with fast/quality presets, detector/loss choices,
-  optional ROI, pair enablement, staged match/solve, preview/apply/revert, and
-  clear-overlays controls.
+- alignment controls are hidden by default and open a separate lazy nonmodal
+  Alignment Workbench. It supports selected-pair or visible-layer scope,
+  fast/quality presets, detector/loss choices, optional coplanarity filtering,
+  a projection-plane ROI, pair and observation curation, and explicit Match,
+  Filter, Solve, Preview, Apply, Revert, and Clear stages.
+- after Preview or Apply, Dense surface runs CPU SGM on fresh pair-specific
+  alignment working images and opens runtime intensity and metric surface
+  views.
 - Blend mode context menu supports `"alpha"` and `"redBlueAnaglyph"`.
 - Crosshair toggles cyan screen-space guide lines across the image viewport.
 - Cycle shows the next layer and hides the others without changing layer alpha.
@@ -408,8 +426,11 @@ backend jobs use `ProjectionBackendTiledRenderer` through
 
 ### Preview/Exact Comparison
 
-An app mode that shows preview, exact readback, and difference/flicker views is
-not yet implemented. This remains a likely next milestone.
+A production app mode that shows preview, exact readback, and
+difference/flicker views is not implemented. The Pack 8 CPU raster path provides
+an optional diagnostic comparison API, but the production viewer remains on
+differential tiled surfaces. A richer operator comparison view is deferred and
+is not the active implementation queue.
 
 ## Viewer State
 
@@ -496,7 +517,8 @@ buildtool test
 
 The current suite exercises pure geometry, scene construction, sparse geometry,
 mesh building, readback, layer workflows, state serialization, and app
-interactions.
+interactions. The current fresh-class baseline is 386/386 passing tests with no
+failures or incomplete tests.
 
 ## Backend Processor Work Plan
 
@@ -600,6 +622,12 @@ Implementation status:
 - The Auto Alignment Feature Tree milestones 1-13 are complete, validated, and
   committed; the milestone list below is retained as implementation history and
   design reference.
+- Backend Performance Packs 0-1 subsequently added one reusable runtime render
+  plan per job and selected full-source inverse-warp radiometry. Backend
+  Performance Packs 2-5 remain the active ordered queue for bounded streaming,
+  bounded thread submission, radiometric/precision policy, and file-backed
+  source regions. The current tiled renderer is not bounded-memory end to end
+  for very large file outputs.
 
 #### Backend Milestone 1: Job Contract And Serialization
 
@@ -681,6 +709,10 @@ Feedback checkpoint:
   for current use, or whether a stricter readback kernel is needed.
 
 #### Backend Milestone 6: Tiled CPU Renderer
+
+This historical milestone established tiled computation and numerical
+equivalence, but it did not make the complete output/write lifecycle
+bounded-memory. That follow-up is Backend Performance Pack 2.
 
 Deliverables:
 
@@ -772,25 +804,29 @@ Implementation status:
   capability checks, match filtering with a radial-filter hook, OPK solving,
   joint multi-image scheduling/solving, optional shared scale, ray-to-ray loss,
   GUI workflow controls, and backend alignment integration.
-- The remaining alignment items are follow-up quality and sensor-workflow
-  decisions, not unstarted milestone gates.
+- Further alignment ideas are decision-gated quality and sensor-workflow
+  topics, not unstarted milestone gates.
 - Real-data GUI alignment hardening is tracked in
   `docs/alignment_workflow_hardening_plan.md`. Its completed first wave covers
   staged controls, guardrails, overlays, and manual curation. The selected
   Real-Data Reliability Packs 0-8 cover complete match provenance, stable layer
   identity and overlays, deterministic working images/matching, truthful 2D and
-  coplanarity filtering, an approved separate Alignment Workbench, balanced
+  coplanarity filtering, an implemented separate Alignment Workbench, balanced
   common/differential network solving, an `epipolarCoplanarity` loss,
-  Shift+left common-anchor drag, and representative real-data validation.
+  Shift+left common-anchor drag, and a consolidated synthetic validation
+  matrix. Representative Windows/real-data acceptance remains an external
+  manual gate because no user real-data pair is available.
 - Dense Surface Pack 1 is complete. From a previewed or applied selected-pair
   alignment, the Workbench can run CPU semi-global matching on fresh bounded
   alignment working images, map dense correspondences back to full-source
   observations, and triangulate corrected ray pairs into an analysis-only
   metric height surface. The first-pass contract and limitations are recorded
   in `docs/dense_surface_feature_pack.md`.
-- Real-Data Reliability Packs 0-1 are complete. Stable layer IDs now flow through
-  viewer state, alignment requests/schedules/working images, match pairs,
-  solver corrections, and backend payloads. A non-destructive raw-match ledger
+- Reliability Packs 0-4 established the data, geometry, working-image,
+  deterministic matching, and truthful filtering foundations. Stable layer IDs
+  now flow through viewer state, alignment requests/schedules/working images,
+  match pairs, solver corrections, and backend payloads. A non-destructive
+  raw-match ledger
   records explicit stage masks/reasons and coordinate/residual units;
   `SolverObservations` is canonical while `Inliers` is a compatibility alias.
   Current overlay reprojection uses exact sampled rays when available, reports
@@ -855,8 +891,9 @@ Implementation status:
   projection plane.
 - A second loss mode evaluates ray-to-ray closest approach between matched
   feature observations.
-- A planned third `epipolarCoplanarity` loss uses normalized per-observation
-  baseline/ray coplanarity and may also serve as an optional pre-solve filter.
+- The implemented third `epipolarCoplanarity` loss uses normalized
+  per-observation baseline/ray coplanarity and may also serve as an optional
+  pre-solve filter.
   It must use forward-ray validity diagnostics and handle varying pushbroom
   origins and degenerate baselines explicitly.
 - Optimal relief-rich stereo means compatible forward rays and reduced
@@ -865,11 +902,11 @@ Implementation status:
   hardening packs. They may be reconsidered later as optional absolute
   constraints.
 - The match filtering pipeline includes a pluggable `RadialFilterFcn`.
-- A planned Shift+left common-anchor drag will move both images through a
-  two-degree-of-freedom shared boresight correction while preserving the
-  differential correction and relief-supported disparity. One anchor will not
-  adjust common kappa; final OPK corrections are serialized while manual-drag
-  history remains session-only.
+- Shift+left common-anchor drag moves both images through a two-degree-of-freedom
+  shared boresight correction while preserving differential correction and
+  relief-supported disparity. One anchor does not adjust common kappa; final
+  OPK corrections are serialized while manual-drag history remains
+  session-only.
 
 ### Auto Alignment Milestones
 
@@ -1119,14 +1156,17 @@ offsets, attitude perturbations, scan-angle bias, range/altitude corrections, or
 synthetic-geometry parameter edits. These should keep using the `SampleFcn`
 contract and should not require mesh-builder special cases.
 
-### Auto Alignment Hardening
+### Alignment Real-Data Acceptance And Dense Stereo Follow-Up
 
-The next alignment work should follow
-`docs/alignment_workflow_hardening_plan.md`. The current priority is to make
-real-data GUI alignment safer and more inspectable by rejecting catastrophic
-matches, applying conservative OPK bounds, splitting match/filter/solve steps,
-adding clear-overlay controls, and preserving intermediate match state for
-future manual curation.
+Alignment Reliability Packs 0-8 and Dense Surface Pack 1 are complete. The
+remaining alignment acceptance gate is a representative difficult real-data
+run on the intended Windows workstation. Dense-surface improvements such as
+calibrated/spatially varying rectification, confidence and consistency
+filtering, cleanup, uncertainty, and export are decision-gated follow-up rather
+than an approved pack queue. See
+`docs/alignment_workflow_hardening_plan.md`,
+`docs/alignment_reliability_validation_report.md`, and
+`docs/dense_surface_feature_pack.md`.
 
 ### Preview/Exact Comparison Mode
 
@@ -1138,19 +1178,20 @@ interpolation and camera behavior differ from the headless renderer.
 
 For `15000 x 10000` to `30000 x 20000` imagery, the viewer now has an
 app-facing display pyramid and visible tile selection path. Follow-up work may
-still consider `blockedImage`, lazy on-disk pyramid construction, more advanced
-zoom-dependent tile replacement, and profiling of very large scenes. Backend
-processing should remain streamlined and 1:1 with the source image data: preview
-pyramids are not backend inputs, and full-resolution exact readback remains
-outside the UI loop.
+still consider `blockedImage` and profiling on representative 100-150 MP
+Windows scenes. The current viewer already has lazy/file-backed preview levels,
+settle-aware LOD hysteresis, cached visibility, and differential tile reuse.
+Backend Performance Packs 2-5 separately address genuinely bounded output
+streaming and file-backed source regions. Preview pyramids remain outside
+backend input.
 
 ### Optional GPU Path
 
-GPU support belongs in the backend path before the viewer path. Use MATLAB's
-inherent GPU acceleration first: `gpuArray`, GPU-supported MATLAB functions, and
-explicit `gather` boundaries. Custom kernels should be considered only after
-profiling shows that CPU tiling, `parpool("threads")`, and MATLAB-managed GPU
-operations do not meet backend needs.
+The backend already accepts optional MATLAB-managed `gpuArray` acceleration
+with capability checks, explicit CPU fallback, and `gather` boundaries. GPU
+support remains optional; viewer GPU work and custom kernels are not
+recommended without target-Windows profiling that shows a bottleneck not met by
+CPU tiling, `parpool("threads")`, and MATLAB-managed operations.
 
 macOS development remains CPU-only because `gpuArray` is unsupported in the
 current local environment. Windows GPU testing should add numerical-equivalence
