@@ -840,8 +840,9 @@ Implementation status:
   coplanarity filtering, an implemented separate Alignment Workbench, balanced
   common/differential network solving, an `epipolarCoplanarity` loss,
   Shift+left common-anchor drag, and a consolidated synthetic validation
-  matrix. Representative Windows/real-data acceptance remains an external
-  manual gate because no user real-data pair is available.
+  matrix. The approved full-scale truth-aware synthetic expansion is the
+  primary systematic alignment gate; representative Windows large-image
+  performance remains external.
 - Dense Surface Pack 1 is complete. From a previewed or applied selected-pair
   alignment, the Workbench can run CPU semi-global matching on fresh bounded
   alignment working images, map dense correspondences back to full-source
@@ -1156,7 +1157,7 @@ Deliverables:
 - alignment presets for fast preview versus high-quality solve.
 - documentation for recommended workflows and failure modes.
 - see `docs/alignment_workflow_hardening_plan.md` for the completed follow-up
-  feature tree and remaining external real-data acceptance gate.
+  feature tree and current synthetic-primary acceptance policy.
 
 Feedback checkpoint:
 
@@ -1170,8 +1171,10 @@ Presentation Pack, and Alignment Workbench Usability and Offset-Semantics Pack
 are implemented. The Cross-System Acceleration Pass is also complete. The
 remaining queue is:
 
-1. Dense-surface synthetic data expansion after the user supplies desired
-   image dimensions and rough sensor azimuth/elevation/range.
+1. The approved dense-surface synthetic expansion milestones in
+   `docs/dense_surface_synthetic_expansion_plan.md`. Required fixture decisions
+   are captured privately; implementation begins with configuration validation
+   and geometry feasibility.
 
 The items below remain broader design topics to prioritize with user guidance.
 
@@ -1189,11 +1192,12 @@ offsets, attitude perturbations, scan-angle bias, range/altitude corrections, or
 synthetic-geometry parameter edits. These should keep using the `SampleFcn`
 contract and should not require mesh-builder special cases.
 
-### Alignment Real-Data Acceptance And Dense Stereo Follow-Up
+### Alignment Acceptance And Dense Stereo Follow-Up
 
 Alignment Reliability Packs 0-8 and Dense Surface Pack 1 are complete. The
-remaining alignment acceptance gate is a representative difficult real-data
-run on the intended Windows workstation. Dense-surface improvements such as
+approved truth-aware synthetic expansion is the primary systematic alignment
+acceptance fixture. Later air-gapped real-data findings may refine individual
+metrics. Dense-surface improvements such as
 calibrated/spatially varying rectification, confidence and consistency
 filtering, cleanup, uncertainty, and export are decision-gated follow-up rather
 than an approved pack queue. See

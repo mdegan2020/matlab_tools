@@ -1,9 +1,10 @@
 # Dense Surface Feature Pack
 
-Status: Pack 1 is complete. Representative synthetic image/geometry expansion
-is the final item in the active implementation queue and begins after the user
-supplies the requested fixture dimensions and rough sensor geometry. Other
-follow-up candidates below remain decision-gated; see `docs/project_status.md`.
+Status: Pack 1 is complete. The representative synthetic image/geometry
+expansion is approved and is the active implementation queue. Its ordered,
+privacy-preserving milestones are defined in
+`docs/dense_surface_synthetic_expansion_plan.md`. Other follow-up candidates
+below remain decision-gated; see `docs/project_status.md`.
 
 ## Purpose
 
@@ -121,14 +122,14 @@ This is a starting point, not calibrated general stereo rectification.
   left/right consistency, connected-component filtering, or surface smoothing.
 - Results are not geospatial files, DEMs, point clouds, or persisted products.
   Export and serialization need a separately reviewed contract.
-- A future quality pack should compare SGM with alternative dense matchers,
-  add rectification-quality diagnostics and adjustable options, and validate
-  against representative oblique real data before promoting the product beyond
-  exploratory visualization.
-- A representative synthetic image/geometry fixture expansion is queued at low
-  priority. The user will provide desired output dimensions and rough sensor
-  azimuth/elevation/range; the tooling should derive the remaining geometry
-  and radiometry details for better surface-extraction validation.
+- A future quality pack should compare SGM with alternative dense matchers and
+  add rectification-quality diagnostics and adjustable options. The approved
+  synthetic expansion supplies the primary truth-aware acceptance fixture;
+  later air-gapped real-data metrics may refine individual criteria.
+- The approved representative synthetic expansion adds a physically motivated
+  multi-view collection, occluding terrain, navigation-error variants, and
+  known truth. Actual fixture parameters remain in an ignored local JSON file
+  and must not be copied into committed documentation.
 
 ## Validation
 
@@ -145,5 +146,5 @@ rehash;
 results = runTests;
 ```
 
-The completed Pack 1 fresh-class run passes all 386 repository tests with zero
-failures and zero incomplete tests.
+The completed Pack 1 fresh-class run passed all 386 repository tests at that
+milestone. The current fresh-class repository baseline is 416/416.

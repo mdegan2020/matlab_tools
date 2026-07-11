@@ -1728,10 +1728,11 @@ The completed viewer sequence was:
 Viewer Packs 0-8, Backend Packs 0-5, the Viewer Orientation and Anaglyph
 Presentation Pack, and the Alignment Workbench Usability and Offset-Semantics
 Pack, and the Cross-System Acceleration Pass are complete. The remaining
-implementation queue is dense-surface synthetic expansion after the user
-supplies the requested fixture inputs. Backend performance packs are complete;
-bounded serial/thread behavior retains CPU equivalence, and optional GPU work
-remains capability-checked. The representative 100-150 MP Windows
+implementation queue is the approved dense-surface synthetic expansion in
+`docs/dense_surface_synthetic_expansion_plan.md`; required fixture decisions
+are captured in the ignored local configuration. Backend performance packs are
+complete; bounded serial/thread behavior retains CPU equivalence, and optional
+GPU work remains capability-checked. The representative 100-150 MP Windows
 viewer/tile-size matrix remains an external validation gate rather than an
 additional viewer pack.
 

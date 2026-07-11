@@ -5,6 +5,10 @@
 test_data/*.tif
 test_data/*.tiff
 
+# Local full-scale synthetic fixture configuration and products
+config/dense_surface_synthetic.local.json
+artifacts/dense_surface_synthetic/*
+
 # Local backend evaluation artifacts
 artifacts/backend_evaluation/*
 !artifacts/backend_evaluation/.gitkeep

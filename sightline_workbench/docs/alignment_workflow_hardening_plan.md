@@ -3,9 +3,11 @@
 This document records the completed GUI auto-alignment hardening and
 Reliability Packs 0-8, together with their design rationale, the completed
 Alignment Workbench usability/offset-semantics follow-up, and deferred scope.
-For the concise current queue, see `docs/project_status.md`. The only remaining
-alignment acceptance item is an external representative Windows/real-data run;
-no user real-data pair is currently available to the repository.
+For the concise current queue, see `docs/project_status.md`. The approved
+truth-aware dense-surface synthetic expansion is now the primary systematic
+alignment acceptance fixture. Later air-gapped real-data observations may
+adjust individual metrics, but a repository-accessible real-data corpus is not
+expected.
 
 At plan inception, the auto-alignment pipeline was fast enough to run on large
 real imagery after the matched-ray solver optimization, but the default
@@ -1372,8 +1374,9 @@ The reliability workstream was implemented and validated in this order:
 8. Reliability Pack 7: complete — Shift+left common-anchor drag with bounded
    refinement, rollback, diagnostics, and undo.
 9. Reliability Pack 8: complete — consolidated synthetic validation matrix,
-   reference report, and operator documentation; representative Windows
-   real-data acceptance remains an external manual gate.
+   reference report, and operator documentation. The approved full-scale
+   truth-aware synthetic expansion supersedes the former systematic real-data
+   gate; Windows large-image performance remains external.
 
 Each sub-pack inspected the relevant source/tests, added focused coverage, ran
 targeted and full validation, updated documentation, and used an

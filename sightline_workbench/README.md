@@ -57,6 +57,7 @@ docs/alignment_workflow_hardening_plan.md Completed reliability/usability record
 docs/alignment_operator_guide.md Staged workflow and failure-recovery guide
 docs/alignment_reliability_validation_report.md Pack 8 reference results and remaining gate
 docs/dense_surface_feature_pack.md Dense stereo surface scope, workflow, and limitations
+docs/dense_surface_synthetic_expansion_plan.md Active truth-aware synthetic fixture milestones
 docs/cross_system_acceleration_report.md Cross-system CPU/thread/GPU decision record
 docs/performance_optimization_workplan.md Viewer/backend optimization packs
 docs/project_status.md           Current completion state and outstanding work
@@ -78,10 +79,12 @@ The current implementation baseline is summarized in
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete;
 - the latest fresh-class repository validation passes all 416 tests;
-- the remaining implementation queue is dense-surface synthetic expansion
-  after the requested fixture inputs are available; and
-- representative 100-150 MP Windows/real-data validation remains external
-  because no user real-data pair is available in this repository.
+- the remaining implementation queue is the approved, fully specified
+  dense-surface synthetic expansion; and
+- representative 100-150 MP Windows viewer and optional GPU validation remain
+  external. The truth-aware synthetic expansion is the primary systematic
+  alignment acceptance fixture; later air-gapped real-data findings may refine
+  individual metrics.
 
 ## Naming And Shape Conventions
 
@@ -197,7 +200,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 393 passing tests with no failures or incomplete tests.
+baseline is 416 passing tests with no failures or incomplete tests.
 
 ## Viewer Performance Evaluation
 
@@ -671,8 +674,9 @@ state from the context menu. Common failure modes are too few filtered or
 solver-used matches, disabled or hidden layers leaving no enabled pairs, a solve
 that hits OPK bounds, weak residual improvement, an ROI that clips all features,
 or a detector that is unavailable in the current MATLAB installation.
-The completed hardening work and remaining representative Windows/real-data
-validation gate are tracked in `docs/alignment_workflow_hardening_plan.md`.
+The completed hardening work, synthetic-primary acceptance policy, and
+remaining Windows validation gates are tracked in
+`docs/alignment_workflow_hardening_plan.md`.
 
 Projection scenes can choose how the initial projection plane is built:
 
@@ -815,15 +819,16 @@ provide `BackendSource=struct(Kind="tiff",Path=...)`; each serial output tile
 reads only the required source bounding region. Runtime provider images/caches
 remain in the render plan, never the serializable scene descriptor. MATLAB TIFF
 region reads are unsupported on thread workers, so file-backed sources
-currently require serial execution. Dense-surface synthetic expansion follows
-after the requested fixture inputs are supplied.
+currently require serial execution. Dense-surface synthetic expansion is now
+the active queue; its private configuration and ordered public contract are
+described in `docs/dense_surface_synthetic_expansion_plan.md`.
 See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output
 production work.
 
 See `docs/backend_app_workflow.md` for the complete app-to-backend workflow,
 `docs/alignment_workflow_hardening_plan.md` for the completed reliability and
-usability/offset-semantics work plus the remaining external acceptance gate,
+usability/offset-semantics work plus the synthetic-primary acceptance policy,
 and
 `docs/backend_milestone_9_custom_gpu_kernel_assessment.md` for the current
 custom GPU kernel decision record.

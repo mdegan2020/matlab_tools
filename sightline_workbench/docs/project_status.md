@@ -87,25 +87,43 @@ provenance summaries, and in-memory/file-backed numerical parity. MATLAB TIFF
 region reads require serial execution because their internal reader is not
 supported on thread workers.
 
-The remaining implementation queue is dense-surface synthetic expansion.
+The remaining implementation queue is the approved dense-surface synthetic
+expansion. Required fixture decisions are captured in an ignored local JSON
+configuration; no user input currently blocks the first milestone. Actual
+sensor and geometry values must remain out of committed documentation.
 
-1. **Dense-surface synthetic data expansion.** The user will provide desired
-   output dimensions and
-   rough sensor geometry such as azimuth, elevation, and range; the tooling
-   should derive the remaining synthetic image/geometry details for more
-   representative surface-extraction validation fixtures.
+1. **Configuration and feasibility.** Validate the private configuration and
+   solve range, sampling, gimbal scan, constant-gap collection timing,
+   field-of-regard, footprint, and reflected-texture constraints before
+   allocating full-size imagery.
+2. **Terrain, texture, and truth geometry.** Add logical reflected texture
+   addressing, asymmetric smooth terrain with real occlusion, continuous truth
+   motion, and compact on-demand truth sampling.
+3. **Full-scale image generation.** Render the configured single-band views
+   from truth geometry and full in-memory texture, then write final TIFF/PNG
+   products and compact ignored diagnostics.
+4. **Navigation presets and scene variants.** Add generic Tactical Grade IMU
+   and Navigation Grade IMU error-state presets with nominal non-RTK GNSS
+   aiding, plus pointing-only and combined-error acceptance variants.
+5. **Alignment and dense-surface acceptance.** Run the existing staged
+   alignment and dense extraction against known truth, record the first
+   full-scale evidence package, and propose numerical thresholds separately.
+
+See `docs/dense_surface_synthetic_expansion_plan.md` for the complete ordered
+contract.
 
 The bounded claim applies to serial/thread TIFF output with in-memory sources,
 and to serial TIFF output with file-backed sources. PNG remains in-memory.
 
 ## External Validation Gates
 
-These require user data or target hardware rather than more synthetic claims:
+The approved truth-aware synthetic expansion is the primary systematic
+alignment acceptance fixture. Later air-gapped real-data findings may be
+incorporated as isolated metric or threshold updates; a repository-accessible
+real-data corpus is not expected.
 
-- Run the alignment workflow on representative difficult real imagery. Record
-  all match-stage counts, correction split, observability, bounds,
-  forward-ray residuals, interaction behavior, and saved/background
-  equivalence.
+The remaining external gates require target hardware:
+
 - Benchmark representative 100-150 MP primarily single-channel images on the
   intended high-end Windows workstation at 1080p/4K, including 512 versus 1024
   display tile sides and one, two, and four visible layers. The provisional
@@ -114,8 +132,8 @@ These require user data or target hardware rather than more synthetic claims:
   supported Windows GPU system before making any performance recommendation,
   including dense-surface `disparitySGM` GPU behavior if available.
 
-No user real-data pair is currently available to the repository, so these
-gates remain explicitly unclaimed.
+The Windows viewer/GPU gates remain explicitly unclaimed on the current macOS
+development system.
 
 ## Deferred Or Decision-Gated Work
 
@@ -124,6 +142,10 @@ queue:
 
 - calibrated or spatially varying stereo rectification, confidence/uncertainty,
   consistency filtering, cleanup, smoothing, and export for dense surfaces;
+- degraded or interrupted GNSS, precision/differential GNSS, explicit
+  gimbal/boresight/mounting errors, and independent repeat-pass error draws;
+- piecewise-linear and true curved target-orbit collection trajectories;
+- per-column or smoothly posted time-varying OPK correction;
 - a production preview/exact/difference/flicker comparison view;
 - sensor-specific geometry ingestion beyond
   `ProjectionSourceGeometry.fromGrid`;
@@ -137,7 +159,9 @@ queue:
   `PlanarProjection.intersectPlane` and
   `PlanarProjection.triangulateRays` APIs; and
 - custom GPU kernels, only if profiling shows a bottleneck not addressed by
-  CPU tiling, thread execution, and MATLAB-managed GPU operations.
+  CPU tiling, thread execution, and MATLAB-managed GPU operations; and
+- a production C++ backend and NITF output; current prototyping may keep all
+  inputs/outputs in memory and perform one final TIFF/PNG write.
 
 ## Sources Of Truth
 
@@ -151,4 +175,7 @@ queue:
   5.
 - `docs/dense_surface_feature_pack.md` — exploratory dense-surface contract
   and limitations.
+- `docs/dense_surface_synthetic_expansion_plan.md` — active truth-aware
+  synthetic fixture, navigation presets, acceptance modes, and ordered
+  implementation milestones.
 - `docs/alignment_operator_guide.md` — current staged operator workflow.

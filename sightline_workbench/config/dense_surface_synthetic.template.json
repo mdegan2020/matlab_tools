@@ -1,0 +1,123 @@
+{
+  "schema_version": null,
+  "fixture": {
+    "source_image_path": null,
+    "reserved_source_image_paths": null,
+    "random_seed": null
+  },
+  "image": {
+    "rows": null,
+    "columns": null,
+    "view_count": null,
+    "instantaneous_line_axis": null,
+    "scan_axis": null,
+    "scan_rate_lines_per_second": null,
+    "cross_track_fov_degrees": null,
+    "focal_length_meters": null,
+    "source_band_sequence": null
+  },
+  "world_frame": {
+    "x_axis_definition": null,
+    "y_axis_definition": null,
+    "z_axis_definition": null,
+    "platform_x_axis_definition": null,
+    "platform_y_axis_definition": null,
+    "platform_z_axis_definition": null
+  },
+  "platform": {
+    "height_above_ground_meters": null,
+    "forward_velocity_meters_per_second": null,
+    "nominal_off_nadir_degrees": null,
+    "target_side": null
+  },
+  "gimbal": {
+    "zero_boresight_axis": null,
+    "rotation_order": null,
+    "roll_axis": null,
+    "pitch_axis": null,
+    "positive_rotation_convention": null,
+    "pitch_field_of_regard_degrees": null,
+    "maximum_initial_forward_pitch_degrees": null,
+    "ideal_encoder_and_mounting": null
+  },
+  "collection_planner": {
+    "desired_scene_center_separation_degrees": null,
+    "allow_separation_expansion": null,
+    "constant_inter_image_gap": null,
+    "retrace_time_seconds": null,
+    "minimum_slant_range_meters": null,
+    "maximum_slant_range_meters": null,
+    "stop_for_user_on_infeasible_geometry": null
+  },
+  "sampling": {
+    "maximum_oversampling_per_axis": null,
+    "derive_range": null,
+    "minimum_reflection_tiles_rows": null,
+    "minimum_reflection_tiles_columns": null,
+    "maximum_reflection_tiles_rows": null,
+    "maximum_reflection_tiles_columns": null,
+    "prefer_odd_tile_counts": null,
+    "logical_reflection_addressing": null
+  },
+  "terrain": {
+    "model": null,
+    "minimum_height_meters": null,
+    "maximum_height_meters": null,
+    "characteristic_lengths_meters": null,
+    "asymmetry_weights": null,
+    "require_occlusion": null
+  },
+  "truth_turbulence": {
+    "model": null,
+    "position_rms_meters_per_axis": null,
+    "attitude_rms_degrees_per_axis": null,
+    "correlation_time_seconds": null
+  },
+  "navigation": {
+    "aiding_mode": null,
+    "gnss": {
+      "class": null,
+      "update_rate_hz": null,
+      "horizontal_position_sigma_meters": null,
+      "vertical_position_sigma_meters": null,
+      "velocity_sigma_meters_per_second": null,
+      "correlation_time_seconds": null
+    },
+    "bias_draw_scope": null,
+    "presets": {
+      "tactical_grade_imu": {
+        "gyro_bias_sigma_degrees_per_hour": null,
+        "gyro_angle_random_walk_degrees_per_sqrt_hour": null,
+        "accelerometer_bias_sigma_mg": null,
+        "accelerometer_velocity_random_walk_meters_per_second_per_sqrt_hour": null
+      },
+      "navigation_grade_imu": {
+        "gyro_bias_sigma_degrees_per_hour": null,
+        "gyro_angle_random_walk_degrees_per_sqrt_hour": null,
+        "accelerometer_bias_sigma_mg": null,
+        "accelerometer_velocity_random_walk_meters_per_second_per_sqrt_hour": null
+      }
+    }
+  },
+  "acceptance": {
+    "modes": null,
+    "establish_thresholds_after_first_full_scale_baseline": null,
+    "record_metrics": null
+  },
+  "output": {
+    "directory": null,
+    "default_image_format": null,
+    "supported_image_formats": null,
+    "preserve_source_integer_class": null,
+    "write_compact_mat_truth": null,
+    "write_json_run_summary": null
+  },
+  "future": {
+    "reserve_maximum_images_within_for_mode": null,
+    "reserve_degraded_gps_mode": null,
+    "reserve_independent_passes_mode": null,
+    "reserve_piecewise_linear_orbit_mode": null,
+    "reserve_curved_orbit_mode": null,
+    "reserve_time_varying_opk_posts": null
+  }
+}
