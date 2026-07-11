@@ -91,6 +91,84 @@ classdef ProjectionBackendProcessorOutputTest < matlab.unittest.TestCase
                 AbsTol=ProjectionBackendProcessorOutputTest.Tol);
         end
 
+        function testUint16RadiometricPolicyIsFormatConsistentAndRecorded(testCase)
+            outputDirectory = string(tempname);
+            mkdir(outputDirectory);
+            testCase.addTeardown(@() ...
+                ProjectionBackendProcessorOutputTest.removeFolder(outputDirectory));
+            scene = ProjectionBackendProcessorOutputTest.makeTwoLayerScene();
+            output = struct(Directory=outputDirectory, WriteFiles=true, ...
+                Formats=["png", "tiff"], OutputClass="uint16", ...
+                RadiometricScale=2, RadiometricOffset=-0.5, ...
+                FillValue=-0.5, OutOfRangePolicy="clip", ...
+                InMemoryPolicy="always");
+            job = struct(Scene=scene, ...
+                RenderOptions=struct(OutputSize=[3 4]), Output=output);
+
+            result = ProjectionBackendProcessor.run(job);
+            pngImage = imread(fullfile(outputDirectory, "composite.png"));
+            tiffImage = imread(fullfile(outputDirectory, "composite.tif"));
+            expected = ProjectionBackendRadiometry.prepare( ...
+                result.Readback.Image, result.Output);
+            metadata = jsondecode(fileread(fullfile( ...
+                outputDirectory, "metadata.json")));
+
+            testCase.verifyClass(pngImage, "uint16");
+            testCase.verifyEqual(pngImage, expected);
+            testCase.verifyEqual(tiffImage, expected);
+            testCase.verifyEqual(string(metadata.Radiometry.OutputClass), ...
+                "uint16");
+            testCase.verifyEqual(metadata.Radiometry.Scale, 2);
+            testCase.verifyEqual(metadata.Radiometry.Offset, -0.5);
+            testCase.verifyEqual( ...
+                metadata.Radiometry.StoredNormalizationDivisor, ...
+                double(intmax("uint16")));
+        end
+
+        function testSinglePrecisionStreamingTiffMatchesDoubleReference(testCase)
+            outputDirectory = string(tempname);
+            mkdir(outputDirectory);
+            testCase.addTeardown(@() ...
+                ProjectionBackendProcessorOutputTest.removeFolder(outputDirectory));
+            scene = ProjectionBackendProcessorOutputTest.makeTwoLayerScene();
+            reference = ProjectionBackendProcessor.run(struct(Scene=scene, ...
+                RenderOptions=struct(OutputSize=[17 19], TileSize=[16 16])));
+            output = struct(Directory=outputDirectory, WriteFiles=true, ...
+                Formats="tiff", OutputClass="single", ...
+                InMemoryPolicy="never");
+            job = struct(Scene=scene, RenderOptions=struct( ...
+                OutputSize=[17 19], TileSize=[16 16], ...
+                WorkingPrecision="single"), Output=output);
+
+            result = ProjectionBackendProcessor.run(job);
+            diskImage = imread(fullfile(outputDirectory, "composite.tif"));
+            expected = ProjectionBackendRadiometry.prepare( ...
+                reference.Readback.Image, result.Output);
+
+            testCase.verifyClass(diskImage, "single");
+            testCase.verifyEqual(diskImage, expected, AbsTol=eps("single"));
+            testCase.verifyEqual(result.RenderPlan.WorkingPrecision, "single");
+        end
+
+        function testSinglePrecisionInMemoryTiffUsesExplicitWriter(testCase)
+            outputDirectory = string(tempname);
+            mkdir(outputDirectory);
+            testCase.addTeardown(@() ...
+                ProjectionBackendProcessorOutputTest.removeFolder(outputDirectory));
+            scene = ProjectionBackendProcessorOutputTest.makeTwoLayerScene();
+            output = struct(Directory=outputDirectory, WriteFiles=true, ...
+                Formats="tiff", OutputClass="single", ...
+                InMemoryPolicy="always");
+            job = struct(Scene=scene, RenderOptions=struct( ...
+                OutputSize=[3 4], WorkingPrecision="single"), Output=output);
+
+            result = ProjectionBackendProcessor.run(job);
+            diskImage = imread(fullfile(outputDirectory, "composite.tif"));
+
+            testCase.verifyClass(diskImage, "single");
+            testCase.verifyEqual(diskImage, result.Readback.Image);
+        end
+
         function testSerialStreamingTiffMatchesInMemoryReference(testCase)
             outputDirectory = string(tempname);
             mkdir(outputDirectory);
@@ -252,14 +330,15 @@ classdef ProjectionBackendProcessorOutputTest < matlab.unittest.TestCase
             scene.layers(1).Image(:) = 2;
             scene.layers(1).Alpha = 0;
             output = struct(Directory=outputDirectory, WriteFiles=true, ...
-                Formats="tiff", InMemoryPolicy="never");
+                Formats="tiff", InMemoryPolicy="never", ...
+                OutOfRangePolicy="error");
             job = struct(Scene=scene, ...
                 RenderOptions=struct(OutputSize=[3 4], TileSize=[16 16]), ...
                 Output=output);
 
             testCase.verifyError( ...
                 @() ProjectionBackendProcessor.run(job), ...
-                "ProjectionBackendTiffTileWriter:radiometryOutOfRange");
+                "ProjectionBackendRadiometry:outOfRange");
             testCase.verifyEmpty(dir(fullfile(outputDirectory, "*.partial")));
             testCase.verifyFalse(isfile(fullfile( ...
                 outputDirectory, "composite.tif")));

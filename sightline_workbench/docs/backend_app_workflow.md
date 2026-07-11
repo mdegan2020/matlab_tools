@@ -107,7 +107,7 @@ jobOptions.RenderOptions.UseGPU = true;
 
 ## Large-output status
 
-Backend Performance Packs 0-3 are complete: one runtime render plan is compiled
+Backend Performance Packs 0-4 are complete: one runtime render plan is compiled
 per job, backend radiometry defaults to full-source inverse warp, and serial
 TIFF products can be streamed without retaining output-wide image, mask, or
 query-coordinate arrays. Thread mode submits at most
@@ -127,7 +127,12 @@ jobOptions.Output = struct( ...
     WriteFiles=true, ...
     Formats="tiff", ...
     InMemoryPolicy="never", ...
-    MaximumInMemoryPixels=16000000);
+    MaximumInMemoryPixels=16000000, ...
+    OutputClass="uint16", ...
+    RadiometricScale=1, ...
+    RadiometricOffset=0, ...
+    FillValue=0, ...
+    OutOfRangePolicy="clip");
 ```
 
 `InMemoryPolicy="auto"` streams writing jobs above
@@ -136,6 +141,11 @@ ceiling, and `"never"` requires file output. Streaming currently accepts only
 serial or thread execution, TIFF-only formats, tile dimensions that are
 multiples of 16, and normalized `[0,1]` radiometry. Only
 `parpool("threads")` is accepted. Streamed masks use TIFF. PNG remains
-in-memory, Pack 4 owns the broader radiometric/precision contract, and Pack 5
-owns file-backed source regions. See
+in-memory. `OutputClass` accepts `uint8`, `uint16`, or TIFF-only `single`.
+Stored normalized values reconstruct physical renderer values as
+`storedNormalized * RadiometricScale + RadiometricOffset`; this contract and
+the fill/clipping policy are written to metadata. Optional
+`RenderOptions.WorkingPrecision="single"` casts tile image/coordinate products
+before retention or worker transfer; the tested tolerance versus double is
+`1e-6`. Pack 5 owns file-backed source regions. See
 `docs/project_status.md` and `docs/performance_optimization_workplan.md`.

@@ -39,6 +39,7 @@ classdef ProjectionReadbackRenderer
             options.InvalidFillValue = plan.InvalidFillValue;
             options.IncludeLayerReadbacks = plan.IncludeLayerReadbacks;
             options.IncludeQueryCoordinates = plan.IncludeQueryCoordinates;
+            options.WorkingPrecision = plan.WorkingPrecision;
             options.UseGPU = plan.UseGPU;
             options.GpuInfo = plan.GpuInfo;
             options.NumericalMode = plan.NumericalMode;
@@ -86,6 +87,9 @@ classdef ProjectionReadbackRenderer
                     compositeImage);
                 validMask = ProjectionReadbackRenderer.gatherIfNeeded(validMask);
             end
+            [compositeImage, layerReadbacks] = ...
+                ProjectionReadbackRenderer.applyWorkingPrecision( ...
+                compositeImage, layerReadbacks, options.WorkingPrecision);
 
             readback = struct();
             readback.Image = compositeImage;
@@ -109,6 +113,22 @@ classdef ProjectionReadbackRenderer
     end
 
     methods (Static, Access = private)
+        function [compositeImage, layerReadbacks] = ...
+                applyWorkingPrecision(compositeImage, layerReadbacks, precision)
+            if precision ~= "single"
+                return
+            end
+            compositeImage = single(compositeImage);
+            for layerIndex = 1:numel(layerReadbacks)
+                layerReadbacks(layerIndex).Image = ...
+                    single(layerReadbacks(layerIndex).Image);
+                if ~isempty(layerReadbacks(layerIndex).QueryPlaneCoordinates)
+                    layerReadbacks(layerIndex).QueryPlaneCoordinates = ...
+                        single(layerReadbacks(layerIndex).QueryPlaneCoordinates);
+                end
+            end
+        end
+
         function samplingGrid = createSamplingGrid(frameCamera, mesh, options)
             if ~isempty(options.OutputGrid)
                 samplingGrid = ProjectionReadbackRenderer.createOutputSamplingGrid( ...

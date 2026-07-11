@@ -62,6 +62,24 @@ classdef ProjectionBackendTiledRendererTest < matlab.unittest.TestCase
                 zeros(1, 9));
         end
 
+        function testSingleWorkingPrecisionMatchesDoubleReference(testCase)
+            scene = ProjectionBackendTiledRendererTest.makeTwoLayerScene();
+            outputGrid = ProjectionBackendTiledRendererTest.makeOutputGrid(scene);
+            doubleResult = ProjectionBackendTiledRenderer.renderScene( ...
+                scene, struct(OutputGrid=outputGrid, TileSize=[2 3]));
+            singleResult = ProjectionBackendTiledRenderer.renderScene( ...
+                scene, struct(OutputGrid=outputGrid, TileSize=[2 3], ...
+                WorkingPrecision="single"));
+
+            testCase.verifyClass(singleResult.Image, "single");
+            testCase.verifyClass(singleResult.LayerReadbacks(1).Image, "single");
+            testCase.verifyClass( ...
+                singleResult.LayerReadbacks(1).QueryPlaneCoordinates, "single");
+            testCase.verifyEqual(double(singleResult.Image), ...
+                doubleResult.Image, AbsTol=1e-6);
+            testCase.verifyEqual(singleResult.ValidMask, doubleResult.ValidMask);
+        end
+
         function testProcessorUsesTiledRendererWhenTileSizeSet(testCase)
             scene = ProjectionBackendTiledRendererTest.makeTwoLayerScene();
             job = struct(Scene=scene, ...

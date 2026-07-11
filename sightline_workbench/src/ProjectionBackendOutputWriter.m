@@ -25,7 +25,8 @@ classdef ProjectionBackendOutputWriter
 
             if output.IncludeComposite
                 outputFiles.Composite = ProjectionBackendOutputWriter.writeImageFormats( ...
-                    result.Readback.Image, outputDirectory, "composite", formats);
+                    result.Readback.Image, outputDirectory, "composite", ...
+                    formats, output);
                 outputFiles.CompositeMask = ProjectionBackendOutputWriter.writeMask( ...
                     result.Readback.ValidMask, outputDirectory, "composite_mask");
             end
@@ -33,7 +34,7 @@ classdef ProjectionBackendOutputWriter
             if output.IncludeLayers
                 outputFiles.Layers = ProjectionBackendOutputWriter.writeLayerOutputs( ...
                     result.Readback.LayerReadbacks, result.Scene.layers, ...
-                    outputDirectory, formats);
+                    outputDirectory, formats, output);
             end
 
             outputFiles = ProjectionBackendOutputWriter.complete( ...
@@ -65,7 +66,9 @@ classdef ProjectionBackendOutputWriter
             end
         end
 
-        function files = writeImageFormats(imageData, outputDirectory, baseName, formats)
+        function files = writeImageFormats( ...
+                imageData, outputDirectory, baseName, formats, output)
+            imageData = ProjectionBackendRadiometry.prepare(imageData, output);
             files = struct([]);
             for formatIndex = 1:numel(formats)
                 format = formats(formatIndex);
@@ -83,7 +86,7 @@ classdef ProjectionBackendOutputWriter
         end
 
         function layers = writeLayerOutputs(layerReadbacks, sceneLayers, ...
-                outputDirectory, formats)
+                outputDirectory, formats, output)
             layers = struct([]);
             for outputIndex = 1:numel(layerReadbacks)
                 layerIndex = layerReadbacks(outputIndex).LayerIndex;
@@ -92,8 +95,8 @@ classdef ProjectionBackendOutputWriter
                 layers(outputIndex).LayerIndex = layerIndex;
                 layers(outputIndex).ImageFiles = ...
                     ProjectionBackendOutputWriter.writeImageFormats( ...
-                    layerReadbacks(outputIndex).Image, outputDirectory, ...
-                    baseName, formats);
+                        layerReadbacks(outputIndex).Image, outputDirectory, ...
+                        baseName, formats, output);
                 layers(outputIndex).MaskPath = ProjectionBackendOutputWriter.writeMask( ...
                     layerReadbacks(outputIndex).ValidMask, outputDirectory, ...
                     baseName + "_mask");
@@ -126,6 +129,8 @@ classdef ProjectionBackendOutputWriter
                 result.OutputGrid);
             metadata.RenderPlan = result.RenderPlan;
             metadata.GpuInfo = result.GpuInfo;
+            metadata.Radiometry = ...
+                ProjectionBackendRadiometry.metadata(result.Output);
             metadata.OutputFiles = outputFiles;
             metadata.Timing = result.Timing;
             metadata.AlignmentSummary = ...
@@ -220,31 +225,46 @@ classdef ProjectionBackendOutputWriter
         end
 
         function writeImage(imageData, filePath, format)
-            imageData = ProjectionBackendOutputWriter.prepareImageForWrite(imageData);
             switch format
                 case "png"
                     imwrite(imageData, filePath);
                 case "tiff"
-                    imwrite(imageData, filePath, "tif");
+                    if isa(imageData, "single")
+                        ProjectionBackendOutputWriter.writeSingleTiff( ...
+                            imageData, filePath);
+                    else
+                        imwrite(imageData, filePath, "tif");
+                    end
                 otherwise
                     error("ProjectionBackendOutputWriter:unsupportedFormat", ...
                         "Unsupported output format %s.", format);
             end
         end
 
-        function imageData = prepareImageForWrite(imageData)
-            imageData = double(imageData);
-            imageData(~isfinite(imageData)) = 0;
-            minValue = min(imageData, [], "all");
-            maxValue = max(imageData, [], "all");
-            if minValue < 0 || maxValue > 1
-                if maxValue > minValue
-                    imageData = (imageData - minValue) / (maxValue - minValue);
-                else
-                    imageData = zeros(size(imageData));
+        function writeSingleTiff(imageData, filePath)
+            tiffObject = Tiff(char(filePath), "w");
+            cleaner = onCleanup(@() close(tiffObject));
+            bandCount = size(imageData, 3);
+            tags = struct(ImageLength=size(imageData, 1), ...
+                ImageWidth=size(imageData, 2), BitsPerSample=32, ...
+                SamplesPerPixel=bandCount, ...
+                SampleFormat=Tiff.SampleFormat.IEEEFP, ...
+                PlanarConfiguration=Tiff.PlanarConfiguration.Chunky, ...
+                Compression=Tiff.Compression.None, ...
+                RowsPerStrip=min(256, size(imageData, 1)), ...
+                Software="Sightline Workbench");
+            if bandCount == 3
+                tags.Photometric = Tiff.Photometric.RGB;
+            else
+                tags.Photometric = Tiff.Photometric.MinIsBlack;
+                if bandCount > 1
+                    tags.ExtraSamples = repmat( ...
+                        Tiff.ExtraSamples.Unspecified, 1, bandCount - 1);
                 end
             end
-            imageData = min(max(imageData, 0), 1);
+            setTag(tiffObject, tags);
+            write(tiffObject, imageData);
+            clear cleaner
         end
 
         function extension = extension(format)

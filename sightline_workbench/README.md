@@ -39,6 +39,7 @@ src/ProjectionBackendGpuSupport.m Backend optional gpuArray capability checks
 src/ProjectionBackendCustomGpuKernelPlan.m Backend custom GPU kernel assessment
 src/ProjectionBackendOutputGrid.m Backend full-extent output grid planner
 src/ProjectionBackendOutputWriter.m Backend image/mask/metadata writers
+src/ProjectionBackendRadiometry.m Explicit output scale/offset/class policy
 src/ProjectionBackendTiffTileWriter.m Bounded indexed tiled-TIFF writer
 src/ProjectionBackendTiledRenderer.m Bounded serial/thread tile pipeline
 src/ProjectionBackendProcessor.m Backend job invocation facade
@@ -71,12 +72,12 @@ The current implementation baseline is summarized in
 
 - the original viewer milestones, Backend Milestones 1-10, Auto Alignment
   Milestones 1-13, Alignment Reliability Packs 0-8, Viewer Performance Packs
-  0-8, Backend Performance Packs 0-3, Dense Surface Pack 1, the Viewer
+  0-8, Backend Performance Packs 0-4, Dense Surface Pack 1, the Viewer
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete;
-- the latest fresh-class repository validation passes all 405 tests;
-- the remaining implementation queue is Backend Performance Packs 4-5,
+- the latest fresh-class repository validation passes all 413 tests;
+- the remaining implementation queue is Backend Performance Pack 5,
   followed by dense-surface synthetic expansion after the requested fixture
   inputs are available; and
 - representative 100-150 MP Windows/real-data validation remains external
@@ -795,19 +796,22 @@ backend records the fallback reason in `GpuInfo` and continues on CPU.
 Dense-surface extraction likewise defaults to CPU and can optionally request
 capability-checked GPU execution for only the `disparitySGM` kernel.
 
-Backend Performance Packs 0-3 compile one reusable render plan per job, make
+Backend Performance Packs 0-4 compile one reusable render plan per job, make
 full-source inverse warp the default, and provide bounded serial tiled-TIFF
 output. `Output.InMemoryPolicy` selects `auto`, `always`, or `never`, with
 `Output.MaximumInMemoryPixels` providing the explicit retention ceiling.
 Streaming returns summaries rather than full image arrays, writes TIFF images
 and masks through temporary files, and cleans incomplete products on failure.
-PNG remains an in-memory format, and streamed normalized radiometry remains
-restricted to `[0,1]` until Pack 4 defines the production radiometric policy.
+PNG remains an in-memory format. Output encoding now uses explicit
+`OutputClass`, `RadiometricScale`, `RadiometricOffset`, `FillValue`, and
+`OutOfRangePolicy` values recorded in metadata; no data-dependent normalization
+is performed.
 Thread mode now uses bounded `parfeval` submission on `parpool("threads")`,
 consumes `fetchNext` results immediately, and exposes the configured and
-observed in-flight counts. Backend Performance Packs 4-5 cover explicit
-radiometric/precision policy and file-backed source regions. Dense-surface
-synthetic expansion follows the backend packs.
+observed in-flight counts. `RenderOptions.WorkingPrecision="single"` optionally
+reduces retained/in-flight image products while preserving the double reference
+within tested tolerance. Backend Performance Pack 5 covers file-backed source
+regions. Dense-surface synthetic expansion follows the backend packs.
 See `docs/project_status.md` and
 `docs/performance_optimization_workplan.md` before scheduling large-output
 production work.

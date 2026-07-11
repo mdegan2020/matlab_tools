@@ -29,11 +29,17 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
             testCase.verifyFalse(job.RenderOptions.UseGPU);
             testCase.verifyTrue(job.RenderOptions.IncludeLayerReadbacks);
             testCase.verifyTrue(job.RenderOptions.IncludeQueryCoordinates);
+            testCase.verifyEqual(job.RenderOptions.WorkingPrecision, "double");
             testCase.verifyEqual(job.RenderOptions.InvalidIntersectionPolicy, "error");
             testCase.verifyEqual(job.Output.Formats, ["tiff", "png"]);
             testCase.verifyFalse(job.Output.WriteFiles);
             testCase.verifyEqual(job.Output.InMemoryPolicy, "auto");
             testCase.verifyEqual(job.Output.MaximumInMemoryPixels, 16000000);
+            testCase.verifyEqual(job.Output.OutputClass, "uint8");
+            testCase.verifyEqual(job.Output.RadiometricScale, 1);
+            testCase.verifyEqual(job.Output.RadiometricOffset, 0);
+            testCase.verifyEqual(job.Output.FillValue, 0);
+            testCase.verifyEqual(job.Output.OutOfRangePolicy, "clip");
             testCase.verifyEqual(job.Execution.Mode, "serial");
             testCase.verifyFalse(job.Execution.UseGPU);
             testCase.verifyFalse(job.Execution.UseCustomGpuKernels);
@@ -114,6 +120,16 @@ classdef ProjectionBackendJobTest < matlab.unittest.TestCase
 
             testCase.verifyError( ...
                 @() ProjectionBackendJob.validate(job), ...
+                "ProjectionBackendJob:invalidOutput");
+        end
+
+        function testValidationRejectsSinglePrecisionPngOutput(testCase)
+            scene = ProjectionBackendJobTest.makeScene();
+            output = struct(Directory=tempname, WriteFiles=true, ...
+                Formats="png", OutputClass="single");
+
+            testCase.verifyError(@() ...
+                ProjectionBackendJob.validate(struct(Scene=scene, Output=output)), ...
                 "ProjectionBackendJob:invalidOutput");
         end
 

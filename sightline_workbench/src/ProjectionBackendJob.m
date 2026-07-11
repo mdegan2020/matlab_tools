@@ -283,6 +283,7 @@ classdef ProjectionBackendJob
             options.UseGPU = false;
             options.IncludeLayerReadbacks = true;
             options.IncludeQueryCoordinates = true;
+            options.WorkingPrecision = "double";
             options.InvalidIntersectionPolicy = "error";
         end
 
@@ -325,6 +326,12 @@ classdef ProjectionBackendJob
                 ProjectionBackendJob.validateLogicalScalar( ...
                 options.IncludeQueryCoordinates, ...
                 "RenderOptions.IncludeQueryCoordinates");
+            options.WorkingPrecision = lower(string(options.WorkingPrecision));
+            if ~isscalar(options.WorkingPrecision) || ...
+                    ~ismember(options.WorkingPrecision, ["double", "single"])
+                error("ProjectionBackendJob:invalidRenderOptions", ...
+                    "RenderOptions.WorkingPrecision must be double or single.");
+            end
             options.InvalidIntersectionPolicy = string(options.InvalidIntersectionPolicy);
             if ~isscalar(options.InvalidIntersectionPolicy) || ...
                     options.InvalidIntersectionPolicy ~= "error"
@@ -342,6 +349,11 @@ classdef ProjectionBackendJob
             defaults.IncludeLayers = true;
             defaults.InMemoryPolicy = "auto";
             defaults.MaximumInMemoryPixels = 16000000;
+            defaults.OutputClass = "uint8";
+            defaults.RadiometricScale = 1;
+            defaults.RadiometricOffset = 0;
+            defaults.FillValue = 0;
+            defaults.OutOfRangePolicy = "clip";
 
             output = ProjectionBackendJob.mergeStruct(defaults, output, "Output");
             output.Directory = string(output.Directory);
@@ -373,6 +385,32 @@ classdef ProjectionBackendJob
                 output.MaximumInMemoryPixels, ...
                 "Output.MaximumInMemoryPixels", ...
                 "ProjectionBackendJob:invalidOutput");
+            output.OutputClass = lower(string(output.OutputClass));
+            if ~isscalar(output.OutputClass) || ...
+                    ~ismember(output.OutputClass, ["uint8", "uint16", "single"])
+                error("ProjectionBackendJob:invalidOutput", ...
+                    "Output.OutputClass must be uint8, uint16, or single.");
+            end
+            output.RadiometricScale = ProjectionBackendJob.validatePositiveScalar( ...
+                output.RadiometricScale, "Output.RadiometricScale", ...
+                "ProjectionBackendJob:invalidOutput");
+            output.RadiometricOffset = ProjectionBackendJob.validateFiniteScalar( ...
+                output.RadiometricOffset, "Output.RadiometricOffset", ...
+                "ProjectionBackendJob:invalidOutput");
+            output.FillValue = ProjectionBackendJob.validateFiniteScalar( ...
+                output.FillValue, "Output.FillValue", ...
+                "ProjectionBackendJob:invalidOutput");
+            output.OutOfRangePolicy = lower(string(output.OutOfRangePolicy));
+            if ~isscalar(output.OutOfRangePolicy) || ...
+                    ~ismember(output.OutOfRangePolicy, ["clip", "error"])
+                error("ProjectionBackendJob:invalidOutput", ...
+                    "Output.OutOfRangePolicy must be clip or error.");
+            end
+            if output.WriteFiles && output.OutputClass == "single" && ...
+                    any(output.Formats == "png")
+                error("ProjectionBackendJob:invalidOutput", ...
+                    "Single-precision output is supported only for TIFF.");
+            end
             if output.WriteFiles && strlength(output.Directory) == 0
                 error("ProjectionBackendJob:invalidOutput", ...
                     "Output.Directory is required when Output.WriteFiles is true.");
@@ -612,6 +650,23 @@ classdef ProjectionBackendJob
                     value < 1 || fix(value) ~= value
                 error(errorIdentifier, ...
                     "%s must be a finite positive integer.", name);
+            end
+            value = double(value);
+        end
+
+        function value = validatePositiveScalar(value, name, errorIdentifier)
+            if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || ...
+                    value <= 0
+                error(errorIdentifier, ...
+                    "%s must be a finite positive scalar.", name);
+            end
+            value = double(value);
+        end
+
+        function value = validateFiniteScalar(value, name, errorIdentifier)
+            if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value)
+                error(errorIdentifier, ...
+                    "%s must be a finite numeric scalar.", name);
             end
             value = double(value);
         end

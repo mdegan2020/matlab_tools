@@ -55,9 +55,10 @@ classdef ProjectionBackendTiffTileWriter < handle
                 mask = obj.prepareMaskTile(tileReadback.ValidMask);
                 if isempty(obj.CompositeImageSink)
                     obj.CompositeImageSink = obj.openSink( ...
-                        "composite.tif", obj.bandCount(composite));
+                        "composite.tif", obj.bandCount(composite), ...
+                        class(composite));
                     obj.CompositeMaskSink = obj.openSink( ...
-                        "composite_mask.tif", 1);
+                        "composite_mask.tif", 1, "uint8");
                 end
                 obj.writeSink(obj.CompositeImageSink, tile, composite);
                 obj.writeSink(obj.CompositeMaskSink, tile, mask);
@@ -81,9 +82,10 @@ classdef ProjectionBackendTiffTileWriter < handle
                         baseName = obj.layerBaseName( ...
                             layerIndex, obj.SceneLayers(layerIndex));
                         obj.LayerImageSinks(outputIndex) = obj.openSink( ...
-                            baseName + ".tif", obj.bandCount(imageTile));
+                            baseName + ".tif", obj.bandCount(imageTile), ...
+                            class(imageTile));
                         obj.LayerMaskSinks(outputIndex) = obj.openSink( ...
-                            baseName + "_mask.tif", 1);
+                            baseName + "_mask.tif", 1, "uint8");
                     end
                     obj.writeSink(obj.LayerImageSinks(outputIndex), ...
                         tile, imageTile);
@@ -139,7 +141,7 @@ classdef ProjectionBackendTiffTileWriter < handle
     end
 
     methods (Access = private)
-        function sinkIndex = openSink(obj, fileName, bandCount)
+        function sinkIndex = openSink(obj, fileName, bandCount, sampleClass)
             finalPath = string(fullfile(obj.OutputDirectory, fileName));
             temporaryPath = finalPath + ".partial";
             if isfile(temporaryPath)
@@ -151,9 +153,9 @@ classdef ProjectionBackendTiffTileWriter < handle
             tags.ImageWidth = obj.OutputSize(2);
             tags.TileLength = obj.TileSize(1);
             tags.TileWidth = obj.TileSize(2);
-            tags.BitsPerSample = 8;
+            [tags.BitsPerSample, tags.SampleFormat] = ...
+                obj.tiffSampleDescription(sampleClass);
             tags.SamplesPerPixel = bandCount;
-            tags.SampleFormat = Tiff.SampleFormat.UInt;
             tags.PlanarConfiguration = Tiff.PlanarConfiguration.Chunky;
             tags.Compression = Tiff.Compression.None;
             if bandCount == 3
@@ -193,23 +195,18 @@ classdef ProjectionBackendTiffTileWriter < handle
         function padded = paddedTile(obj, imageTile)
             bandCount = obj.bandCount(imageTile);
             if bandCount == 1
-                padded = zeros(obj.TileSize, "uint8");
+                padded = zeros(obj.TileSize, "like", imageTile);
                 padded(1:size(imageTile, 1), 1:size(imageTile, 2)) = imageTile;
             else
-                padded = zeros([obj.TileSize bandCount], "uint8");
+                padded = zeros([obj.TileSize bandCount], "like", imageTile);
                 padded(1:size(imageTile, 1), 1:size(imageTile, 2), :) = ...
                     imageTile;
             end
         end
 
-        function imageTile = prepareImageTile(~, imageTile)
-            imageTile = double(imageTile);
-            imageTile(~isfinite(imageTile)) = 0;
-            if any(imageTile < 0 | imageTile > 1, "all")
-                error("ProjectionBackendTiffTileWriter:radiometryOutOfRange", ...
-                    "Streaming currently requires normalized [0,1] radiometry; use in-memory output until Pack 4 defines scaling policy.");
-            end
-            imageTile = uint8(round(255 * imageTile));
+        function imageTile = prepareImageTile(obj, imageTile)
+            imageTile = ProjectionBackendRadiometry.prepare( ...
+                imageTile, obj.Output);
         end
 
         function maskTile = prepareMaskTile(~, maskTile)
@@ -221,6 +218,24 @@ classdef ProjectionBackendTiffTileWriter < handle
                 count = 1;
             else
                 count = size(imageData, 3);
+            end
+        end
+
+        function [bitsPerSample, sampleFormat] = ...
+                tiffSampleDescription(~, sampleClass)
+            switch string(sampleClass)
+                case "uint8"
+                    bitsPerSample = 8;
+                    sampleFormat = Tiff.SampleFormat.UInt;
+                case "uint16"
+                    bitsPerSample = 16;
+                    sampleFormat = Tiff.SampleFormat.UInt;
+                case "single"
+                    bitsPerSample = 32;
+                    sampleFormat = Tiff.SampleFormat.IEEEFP;
+                otherwise
+                    error("ProjectionBackendTiffTileWriter:unsupportedClass", ...
+                        "Unsupported TIFF sample class %s.", sampleClass);
             end
         end
 

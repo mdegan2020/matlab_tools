@@ -178,6 +178,7 @@ classdef ProjectionBackendTiledRenderer
             defaults.ExecutionMode = "serial";
             defaults.MaximumInFlightTiles = 4;
             defaults.NumericalMode = "fullSourceInverseWarp";
+            defaults.WorkingPrecision = "double";
 
             names = fieldnames(options);
             for k = 1:numel(names)
@@ -220,6 +221,12 @@ classdef ProjectionBackendTiledRenderer
                     ~ismember(defaults.Interpolation, ["bilinear", "nearest"])
                 error("ProjectionBackendTiledRenderer:invalidOptions", ...
                     "Interpolation must be bilinear or nearest.");
+            end
+            defaults.WorkingPrecision = lower(string(defaults.WorkingPrecision));
+            if ~isscalar(defaults.WorkingPrecision) || ...
+                    ~ismember(defaults.WorkingPrecision, ["double", "single"])
+                error("ProjectionBackendTiledRenderer:invalidOptions", ...
+                    "WorkingPrecision must be double or single.");
             end
 
             options = defaults;
@@ -406,9 +413,10 @@ classdef ProjectionBackendTiledRenderer
 
         function imageData = allocateImage(outputSize, sampleImage)
             if ismatrix(sampleImage)
-                imageData = zeros(outputSize);
+                imageData = zeros(outputSize, "like", sampleImage);
             else
-                imageData = zeros([outputSize size(sampleImage, 3)]);
+                imageData = zeros([outputSize size(sampleImage, 3)], ...
+                    "like", sampleImage);
             end
         end
 
@@ -433,7 +441,8 @@ classdef ProjectionBackendTiledRenderer
                 layerReadbacks(k).LayerIndex = tileLayerReadbacks(k).LayerIndex;
                 if includeQueryCoordinates
                     layerReadbacks(k).QueryPlaneCoordinates = ...
-                        zeros([2 outputSize]);
+                        zeros([2 outputSize], "like", ...
+                        tileLayerReadbacks(k).QueryPlaneCoordinates);
                 end
                 layerReadbacks(k).Mesh = tileLayerReadbacks(k).Mesh;
             end
@@ -585,7 +594,8 @@ classdef ProjectionBackendTiledRenderer
                     renderPlan.IncludeLayerReadbacks ~= ...
                     logical(options.IncludeLayerReadbacks) || ...
                     renderPlan.IncludeQueryCoordinates ~= ...
-                    logical(options.IncludeQueryCoordinates)
+                    logical(options.IncludeQueryCoordinates) || ...
+                    renderPlan.WorkingPrecision ~= options.WorkingPrecision
                 error("ProjectionBackendTiledRenderer:planMismatch", ...
                     "Render plan does not match tiled output or interpolation options.");
             end

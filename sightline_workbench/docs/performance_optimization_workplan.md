@@ -48,8 +48,9 @@ Anaglyph Presentation Pack is also complete. The Cross-System Acceleration Pass
 retains CPU viewer/alignment execution, keeps new backend threading dependent
 on bounded serial streaming, and adds optional capability-checked GPU SGM with
 CPU fallback. Backend Performance Pack 2 now provides bounded serial tiled-TIFF
-output, and Pack 3 adds bounded thread submission/consumption. Pack 4 is active.
-The current fresh-class repository baseline is 405/405 passing tests. See
+output, Pack 3 adds bounded thread submission/consumption, and Pack 4 defines
+output radiometry/precision. Pack 5 is active. The current
+fresh-class repository baseline is 413/413 passing tests. See
 `docs/project_status.md` for the concise cross-workstream status.
 
 Use the selected project queue and the backend dependency order in this
@@ -1441,7 +1442,27 @@ Backend Performance Pack 3: Bound threaded tile execution
 
 ### Backend Performance Pack 4: Radiometric And Precision Policy
 
-Status: not started; follows Pack 3.
+Status: complete on July 11, 2026.
+
+Implementation:
+
+- `Output.OutputClass` selects `uint8`, `uint16`, or TIFF-only `single`.
+- `RadiometricScale`, `RadiometricOffset`, `FillValue`, and
+  `OutOfRangePolicy` (`clip` or `error`) define one deterministic encoding for
+  in-memory and streaming writers. Physical values reconstruct as
+  `storedNormalized * Scale + Offset`.
+- `ProjectionBackendRadiometry` prepares each full image or tile once; PNG and
+  TIFF writers reuse the prepared values rather than independently rescanning
+  and normalizing full arrays.
+- Metadata records class, scale, offset, fill, clipping policy, stored-value
+  contract, and integer normalization divisor.
+- `RenderOptions.WorkingPrecision` selects `double` or `single`. Single mode
+  casts final tile image/query-coordinate products before retention or worker
+  transfer; masks remain logical and mapping/radiometric inputs remain the full
+  source imagery.
+- Tests cover uint8 identity encoding, uint16 PNG/TIFF parity, TIFF single
+  writing in streaming and in-memory paths, error/clip behavior, and single
+  image products within `1e-6` of double.
 
 Deliverables:
 
@@ -1685,10 +1706,10 @@ The completed viewer sequence was:
 8. Viewer Performance Pack 7: lazy UI and preview storage.
 9. Viewer Performance Pack 8: raster preview prototype and decision.
 
-Viewer Packs 0-8, Backend Packs 0-3, the Viewer Orientation and Anaglyph
+Viewer Packs 0-8, Backend Packs 0-4, the Viewer Orientation and Anaglyph
 Presentation Pack, and the Alignment Workbench Usability and Offset-Semantics
 Pack, and the Cross-System Acceleration Pass are complete. The remaining
-implementation queue is, in order: Backend Performance Packs 4-5; then
+implementation queue is, in order: Backend Performance Pack 5; then
 dense-surface synthetic expansion after the user supplies the requested
 fixture inputs. Keep backend
 work dependency-aware: bounded serial and thread streaming are complete;
