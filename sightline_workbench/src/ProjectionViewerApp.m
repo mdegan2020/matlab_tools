@@ -214,7 +214,7 @@ classdef ProjectionViewerApp < handle
             if nargin >= 2 && ~isempty(projectionPlane)
                 scene = ProjectionViewerHarness.applyProjectionPlane(scene, projectionPlane);
             end
-            scene = ProjectionLayerIdentity.ensureScene(scene);
+            scene = ProjectionViewMetadata.ensureScene(scene);
 
             app.Scene = scene;
             app.AlignmentSession = ProjectionAlignmentSession();

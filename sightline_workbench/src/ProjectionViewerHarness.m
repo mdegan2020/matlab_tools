@@ -101,7 +101,7 @@ classdef ProjectionViewerHarness
             scene.renderOrigin = basePlane.P0;
             scene.preview = preview;
             scene.renderOptions = renderOptions;
-            scene.layers = ProjectionLayerIdentity.ensureLayers(layers);
+            scene.layers = ProjectionViewMetadata.ensureLayers(layers);
         end
 
         function options = realDataOptions(overrides)
@@ -179,6 +179,8 @@ classdef ProjectionViewerHarness
                 layer = ProjectionViewerHarness.createLayer( ...
                     imageData, "", sourceGeometry, projectionPlane, ...
                     meshSampling, layerOptions);
+                layer = ProjectionViewMetadata.applyOverrides( ...
+                    layer, geometryDefinitions{layerIndex});
                 if layerIndex == 1
                     layers = layer;
                 else
@@ -195,7 +197,7 @@ classdef ProjectionViewerHarness
             scene.renderOrigin = projectionPlane.P0;
             scene.preview = preview;
             scene.renderOptions = renderOptions;
-            scene.layers = ProjectionLayerIdentity.ensureLayers(layers);
+            scene.layers = ProjectionViewMetadata.ensureLayers(layers);
         end
 
         function sourceGeometry = createRealSourceGeometry(imageSize, ...
@@ -601,6 +603,12 @@ classdef ProjectionViewerHarness
             layer.Alpha = 1.0;
             layer.BlendMode = "alpha";
             layer.Visible = true;
+            layer.ViewId = "";
+            layer.PassId = ProjectionViewMetadata.DefaultPassId;
+            layer.AcquisitionStartTime = [];
+            layer.LineRateHz = [];
+            layer.ScanAxis = "column";
+            layer.ScanDirection = "increasing";
         end
 
         function textureData = prepareLayerDisplayTexture(imageData, options)
