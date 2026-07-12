@@ -31,10 +31,20 @@ classdef ProjectionAlignmentScheduler
 
             referenceIndex = ProjectionAlignmentScheduler.referenceIndex( ...
                 layerIndices, request, options);
-            pairMatrix = ProjectionAlignmentScheduler.strategyPairs( ...
-                layerIndices, referenceIndex, options.Strategy);
             layerIds = ProjectionAlignmentScheduler.scheduleLayerIds( ...
                 request, layerIndices);
+            viewIds = ProjectionAlignmentScheduler.scheduleViewIds( ...
+                scene, layerIndices, layerIds);
+            graph = struct();
+            if options.Strategy == "qualityGraph"
+                graph = ProjectionPairGraphScheduler.build( ...
+                    scene, layerIndices, viewIds, options);
+                pairMatrix = ProjectionAlignmentScheduler.graphPairMatrix( ...
+                    graph, referenceIndex);
+            else
+                pairMatrix = ProjectionAlignmentScheduler.strategyPairs( ...
+                    layerIndices, referenceIndex, options.Strategy);
+            end
 
             schedule = struct();
             schedule.Format = ProjectionAlignmentScheduler.Format;
@@ -44,14 +54,20 @@ classdef ProjectionAlignmentScheduler
             schedule.IncludeHiddenLayers = options.IncludeHiddenLayers;
             schedule.LayerIndices = layerIndices;
             schedule.LayerIds = layerIds;
+            schedule.ViewIds = viewIds;
             schedule.ReferenceLayerIndex = referenceIndex;
             schedule.ReferenceLayerId = layerIds(layerIndices == referenceIndex);
             schedule.Pairs = ProjectionAlignmentScheduler.pairStructs( ...
                 pairMatrix, layerIndices, layerIds, referenceIndex, ...
-                options.Strategy);
+                options.Strategy, graph, viewIds);
             schedule.PairCount = numel(schedule.Pairs);
             schedule.Diagnostics = ProjectionAlignmentScheduler.scheduleDiagnostics( ...
                 scene, request, layerIndices, schedule.Pairs);
+            if options.Strategy == "qualityGraph"
+                schedule.Graph = graph;
+                schedule.Diagnostics.PairGraph = graph.Diagnostics;
+                schedule.PredictedCost = graph.PredictedCost;
+            end
         end
 
         function diagnostics = scoreMatches(matchResult)
@@ -159,6 +175,9 @@ classdef ProjectionAlignmentScheduler
                         layerIndices, referenceIndex); ...
                         ProjectionAlignmentScheduler.centerStarPairs( ...
                         layerIndices, referenceIndex)]);
+                case "qualityGraph"
+                    error("ProjectionAlignmentScheduler:internalStrategy", ...
+                        "qualityGraph must be built from scene evidence.");
             end
         end
 
@@ -217,12 +236,16 @@ classdef ProjectionAlignmentScheduler
         end
 
         function pairs = pairStructs(pairMatrix, layerIndices, layerIds, ...
-                referenceIndex, strategy)
-            pairs = struct("Pair", {}, "Order", {}, "Strategy", {}, ...
+                referenceIndex, strategy, graph, viewIds)
+            pairs = struct("PairId", {}, "Pair", {}, "Order", {}, ...
+                "Strategy", {}, ...
                 "DistanceFromReference", {}, "IsAdjacent", {}, ...
                 "IncludesReference", {}, "PairLayerIds", {}, ...
+                "PairViewIds", {}, ...
                 "MovingLayerId", {}, "ReferenceLayerId", {}, ...
-                "PairDirection", {});
+                "PairDirection", {}, "GraphRole", {}, ...
+                "QualityScore", {}, "SelectionScore", {}, ...
+                "PredictedCost", {}, "SelectionReason", {});
             referencePosition = find(layerIndices == referenceIndex, 1, "first");
             for k = 1:size(pairMatrix, 1)
                 pair = pairMatrix(k, :);
@@ -237,9 +260,37 @@ classdef ProjectionAlignmentScheduler
                 pairs(k).IsAdjacent = abs(diff(pairPositions)) == 1;
                 pairs(k).IncludesReference = any(pair == referenceIndex);
                 pairs(k).PairLayerIds = layerIds(pairPositions);
+                pairs(k).PairViewIds = viewIds(pairPositions);
+                identity = ProjectionViewMetadata.pairIdentity( ...
+                    pairs(k).PairViewIds(1), pairs(k).PairViewIds(2));
+                pairs(k).PairId = identity.PairId;
                 pairs(k).MovingLayerId = pairs(k).PairLayerIds(1);
                 pairs(k).ReferenceLayerId = pairs(k).PairLayerIds(2);
                 pairs(k).PairDirection = "movingToReference";
+                pairs(k).GraphRole = "legacy";
+                pairs(k).QualityScore = NaN;
+                pairs(k).SelectionScore = NaN;
+                pairs(k).PredictedCost = NaN;
+                pairs(k).SelectionReason = "legacyStrategy";
+                if strategy == "qualityGraph"
+                    graphEdge = graph.Selected(k);
+                    pairs(k).GraphRole = graphEdge.Role;
+                    pairs(k).QualityScore = graphEdge.QualityScore;
+                    pairs(k).SelectionScore = graphEdge.SelectionScore;
+                    pairs(k).PredictedCost = graphEdge.PredictedCost;
+                    pairs(k).SelectionReason = graphEdge.SelectionReason;
+                end
+            end
+        end
+
+        function matrix = graphPairMatrix(graph, referenceIndex)
+            if isempty(graph.Selected)
+                matrix = zeros(0, 2);
+            else
+                matrix = reshape([graph.Selected.Pair], 2, []).';
+                referenceFirst = matrix(:, 1) == referenceIndex;
+                matrix(referenceFirst, :) = ...
+                    matrix(referenceFirst, [2 1]);
             end
         end
 
@@ -254,6 +305,21 @@ classdef ProjectionAlignmentScheduler
                 else
                     layerIds(layerPosition) = string(sprintf( ...
                         "legacy-layer-%06d", layerIndices(layerPosition)));
+                end
+            end
+        end
+
+        function viewIds = scheduleViewIds(scene, layerIndices, fallbackIds)
+            viewIds = fallbackIds;
+            if ~ProjectionAlignmentScheduler.hasSceneLayers(scene)
+                return
+            end
+            for position = 1:numel(layerIndices)
+                layer = scene.layers(layerIndices(position));
+                if isfield(layer, "ViewId") && ...
+                        isstring(layer.ViewId) && isscalar(layer.ViewId) && ...
+                        ~ismissing(layer.ViewId) && strlength(layer.ViewId) > 0
+                    viewIds(position) = layer.ViewId;
                 end
             end
         end

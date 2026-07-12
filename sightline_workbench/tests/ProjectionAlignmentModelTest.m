@@ -30,7 +30,12 @@ classdef ProjectionAlignmentModelTest < matlab.unittest.TestCase
             testCase.verifyEqual(options.FilterPipeline.NativeDisplacementMethod, ...
                 "none");
             testCase.verifyEqual(options.LossMode, "projectionPlane2D");
-            testCase.verifyEqual(options.Scheduling.Strategy, "centerOut");
+            testCase.verifyEqual(options.Scheduling.Strategy, "qualityGraph");
+            testCase.verifyEqual(options.Scheduling.QualitySpeed, "balanced");
+            testCase.verifyEmpty(options.Scheduling.MaxPairs);
+            testCase.verifyFalse(options.Scheduling.AllPlausiblePairs);
+            testCase.verifyEmpty(options.Scheduling.ForcedIncludePairIds);
+            testCase.verifyEmpty(options.Scheduling.ForcedExcludePairIds);
             testCase.verifyEqual(options.MovableParameters.Parameters, ...
                 ["omega", "phi", "kappa"]);
             testCase.verifyTrue(options.MovableParameters.AllowReferenceMotion);

@@ -47,6 +47,13 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentScopeDropDown");
             detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentDetectorDropDown");
+            pairGraphModeDropDown = ...
+                ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentPairGraphModeDropDown");
+            maxPairsSpinner = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMaxPairsSpinner");
+            allPairsCheckBox = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentAllPairsCheckBox");
             lossDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentLossDropDown");
             coplanarityDropDown = ...
@@ -101,6 +108,9 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(presetDropDown.Value), "fast");
             testCase.verifyEqual(string(scopeDropDown.Value), "selectedPair");
             testCase.verifyEqual(string(detectorDropDown.Value), "auto");
+            testCase.verifyEqual(string(pairGraphModeDropDown.Value), "balanced");
+            testCase.verifyEqual(maxPairsSpinner.Value, 20);
+            testCase.verifyFalse(allPairsCheckBox.Value);
             testCase.verifyEqual(string(lossDropDown.Value), "projectionPlane2D");
             testCase.verifyEqual(string(coplanarityDropDown.Value), "none");
             testCase.verifyTrue(referenceMotionCheckBox.Value);
@@ -115,6 +125,11 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual( ...
                 diagnostics.Request.FilterNativeDisplacementMethod, "none");
             testCase.verifyTrue(diagnostics.Request.AllowReferenceMotion);
+            testCase.verifyEqual( ...
+                diagnostics.Request.PairGraphQualitySpeed, "balanced");
+            testCase.verifyEqual(diagnostics.Request.PairGraphMaxPairs, 20);
+            testCase.verifyFalse( ...
+                diagnostics.Request.PairGraphAllPlausiblePairs);
             testCase.verifyEqual(diagnostics.Request.KappaBoundDegrees, 15);
             testCase.verifyEqual( ...
                 diagnostics.Request.SafeMinSolverObservationsPerPair, 3);
@@ -153,6 +168,45 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(ismember( ...
                 ["Enabled", "Pair", "MatchIndex", "ResidualAfter", "State"], ...
                 string(matchTable.Data.Properties.VariableNames))));
+        end
+
+        function testVisibleScopeUsesPairGraphControls(testCase)
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene( ...
+                false, 4);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            scopeDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentScopeDropDown");
+            graphModeDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentPairGraphModeDropDown");
+            maxPairsSpinner = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMaxPairsSpinner");
+            allPairsCheckBox = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentAllPairsCheckBox");
+
+            graphModeDropDown.Value = "quality";
+            maxPairsSpinner.Value = 3;
+            allPairsCheckBox.Value = true;
+            scopeDropDown.Value = "visibleLayers";
+            scopeDropDown.ValueChangedFcn(scopeDropDown, struct());
+            drawnow
+            diagnostics = app.alignmentDiagnostics();
+
+            testCase.verifyEqual( ...
+                diagnostics.Request.SchedulingStrategy, "qualityGraph");
+            testCase.verifyEqual( ...
+                diagnostics.Request.PairGraphQualitySpeed, "quality");
+            testCase.verifyEqual(diagnostics.Request.PairGraphMaxPairs, 3);
+            testCase.verifyTrue( ...
+                diagnostics.Request.PairGraphAllPlausiblePairs);
+            testCase.verifyLessThanOrEqual(diagnostics.Schedule.PairCount, 3);
+            testCase.verifyTrue(isfield( ...
+                diagnostics.Schedule.Diagnostics, "PairGraph"));
+            testCase.verifyTrue( ...
+                diagnostics.Schedule.Diagnostics.PairGraph.BudgetLimited);
         end
 
         function testAlignmentWorkbenchUsesGroupedStagedLayout(testCase)

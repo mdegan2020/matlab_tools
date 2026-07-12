@@ -82,7 +82,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest fresh-class repository validation passes all 552 tests;
+- the latest fresh-class repository validation passes all 557 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -205,7 +205,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 552 passing tests with no failures or incomplete tests.
+baseline is 557 passing tests with no failures or incomplete tests.
 
 ## Correction-Result SDK
 
@@ -300,6 +300,35 @@ diagnostic association evidence only; it is not duplicated as an additional
 solver residual. `ProjectionAlignmentMatchFilter.filter` publishes the same
 result as `filteredMatches.Tracks` and summarizes it under
 `filteredMatches.Diagnostics.Tracks`.
+
+`ProjectionAlignmentScheduler` now defaults multi-image requests to the
+`qualityGraph` strategy. `ProjectionPairGraphScheduler` cheaply scores every
+plausible stable-view pair using projected overlap, intersection geometry,
+pass/time separation, radiometric compatibility, and available operator
+evidence. It selects a deterministic maximum-quality spanning forest, then
+adds complementary loop chords while rewarding low-degree views and redundant
+cross-pass bridges.
+
+```matlab
+forcedPair = ProjectionViewMetadata.pairIdentity("view-a", "view-c");
+request = struct(Options=struct(Scheduling=struct( ...
+    Strategy="qualityGraph", QualitySpeed="balanced", ...
+    MaxPairs=20, AllPlausiblePairs=false, ...
+    ForcedIncludePairIds=forcedPair.PairId, ...
+    ForcedExcludePairIds=strings(1, 0))));
+schedule = ProjectionAlignmentScheduler.build(scene, request);
+
+treePairIds = schedule.Diagnostics.PairGraph.TreePairIds;
+loopPairIds = schedule.Diagnostics.PairGraph.ChordPairIds;
+predictedCost = schedule.Diagnostics.PairGraph.PredictedCost;
+```
+
+The graph diagnostics retain selected tree edges and chords, components, node
+degrees, a fundamental cycle basis, every rejection reason, signal
+availability, budget truncation, and infeasible-connectivity status. The
+Alignment Workbench exposes Fast/Balanced/Quality, hard `Max pairs`, and `All
+plausible` controls. Explicit legacy strategies and the selected-pair
+two-image direction remain supported.
 The OPK adapter retains solver/match/gauge/precision/configuration provenance,
 bounds, conditioning, priors, observability, failure reasons, typed future
 blocks, and an explicit unavailable-covariance reason when the legacy solver
