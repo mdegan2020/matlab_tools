@@ -21,7 +21,7 @@ As of July 12, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 577/577 tests with zero
+- The latest grouped fresh-class repository suite passes 585/585 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -68,6 +68,8 @@ As of July 12, 2026:
 | Multi-Image A6 pass-aware priors and reporting | Complete |
 | Multi-image synthetic acceptance matrix | Complete |
 | Logical MATLAB test-suite grouping | Complete |
+| P0 precision inventory | Complete |
+| P1 viewer long-range precision validation | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -178,8 +180,8 @@ pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
 A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5/A6 global constant-OPK network solving and the multi-image
-synthetic acceptance matrix are also complete. The next ordered work is P0/P1
-precision inventory and required/stretch range validation, followed by
+synthetic acceptance matrix and P0/P1 precision validation are also complete.
+The next ordered work is S3 dense-matcher base/current-SGM adapter, followed by
 dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work
 in the explicit dependency order recorded there.
 
@@ -233,10 +235,19 @@ exact repeatability. No numerical acceptance threshold is implied by the
 recorded evidence.
 
 Repository validation is now partitioned by the authoritative
-`projectionTestGroups` manifest. Every feature pack runs all four logical
+`projectionTestGroups` manifest. Every feature pack runs all five logical
 groups in separate fresh-class MATLAB MCP calls, as documented in
 `docs/test_suite_grouping.md`; an integrity test rejects missing or duplicate
 test-file ownership.
+
+P0/P1 are complete. The executable inventory classifies 16 current precision
+boundaries and retains double as the scientific reference. The long-range
+viewer matrix covers local and large translated coordinates at 1 km, 25 km,
+the required 100 km, and the 200 km stretch range under an unrefracted WGS84
+horizon model. Casting only after double render-origin subtraction stayed at
+`4.005e-5` pixel maximum error with preserved eye ordering; casting absolute
+world values first reached `0.786` pixel and collapsed the 0.02 m stereo
+baseline. See `docs/precision_inventory_and_long_range_validation.md`.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused

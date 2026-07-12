@@ -7,8 +7,8 @@ imagery, A3b measured motion playback, S1 immutable CorrectionSet, and S2
 correction lifecycle/notification are complete. The read-only MATLAB SDK audit
 is also complete. Both A4 track/path-consistency and explainable quality
 pair-graph packs, A5 global constant-OPK network solve, A6 pass-aware priors,
-and the multi-image synthetic acceptance matrix are complete. The current
-grouped fresh-class repository suite passes 577/577 tests. This
+the multi-image synthetic acceptance matrix, and P0/P1 precision validation are
+complete. The current grouped fresh-class repository suite passes 585/585 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1468,12 +1468,13 @@ These trees are coordinated but should remain separately reviewable.
 
 ### Tree P: Precision And Numerical Integrity
 
-1. **P0 — Precision inventory.** Classify every authoritative, derived,
-   display, backend, solver, covariance, dense, and GPU array by role and
-   current type.
-2. **P1 — Viewer long-range validation.** Compare double/single display
-   geometry with local and large origins through required 100 km and stretch
-   `min(200 km, geometric horizon)`.
+1. **P0 — Precision inventory — complete.** The executable inventory classifies
+   authoritative, derived, display, backend, solver, covariance, dense, truth,
+   fusion, and GPU boundaries by role and current/required type.
+2. **P1 — Viewer long-range validation — complete.** Double reference and
+   single display candidates are compared with local and large origins through
+   required 100 km and stretch `min(200 km, geometric horizon)`; single is safe
+   only after double render-origin subtraction.
 3. **P2 — Scientific mixed-precision matrix.** Test backend mapping,
    triangulation, global OPK, covariance, dense refinement, and voxel fusion;
    select explicit boundaries.
@@ -1485,8 +1486,7 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current grouped fresh-class baseline, now 577/577 after the
-   multi-image synthetic acceptance matrix and test-suite grouping refactor.
+1. Preserve the current grouped fresh-class baseline, now 585/585 after P0/P1.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
@@ -1497,7 +1497,7 @@ complete. The ordered implementation queue is:
 9. A4 explainable pair graph and quality/max/all-pair controls — complete.
 10. A5/A6 global constant-OPK network solve and pass-aware priors — complete.
 11. Multi-image synthetic acceptance matrix — complete.
-12. P0/P1 precision inventory and required/stretch range validation.
+12. P0/P1 precision inventory and required/stretch range validation — complete.
 13. S3 dense-matcher base and current SGM adapter.
 14. B0 truth-aware SGM audit.
 15. B1/B2 sparse-seeded classical template matcher.
