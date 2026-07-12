@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 547/547 tests with zero
+- The latest fresh-class repository suite passes 552/552 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -62,6 +62,7 @@ As of July 11, 2026:
 | Multi-Image A3b measured motion playback | Complete |
 | MATLAB SDK S1 immutable CorrectionSet | Complete |
 | MATLAB SDK S2 correction lifecycle and notification | Complete |
+| Multi-Image A4 conflict-safe tracks and path diagnostics | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -169,16 +170,22 @@ and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The
 approved consolidated implementation queue is now
 `docs/multi_image_surface_reconstruction_workplan.md`. MI-0 through MI-3, A2
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
-A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, and
-the SDK audit are complete; the next ordered pack is the first A4 multi-view
-tracks and path/cycle-consistency pack. Pair-graph controls, global multi-image solving,
-precision validation,
+A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
+SDK audit, and the first A4 conflict-safe track/path-consistency pack are
+complete. The next ordered pack is A4 explainable pair-graph controls, followed
+by global multi-image solving, precision validation,
 dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow
 in the explicit dependency order recorded there.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
 immutable history, viewer integration, callback safeguards, and legacy
 compatibility are covered by focused and full fresh-class validation.
+
+The first A4 pack is complete. Accepted pair-ledger records now reconcile into
+stable multi-view tracks with at most one observation per view. Descriptor and
+geometry gates retain explicit rejection reasons, ambiguous transitive merges
+are rejected, and direct-versus-composed observation disagreement is exposed as
+cycle/path diagnostic evidence without becoming a duplicate solver residual.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused

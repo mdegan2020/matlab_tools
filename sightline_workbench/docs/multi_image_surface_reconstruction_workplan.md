@@ -5,7 +5,8 @@ dense-surface synthetic expansion, Multi-Image Foundation MI-0 through MI-3,
 A2 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion
 imagery, A3b measured motion playback, S1 immutable CorrectionSet, and S2
 correction lifecycle/notification are complete. The read-only MATLAB SDK audit
-is also complete. The current fresh-class repository suite passes 547/547 tests. This
+is also complete. The first A4 conflict-safe track/path-consistency pack is
+complete, and the current fresh-class repository suite passes 552/552 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1369,9 +1370,11 @@ These trees are coordinated but should remain separately reviewable.
 5. **A3b — Motion playback — complete.** Measured 0.5-10 fps playback adds
    Space/Escape, sequential no-skip display, one-frame lookahead, explicit
    pause reasons, bounded cache/memory diagnostics, and interaction evidence.
-6. **A4 — Multi-view tracks and pair graph.** Reconcile pair matches into
-   tracks; build an explainable nonsequential, cycle-rich schedule; and add
-   cycle/path-consistency diagnostics without requiring all-pairs matching.
+6. **A4 — Multi-view tracks and pair graph — in progress.** Conflict-safe,
+   stable multi-view tracks and direct-versus-composed path diagnostics are
+   complete. The next pack builds the explainable nonsequential, cycle-rich
+   schedule and quality/max/all-pair controls without requiring all-pairs
+   matching.
 7. **A5 — Global constant-OPK solve.** Make robust epipolar network adjustment
    the primary solve when ray geometry is available.
 8. **A6 — Same-pass/multi-pass priors.** Add pass-common/differential reporting,
@@ -1473,14 +1476,14 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current fresh-class baseline, now 547/547 after S2.
+1. Preserve the current fresh-class baseline, now 552/552 after the first A4 pack.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
 5. A3b motion playback and performance evidence — complete.
 6. S1 immutable `CorrectionSet`, MAT/JSON, stale protection, OPK adapter — complete.
 7. S2 callbacks and explicit apply/revert/generation lineage — complete.
-8. A4 multi-view tracks and cycle diagnostics.
+8. A4 multi-view tracks and cycle diagnostics — complete.
 9. A4 explainable pair graph and quality/max/all-pair controls.
 10. A5/A6 global constant-OPK network solve and pass-aware priors.
 11. Multi-image synthetic acceptance matrix.

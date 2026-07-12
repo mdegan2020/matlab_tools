@@ -82,7 +82,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest fresh-class repository validation passes all 547 tests;
+- the latest fresh-class repository validation passes all 552 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -205,7 +205,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 547 passing tests with no failures or incomplete tests.
+baseline is 552 passing tests with no failures or incomplete tests.
 
 ## Correction-Result SDK
 
@@ -273,6 +273,33 @@ Function-backed source geometry must carry a stable serializable
 navigation providers derive one from their authoritative geometry payload. An
 unverifiable closure fails portable compatibility without serializing its
 workspace or private fixture values.
+
+## Multi-View Feature Tracks
+
+`ProjectionAlignmentTrackBuilder` promotes accepted pair-match ledger records
+into deterministic multi-view tracks. Each track contains at most one
+observation per stable `ViewId`; quality-ordered transitive merges that would
+introduce a second observation from the same view are rejected as
+`duplicateViewConflict` instead of silently corrupting the association.
+Optional descriptor and projection-plane gates retain explicit rejection
+reasons.
+
+```matlab
+trackResult = ProjectionAlignmentTrackBuilder.build(filteredMatches, ...
+    struct(ObservationMergeTolerancePixels=0.25, ...
+    PathConsistencyTolerancePixels=0.5));
+
+tracks = trackResult.Tracks;
+edgeDecisions = trackResult.Edges;
+pathEvidence = trackResult.PathDiagnostics;
+```
+
+Alternate accepted paths are compared with each direct edge in source-pixel
+observation space. The resulting consistent/inconsistent cycle evidence is
+diagnostic association evidence only; it is not duplicated as an additional
+solver residual. `ProjectionAlignmentMatchFilter.filter` publishes the same
+result as `filteredMatches.Tracks` and summarizes it under
+`filteredMatches.Diagnostics.Tracks`.
 The OPK adapter retains solver/match/gauge/precision/configuration provenance,
 bounds, conditioning, priors, observability, failure reasons, typed future
 blocks, and an explicit unavailable-covariance reason when the legacy solver

@@ -43,8 +43,10 @@ classdef ProjectionAlignmentMatchFilter
                     filtered.Matches(k), options, scene);
             end
             filtered.MatchLedger = ProjectionAlignmentMatchLedger.combine(filtered);
+            filtered.Tracks = ProjectionAlignmentTrackBuilder.build(filtered);
             filtered.FilterOptions = options.FilterPipeline;
             filtered.Diagnostics.FilterPipeline = [pairDiagnostics{:}];
+            filtered.Diagnostics.Tracks = filtered.Tracks.Diagnostics;
         end
     end
 
