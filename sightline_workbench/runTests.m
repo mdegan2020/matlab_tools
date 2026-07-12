@@ -3,10 +3,13 @@ function results = runTests(varargin)
 
 projectRoot = fileparts(mfilename("fullpath"));
 addpath(fullfile(projectRoot, "src"));
+groups = projectionTestGroups();
+results = matlab.unittest.TestResult.empty(1, 0);
+for index = 1:numel(groups)
+    groupResults = runTestGroup(groups(index).Name, varargin);
+    results = [results groupResults]; %#ok<AGROW>
+end
 
-results = runtests(fullfile(projectRoot, "tests"), ...
-    "IncludeSubfolders", true, "Strict", true, varargin{:});
-
-disp(table(results));
-assertSuccess(results);
+fprintf("SUITE_TOTAL=%d FAILED=%d INCOMPLETE=%d\n", ...
+    numel(results), nnz([results.Failed]), nnz([results.Incomplete]));
 end

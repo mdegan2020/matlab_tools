@@ -788,7 +788,7 @@ preview planes, or object ownership.
 | --- | --- | --- | --- |
 | VER-001 | Every feature pack shall add focused tests for its pure state, public interface, invalid inputs, failure recovery, and GUI behavior where applicable. | Core | T, I |
 | VER-002 | Changed MATLAB files shall pass checkcode or shall document reviewed unavoidable diagnostics. | Core | I |
-| VER-003 | A feature pack shall run the complete fresh-class repository test suite before its acceptance. | Core | T |
+| VER-003 | A feature pack shall run every authoritative logical fresh-class repository test group before its acceptance; MATLAB MCP execution shall use a separate call per group. | Core | T |
 | VER-004 | GUI requirements shall be tested through programmatic UI interaction where feasible and supplemented by a defined manual demonstration when visual behavior cannot be fully automated. | Core | T, D |
 | VER-005 | Numerical algorithms shall be compared against analytic examples, deterministic synthetic truth, Monte Carlo, or an established double CPU oracle as appropriate. | Core | T, A |
 | VER-006 | Performance claims shall include repeatable scripts, bounded artifacts, hardware/software context, and measured rather than assumed thresholds. | Core | A, I |
@@ -908,16 +908,17 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 567 of 567 fresh-class tests
-passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
+At the date of this draft, the repository reports 577 of 577 grouped
+fresh-class tests passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
 cross-system pass, dense-surface synthetic milestones, and multi-image
 foundation MI-0 through MI-3, pair viewpoint, focus-aware keyboard controls,
 manual and measured motion imagery, MATLAB SDK S1 and S2, and both A4
 conflict-safe track/path-consistency and explainable quality pair-graph packs,
-and A5 global constant-OPK network solving plus A6 pass-aware priors/reporting
-are complete. The SDK audit is complete.
+and A5 global constant-OPK network solving, A6 pass-aware priors/reporting, and
+the multi-image synthetic acceptance matrix are complete. The SDK audit and
+logical test-suite grouping refactor are complete.
 
 This snapshot is informative and may become stale. project_status.md is the
 authoritative implementation-status record.

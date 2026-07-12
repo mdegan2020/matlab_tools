@@ -8,12 +8,31 @@ end
 function testTask(~)
 %testTask Run the unit test suite.
 
-projectRoot = fileparts(mfilename("fullpath"));
-addpath(fullfile(projectRoot, "src"));
+runTests();
+end
 
-results = runtests(fullfile(projectRoot, "tests"), ...
-    "IncludeSubfolders", true, "Strict", true);
-assertSuccess(results);
+function testCoreGeometryStateTask(~)
+%testCoreGeometryStateTask Run core geometry and state tests.
+
+runTestGroup("coreGeometryState");
+end
+
+function testAlignmentTask(~)
+%testAlignmentTask Run sparse and network alignment tests.
+
+runTestGroup("alignment");
+end
+
+function testBackendSurfaceTask(~)
+%testBackendSurfaceTask Run backend and surface tests.
+
+runTestGroup("backendSurface");
+end
+
+function testViewerUiPerformanceTask(~)
+%testViewerUiPerformanceTask Run viewer UI and performance tests.
+
+runTestGroup("viewerUiPerformance");
 end
 
 function coverageTask(~)

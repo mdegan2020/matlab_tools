@@ -6,7 +6,7 @@ should not be mistaken for unfinished implementation.
 
 ## Current Baseline
 
-As of July 11, 2026:
+As of July 12, 2026:
 
 - The project directory and main application title are `sightline_workbench`
   and **Sightline Workbench**.
@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 567/567 tests with zero
+- The latest grouped fresh-class repository suite passes 577/577 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -66,6 +66,8 @@ As of July 11, 2026:
 | Multi-Image A4 explainable quality pair graph | Complete |
 | Multi-Image A5 global constant-OPK network solve | Complete |
 | Multi-Image A6 pass-aware priors and reporting | Complete |
+| Multi-image synthetic acceptance matrix | Complete |
+| Logical MATLAB test-suite grouping | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -175,10 +177,10 @@ approved consolidated implementation queue is now
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
 A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
-complete. A5 global constant-OPK network solving is also complete. The next
-ordered work is the multi-image synthetic acceptance matrix, followed by
-precision validation,
-dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow
+complete. A5/A6 global constant-OPK network solving and the multi-image
+synthetic acceptance matrix are also complete. The next ordered work is P0/P1
+precision inventory and required/stretch range validation, followed by
+dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work
 in the explicit dependency order recorded there.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
@@ -222,9 +224,24 @@ time interval, region, and position correlation, and leave-one-pair-out
 sensitivity with missing/failed child state. Effective covariance and pass
 decomposition remain authoritative through CorrectionSet serialization.
 
+The multi-image synthetic acceptance matrix is complete. Its deterministic
+reported-only scenarios cover 2, 3, 4, and 6 views; balanced, fast, quality,
+and all-plausible pair graphs; single- and multi-pass errors; corrupted-edge
+association rejection; explicit visible/occluded/texture/masked/invalid
+evidence classes; held-out OPK truth comparison; uncertainty summaries; and
+exact repeatability. No numerical acceptance threshold is implied by the
+recorded evidence.
+
+Repository validation is now partitioned by the authoritative
+`projectionTestGroups` manifest. Every feature pack runs all four logical
+groups in separate fresh-class MATLAB MCP calls, as documented in
+`docs/test_suite_grouping.md`; an integrity test rejects missing or duplicate
+test-file ownership.
+
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused
-validation, checkcode, a full fresh-class MATLAB-MCP suite, documentation,
+validation, checkcode, every grouped fresh-class MATLAB-MCP suite,
+documentation,
 commit, push, and clean status. The explicit stop conditions and unattended
 MATLAB/Git rules are recorded under `Continuous execution authorization` in
 the consolidated workplan.

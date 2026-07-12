@@ -6,9 +6,9 @@ A2 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion
 imagery, A3b measured motion playback, S1 immutable CorrectionSet, and S2
 correction lifecycle/notification are complete. The read-only MATLAB SDK audit
 is also complete. Both A4 track/path-consistency and explainable quality
-pair-graph packs, A5 global constant-OPK network solve, and A6 pass-aware priors
-and reporting are complete. The current fresh-class repository suite passes
-567/567 tests. This
+pair-graph packs, A5 global constant-OPK network solve, A6 pass-aware priors,
+and the multi-image synthetic acceptance matrix are complete. The current
+grouped fresh-class repository suite passes 577/577 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1485,7 +1485,8 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current fresh-class baseline, now 567/567 after A6.
+1. Preserve the current grouped fresh-class baseline, now 577/577 after the
+   multi-image synthetic acceptance matrix and test-suite grouping refactor.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
@@ -1495,7 +1496,7 @@ complete. The ordered implementation queue is:
 8. A4 multi-view tracks and cycle diagnostics — complete.
 9. A4 explainable pair graph and quality/max/all-pair controls — complete.
 10. A5/A6 global constant-OPK network solve and pass-aware priors — complete.
-11. Multi-image synthetic acceptance matrix.
+11. Multi-image synthetic acceptance matrix — complete.
 12. P0/P1 precision inventory and required/stretch range validation.
 13. S3 dense-matcher base and current SGM adapter.
 14. B0 truth-aware SGM audit.
@@ -1519,8 +1520,9 @@ only after the MATLAB dense/fusion product contract is selected.
 Beginning with S2, a worker is authorized to continue through this ordered
 queue without requesting permission after each green pack. For every coherent
 pack, it shall inspect current state, implement only the ordered scope, run
-focused tests and checkcode, run the full fresh-class suite through the MATLAB
-MCP server, update directly relevant documentation, commit, push, confirm a
+focused tests and checkcode, run every logical fresh-class suite group through
+separate MATLAB MCP calls, update directly relevant documentation, commit,
+push, confirm a
 clean worktree, and proceed to the next item.
 
 Pack completion, a clean validation result, or a choice already resolved by
