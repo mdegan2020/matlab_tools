@@ -82,7 +82,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest fresh-class repository validation passes all 539 tests;
+- the latest fresh-class repository validation passes all 547 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -205,7 +205,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 539 passing tests with no failures or incomplete tests.
+baseline is 547 passing tests with no failures or incomplete tests.
 
 ## Correction-Result SDK
 
@@ -235,14 +235,52 @@ restored = ProjectionCorrectionSet.read("adjustment-001.json");
 legacy = ProjectionCorrectionOpkAdapter.toLegacySolvedCorrections(restored);
 ```
 
+`ProjectionCorrectionStore` is the graphics-independent authoritative owner for
+proposal, acceptance, rejection, application, supersession, exact reversion,
+and named history. Application validates the complete declared view scope and
+parent generation, applies to a scene copy, verifies every corrected geometry
+fingerprint, and publishes only after every check succeeds:
+
+```matlab
+store = ProjectionCorrectionStore(scene, ...
+    struct(InitialGenerationId="scene-base", ...
+    CorrectionAcceptedFcn=@onCorrectionAccepted, ...
+    CorrectionAppliedFcn=@onCorrectionApplied, ...
+    CorrectionRevertedFcn=@onCorrectionReverted));
+
+store.propose(correctionSet);
+store.accept(correctionSet.GenerationId);
+[alignedScene, applied] = store.apply(correctionSet.GenerationId);
+[parentScene, reverted] = store.revert(correctionSet.GenerationId);
+
+currentApplied = store.current("applied");
+generationHistory = store.history(correctionSet.GenerationId);
+callbackDiagnostics = store.diagnostics();
+```
+
+Callbacks run synchronously after their named transition commits, in supplied
+order, with reentrancy protection. Callback failures are retained in
+diagnostics and never roll back scientific state. `ProjectionViewerApp` exposes
+the same current/history/apply/revert operations, and `runProjectionViewer`
+accepts `CorrectionAcceptedFcn`, `CorrectionAppliedFcn`, and
+`CorrectionRevertedFcn` runtime options without serializing those handles.
+
 `ProjectionGeometryFingerprint` hashes stable identity, source geometry,
 projection planes, and effective geometry corrections with canonical SHA-256;
 visibility, alpha, display imagery, and other presentation state are excluded.
+Function-backed source geometry must carry a stable serializable
+`GeometryRevisionToken`; built-in grid, viewer, oblique-terrain, and synthetic
+navigation providers derive one from their authoritative geometry payload. An
+unverifiable closure fails portable compatibility without serializing its
+workspace or private fixture values.
 The OPK adapter retains solver/match/gauge/precision/configuration provenance,
 bounds, conditioning, priors, observability, failure reasons, typed future
 blocks, and an explicit unavailable-covariance reason when the legacy solver
-does not produce covariance. S1 is read/query/persistence-only; explicit
-accept/apply/revert/history transitions and callbacks remain the ordered S2 pack.
+does not produce covariance. Portable construction and read reject missing,
+malformed, or unsupported correction-set formats and schema versions rather
+than coercing them. The existing degree-based APIs and legacy runner automatic
+safe-apply behavior remain compatibility adapters; the explicit lifecycle is
+the SDK contract.
 
 ## Dense-Surface Synthetic Fixture
 

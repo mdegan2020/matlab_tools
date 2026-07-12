@@ -225,6 +225,8 @@ classdef ProjectionViewerHarness
                 geometryDefinition.NominalSceneCenter;
             sourceGeometry.Metadata.GeometryDefinitionFormat = ...
                 "ProjectionViewerRealDataGeometry";
+            sourceGeometry.GeometryRevisionToken = ...
+                ProjectionGeometryFingerprint.deriveSourceRevision(sourceGeometry);
         end
 
         function scene = applyProjectionPlane(scene, projectionPlane)
@@ -296,6 +298,8 @@ classdef ProjectionViewerHarness
             geometryData.LayerIndex = options.LayerIndex;
             geometryData.LayerCount = options.LayerCount;
             geometryData.Metadata = ProjectionViewerHarness.createSourceMetadata(imageSize, options);
+            geometryData.GeometryRevisionToken = ...
+                ProjectionGeometryFingerprint.deriveSourceRevision(geometryData);
 
             sourceGeometry = geometryData;
             sourceGeometry.SampleFcn = @(rowIndices, columnIndices) ...

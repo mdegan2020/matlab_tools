@@ -147,6 +147,10 @@ classdef ProjectionCorrectionSetTest < matlab.unittest.TestCase
             duplicate.Views(2).ViewId = duplicate.Views(1).ViewId;
             invalidRotation = data;
             invalidRotation.Views(1).IncrementRotationMatrix = eye(3);
+            invalidConvention = data;
+            invalidConvention.Convention.Units = "degrees";
+            invalidDimension = data;
+            invalidDimension.Views(1).EffectiveAttitudeRadians = zeros(1, 4);
 
             testCase.verifyError( ...
                 @() ProjectionCorrectionSet.create(duplicate), ...
@@ -154,6 +158,57 @@ classdef ProjectionCorrectionSetTest < matlab.unittest.TestCase
             testCase.verifyError( ...
                 @() ProjectionCorrectionSet.create(invalidRotation), ...
                 "ProjectionCorrectionSet:invalidRotationLineage");
+            testCase.verifyError( ...
+                @() ProjectionCorrectionSet.create(invalidConvention), ...
+                "ProjectionCorrectionSet:invalidConvention");
+            testCase.verifyError( ...
+                @() ProjectionCorrectionSet.create(invalidDimension), ...
+                "ProjectionCorrectionSet:invalidNumericValue");
+        end
+
+        function testStrictSchemaRejectsMissingMalformedAndUnsupportedValues(testCase)
+            data = ProjectionCorrectionSetTest.makeSet().toStruct();
+            missingFormat = rmfield(data, "Format");
+            missingVersion = rmfield(data, "Version");
+            malformedFormat = data;
+            malformedFormat.Format = ["a" "b"];
+            unsupportedFormat = data;
+            unsupportedFormat.Format = "OtherCorrectionSet";
+            malformedVersion = data;
+            malformedVersion.Version = 1.5;
+            unsupportedVersion = data;
+            unsupportedVersion.Version = 2;
+
+            testCase.verifyError(@() ProjectionCorrectionSet.create(missingFormat), ...
+                "ProjectionCorrectionSet:missingSchemaField");
+            testCase.verifyError(@() ProjectionCorrectionSet.create(missingVersion), ...
+                "ProjectionCorrectionSet:missingSchemaField");
+            testCase.verifyError(@() ProjectionCorrectionSet.create(malformedFormat), ...
+                "ProjectionCorrectionSet:invalidFormat");
+            testCase.verifyError(@() ProjectionCorrectionSet.create(unsupportedFormat), ...
+                "ProjectionCorrectionSet:unsupportedFormat");
+            testCase.verifyError(@() ProjectionCorrectionSet.create(malformedVersion), ...
+                "ProjectionCorrectionSet:invalidVersion");
+            testCase.verifyError(@() ProjectionCorrectionSet.create(unsupportedVersion), ...
+                "ProjectionCorrectionSet:unsupportedVersion");
+        end
+
+        function testFunctionBackedGeometryRequiresStableRevisionToken(testCase)
+            scene = ProjectionCorrectionSetTest.makeScene();
+            set = ProjectionCorrectionSetTest.makeSet(scene);
+            unverifiable = scene;
+            unverifiable.layers(1).SourceGeometry = rmfield( ...
+                unverifiable.layers(1).SourceGeometry, ...
+                "GeometryRevisionToken");
+
+            status = set.compatibility(unverifiable);
+
+            testCase.verifyFalse(status.Compatible);
+            testCase.verifyEqual(status.ReasonCode, "unverifiableGeometry");
+            testCase.verifyError(@() set.assertCompatible(unverifiable), ...
+                "ProjectionCorrectionSet:unverifiableGeometry");
+            testCase.verifyEqual(strlength( ...
+                scene.layers(1).SourceGeometry.GeometryRevisionToken), 64);
         end
     end
 

@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 539/539 tests with zero
+- The latest fresh-class repository suite passes 547/547 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -61,6 +61,7 @@ As of July 11, 2026:
 | Multi-Image A3a-2 manual motion imagery | Complete |
 | Multi-Image A3b measured motion playback | Complete |
 | MATLAB SDK S1 immutable CorrectionSet | Complete |
+| MATLAB SDK S2 correction lifecycle and notification | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -150,8 +151,16 @@ reject missing views, pass changes, and stale parent geometry before any future
 mutation. `ProjectionCorrectionOpkAdapter` bridges existing degree solver
 results in both directions; `solveCorrectionSet` is the new graphics-independent
 headless entry point. MAT and shape-preserving portable JSON round-trip exactly.
-Lifecycle mutation, history ownership, application/revert, and callbacks remain
-S2 and were intentionally not folded into this value-contract pack.
+MATLAB SDK S2 hardens that boundary with strict format/version rejection and
+stable revision tokens for function-backed geometry. The graphics-independent
+`ProjectionCorrectionStore` owns immutable proposal, acceptance, rejection,
+application, supersession, historical, and reverted records. It validates a
+complete correction scope against the exact parent generation, applies on a
+scene copy, verifies every corrected fingerprint before publication, and
+restores verified parent snapshots for exact revert. Ordered post-commit
+callbacks are reentrancy-protected and failure-isolated; queryable history
+remains authoritative. Viewer launch and public app methods expose the same
+contract while the legacy runner retains automatic safe apply compatibility.
 
 ## Current Implementation Queue
 
@@ -160,22 +169,16 @@ and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The
 approved consolidated implementation queue is now
 `docs/multi_image_surface_reconstruction_workplan.md`. MI-0 through MI-3, A2
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
-A3b motion playback, S1 immutable CorrectionSet, and the SDK audit are complete;
-the next ordered pack is S2 correction application and notification. Correction
-SDK, global multi-image solving,
+A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, and
+the SDK audit are complete; the next ordered pack is the first A4 multi-view
+tracks and path/cycle-consistency pack. Pair-graph controls, global multi-image solving,
 precision validation,
 dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow
 in the explicit dependency order recorded there.
 
-S2 is authorized to proceed without another design checkpoint. Its mandatory
-entry hardening is recorded in the consolidated workplan and SRS: portable
-correction sets must reject unsupported formats/versions rather than coerce
-them; function-backed source geometry must supply a stable serializable
-revision/fingerprint token or fail compatibility; Apply/Revert must validate
-the complete scope and publish atomically after corrected/parent fingerprint
-verification; lifecycle/history records remain immutable and graphics
-independent; and post-transition callbacks are ordered, reentrancy-protected,
-failure-isolated, and never authoritative storage.
+S2 is complete. Its mandatory entry hardening, atomic application/reversion,
+immutable history, viewer integration, callback safeguards, and legacy
+compatibility are covered by focused and full fresh-class validation.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused

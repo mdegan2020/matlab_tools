@@ -214,6 +214,8 @@ classdef ProjectionViewerApp < handle
         DenseSurfaceHandles struct = struct()
         DenseSurfaceDiagnostics struct = struct()
         DenseSurfaceRunning logical = false
+        CorrectionStore
+        AlignmentAppliedGenerationId string = ""
     end
 
     properties (Access = private, Dependent)
@@ -236,7 +238,8 @@ classdef ProjectionViewerApp < handle
     end
 
     methods
-        function app = ProjectionViewerApp(scene, projectionPlane, viewerState)
+        function app = ProjectionViewerApp( ...
+                scene, projectionPlane, viewerState, correctionOptions)
             if nargin < 1
                 scene = ProjectionViewerHarness.createDefaultScene();
             end
@@ -245,6 +248,9 @@ classdef ProjectionViewerApp < handle
             end
             if nargin < 3
                 viewerState = [];
+            end
+            if nargin < 4
+                correctionOptions = struct();
             end
             if ~isempty(projectionPlane) && ProjectionViewerState.isState(projectionPlane)
                 viewerState = projectionPlane;
@@ -290,6 +296,8 @@ classdef ProjectionViewerApp < handle
                 app.applyViewerStateToScene(viewerState);
                 app.resetAlphaRuntimeState();
             end
+            app.CorrectionStore = ProjectionCorrectionStore( ...
+                app.Scene, correctionOptions);
             app.createComponents();
             app.createSurface();
             app.configureFrameCamera();
@@ -352,6 +360,57 @@ classdef ProjectionViewerApp < handle
             end
             state.Layers = layers;
             state = ProjectionViewerState.validate(state, numel(app.Scene.layers));
+        end
+
+        function generationId = correctionGenerationId(app)
+            %correctionGenerationId Return the current scientific generation.
+            generationId = app.CorrectionStore.currentGenerationId();
+        end
+
+        function correctionSet = currentCorrection(app, lifecycle)
+            %currentCorrection Query current correction lifecycle state.
+            correctionSet = app.CorrectionStore.current(lifecycle);
+        end
+
+        function records = correctionHistory(app, generationId)
+            %correctionHistory Query authoritative immutable correction history.
+            if nargin < 2
+                records = app.CorrectionStore.history();
+            else
+                records = app.CorrectionStore.history(generationId);
+            end
+        end
+
+        function diagnostics = correctionDiagnostics(app)
+            %correctionDiagnostics Return lifecycle and callback diagnostics.
+            diagnostics = app.CorrectionStore.diagnostics();
+        end
+
+        function proposed = proposeCorrectionSet(app, correctionSet)
+            %proposeCorrectionSet Add a portable proposal to viewer history.
+            proposed = app.CorrectionStore.propose(correctionSet);
+        end
+
+        function accepted = acceptCorrection(app, generationId)
+            %acceptCorrection Accept a current portable proposal.
+            accepted = app.CorrectionStore.accept(generationId);
+        end
+
+        function applied = applyCorrection(app, generationId)
+            %applyCorrection Atomically apply a reviewed portable generation.
+            previousScene = app.Scene;
+            [app.Scene, applied] = app.CorrectionStore.apply(generationId);
+            app.refreshCorrectionScene(previousScene);
+        end
+
+        function reverted = revertCorrection(app, generationId)
+            %revertCorrection Restore an exact parent correction generation.
+            previousScene = app.Scene;
+            [app.Scene, reverted] = app.CorrectionStore.revert(generationId);
+            if string(generationId) == app.AlignmentAppliedGenerationId
+                app.AlignmentAppliedGenerationId = "";
+            end
+            app.refreshCorrectionScene(previousScene);
         end
 
         function importState(app, state)
@@ -800,6 +859,14 @@ classdef ProjectionViewerApp < handle
     end
 
     methods (Access = private)
+        function refreshCorrectionScene(app, previousScene)
+            layerIndices = app.changedProjectionLayerIndices( ...
+                previousScene, app.Scene);
+            app.refreshProjectionLayers( ...
+                layerIndices, app.DefaultMeshSampling, false);
+            app.updateControlsFromSelectedLayer();
+        end
+
 
         function createComponents(app)
             app.UIFigure = uifigure(Name="Sightline Workbench", ...
@@ -2256,14 +2323,23 @@ classdef ProjectionViewerApp < handle
             if ~app.isAlignmentResultActionable(app.AlignmentResult)
                 return
             end
-            previousScene = app.Scene;
-            app.Scene = ProjectionAlignmentOpkSolver.applyCorrections( ...
+            parentScene = ProjectionAlignmentOpkSolver.revertCorrections( ...
                 app.Scene, app.AlignmentResult);
-            layerIndices = app.changedProjectionLayerIndices( ...
-                previousScene, app.Scene);
-            app.refreshProjectionLayers( ...
-                layerIndices, app.DefaultMeshSampling, false);
-            app.updateControlsFromSelectedLayer();
+            if ~app.CorrectionStore.hasCurrent("applied")
+                app.CorrectionStore.synchronizeScene(parentScene, ...
+                    app.CorrectionStore.currentGenerationId());
+            end
+            correctionOptions = struct(ParentGenerationId= ...
+                app.CorrectionStore.currentGenerationId());
+            correctionSet = ProjectionCorrectionOpkAdapter.fromAlignmentResult( ...
+                parentScene, app.AlignmentResult, correctionOptions);
+            app.CorrectionStore.propose(correctionSet);
+            app.CorrectionStore.accept(correctionSet.GenerationId);
+            previousScene = app.Scene;
+            [app.Scene, ~] = app.CorrectionStore.apply( ...
+                correctionSet.GenerationId);
+            app.AlignmentAppliedGenerationId = correctionSet.GenerationId;
+            app.refreshCorrectionScene(previousScene);
             app.drawAlignmentOverlays(app.AlignmentResult);
             app.AlignmentSession.markApplied();
             app.setAlignmentStatus("Applied " + ...
@@ -2275,13 +2351,21 @@ classdef ProjectionViewerApp < handle
                 return
             end
             previousScene = app.Scene;
-            app.Scene = ProjectionAlignmentOpkSolver.revertCorrections( ...
-                app.Scene, app.AlignmentResult);
-            layerIndices = app.changedProjectionLayerIndices( ...
-                previousScene, app.Scene);
-            app.refreshProjectionLayers( ...
-                layerIndices, app.DefaultMeshSampling, false);
-            app.updateControlsFromSelectedLayer();
+            if app.CorrectionStore.hasCurrent("applied")
+                applied = app.CorrectionStore.current("applied");
+                if applied.GenerationId ~= app.AlignmentAppliedGenerationId
+                    error("ProjectionViewerApp:differentCorrectionApplied", ...
+                        "The current applied correction was not created by " + ...
+                        "this alignment result and cannot be reverted here.");
+                end
+                [app.Scene, ~] = app.CorrectionStore.revert( ...
+                    applied.GenerationId);
+                app.AlignmentAppliedGenerationId = "";
+            else
+                app.Scene = ProjectionAlignmentOpkSolver.revertCorrections( ...
+                    app.Scene, app.AlignmentResult);
+            end
+            app.refreshCorrectionScene(previousScene);
             app.drawAlignmentOverlays(app.AlignmentResult);
             app.AlignmentSession.markReverted();
             app.setAlignmentStatus("Reverted alignment preview.");

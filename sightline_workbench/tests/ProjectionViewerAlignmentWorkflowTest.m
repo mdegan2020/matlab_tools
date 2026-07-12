@@ -16,6 +16,9 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
 
     methods (TestMethodSetup)
         function closeExistingViewer(testCase)
+            originalRng = rng;
+            testCase.addTeardown(@() rng(originalRng));
+            rng("default");
             names = ["Sightline Workbench", "Alignment Workbench"];
             for name = names
                 delete(findall(groot, "Type", "figure", "Name", name));

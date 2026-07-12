@@ -10,6 +10,12 @@ classdef ProjectionGeometryFingerprint
         function fingerprint = layer(layer)
             %layer Hash one layer's identity and authoritative geometry.
             layer = ProjectionViewMetadata.ensureLayers(layer);
+            status = ProjectionGeometryFingerprint.sourceRevisionStatus( ...
+                layer.SourceGeometry);
+            if ~status.Verifiable
+                error("ProjectionGeometryFingerprint:unverifiableGeometry", ...
+                    "%s", status.Explanation);
+            end
             payload = struct( ...
                 CanonicalizationVersion= ...
                 ProjectionGeometryFingerprint.CanonicalizationVersion, ...
@@ -28,6 +34,52 @@ classdef ProjectionGeometryFingerprint
                 ProjectionGeometryFingerprint.field( ...
                 layer, "ViewVectorAngularOffsetsDegrees", zeros(3, 1))));
             fingerprint = ProjectionGeometryFingerprint.hash(payload);
+        end
+
+        function token = deriveSourceRevision(authoritativeGeometry)
+            %deriveSourceRevision Hash serializable authoritative geometry.
+            if ~isstruct(authoritativeGeometry) || ...
+                    ~isscalar(authoritativeGeometry)
+                error("ProjectionGeometryFingerprint:invalidSourceGeometry", ...
+                    "Authoritative source geometry must be a scalar struct.");
+            end
+            if isfield(authoritativeGeometry, "GeometryRevisionToken")
+                authoritativeGeometry = rmfield( ...
+                    authoritativeGeometry, "GeometryRevisionToken");
+            end
+            token = ProjectionGeometryFingerprint.hash(authoritativeGeometry);
+        end
+
+        function status = sourceRevisionStatus(sourceGeometry)
+            %sourceRevisionStatus Verify function-backed geometry identity.
+            if ~isstruct(sourceGeometry) || ~isscalar(sourceGeometry)
+                status = struct(Verifiable=false, FunctionBacked=false, ...
+                    Token="", ReasonCode="invalidGeometry", ...
+                    Explanation="Source geometry must be a scalar struct.");
+                return
+            end
+            functionBacked = ProjectionGeometryFingerprint.hasFunctionHandle( ...
+                sourceGeometry);
+            token = "";
+            if isfield(sourceGeometry, "GeometryRevisionToken")
+                token = string(sourceGeometry.GeometryRevisionToken);
+            end
+            validToken = isscalar(token) && ~ismissing(token) && ...
+                token == strip(token) && strlength(token) > 0;
+            if functionBacked && ~validToken
+                status = struct(Verifiable=false, FunctionBacked=true, ...
+                    Token="", ReasonCode="unverifiableGeometry", ...
+                    Explanation="Function-backed source geometry requires " + ...
+                    "a stable serializable GeometryRevisionToken.");
+            else
+                if ~validToken
+                    token = "";
+                end
+                status = struct(Verifiable=true, ...
+                    FunctionBacked=functionBacked, Token=token, ...
+                    ReasonCode="verifiable", ...
+                    Explanation="Source geometry identity is verifiable.");
+            end
         end
 
         function records = scene(scene)
@@ -56,6 +108,34 @@ classdef ProjectionGeometryFingerprint
     end
 
     methods (Static, Access = private)
+        function tf = hasFunctionHandle(value)
+            if isa(value, "function_handle")
+                tf = true;
+            elseif isstruct(value)
+                tf = false;
+                names = fieldnames(value);
+                for elementIndex = 1:numel(value)
+                    for nameIndex = 1:numel(names)
+                        if ProjectionGeometryFingerprint.hasFunctionHandle( ...
+                                value(elementIndex).(names{nameIndex}))
+                            tf = true;
+                            return
+                        end
+                    end
+                end
+            elseif iscell(value)
+                tf = false;
+                for index = 1:numel(value)
+                    if ProjectionGeometryFingerprint.hasFunctionHandle(value{index})
+                        tf = true;
+                        return
+                    end
+                end
+            else
+                tf = false;
+            end
+        end
+
         function value = field(source, name, defaultValue)
             if isfield(source, name)
                 value = source.(name);

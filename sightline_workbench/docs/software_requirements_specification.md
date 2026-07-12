@@ -908,14 +908,14 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 539 of 539 fresh-class tests
+At the date of this draft, the repository reports 547 of 547 fresh-class tests
 passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
 cross-system pass, dense-surface synthetic milestones, and multi-image
 foundation MI-0 through MI-3, pair viewpoint, focus-aware keyboard controls,
-manual and measured motion imagery, and MATLAB SDK S1 are complete. The SDK
-audit is complete.
+manual and measured motion imagery, and MATLAB SDK S1 and S2 are complete. The
+SDK audit is complete.
 
 This snapshot is informative and may become stale. project_status.md is the
 authoritative implementation-status record.

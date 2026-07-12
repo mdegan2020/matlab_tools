@@ -121,6 +121,14 @@ classdef ProjectionCorrectionSet
                         Explanation="PassId differs from the correction parent."); %#ok<AGROW>
                     continue
                 end
+                revision = ProjectionGeometryFingerprint.sourceRevisionStatus( ...
+                    layer.SourceGeometry);
+                if ~revision.Verifiable
+                    mismatches(end + 1) = struct( ...
+                        ViewId=record.ViewId, Code="unverifiableGeometry", ...
+                        Explanation=revision.Explanation); %#ok<AGROW>
+                    continue
+                end
                 current = ProjectionGeometryFingerprint.layer(layer);
                 if current ~= record.ParentGeometryFingerprint
                     mismatches(end + 1) = struct( ...
@@ -148,6 +156,13 @@ classdef ProjectionCorrectionSet
                 error("ProjectionCorrectionSet:" + status.ReasonCode, ...
                     "%s", status.Explanation);
             end
+        end
+
+        function transitioned = withLifecycle(set, lifecycle)
+            %withLifecycle Return a new immutable lifecycle record.
+            data = set.toStruct();
+            data.Lifecycle = lifecycle;
+            transitioned = ProjectionCorrectionSet.create(data);
         end
     end
 
@@ -237,8 +252,9 @@ classdef ProjectionCorrectionSet
                 error("ProjectionCorrectionSet:invalidData", ...
                     "Correction-set data must be a scalar struct.");
             end
-            data.Format = ProjectionCorrectionSet.FormatName;
-            data.Version = ProjectionCorrectionSet.SchemaVersion;
+            ProjectionCorrectionSet.validateTopLevelSchema(data);
+            data.Format = ProjectionCorrectionSet.validateFormat(data.Format);
+            data.Version = ProjectionCorrectionSet.validateVersion(data.Version);
             data.GenerationId = ProjectionCorrectionSet.nonemptyString( ...
                 ProjectionCorrectionSet.value(data, "GenerationId", ...
                 ProjectionCorrectionSet.newGenerationId()), "GenerationId");
@@ -249,7 +265,7 @@ classdef ProjectionCorrectionSet
                 ProjectionCorrectionSet.value(data, "Lifecycle", "proposed"), ...
                 "Lifecycle"));
             if ~any(lifecycle == ["proposed" "accepted" "applied" ...
-                    "rejected" "superseded" "historical"])
+                    "reverted" "rejected" "superseded" "historical"])
                 error("ProjectionCorrectionSet:invalidLifecycle", ...
                     "Unsupported correction lifecycle %s.", lifecycle);
             end
@@ -282,6 +298,52 @@ classdef ProjectionCorrectionSet
                 "Diagnostics");
             data.Failure = ProjectionCorrectionSet.validateFailure( ...
                 ProjectionCorrectionSet.value(data, "Failure", struct()));
+        end
+
+        function validateTopLevelSchema(data)
+            required = ["Format" "Version"];
+            for name = required
+                if ~isfield(data, name)
+                    error("ProjectionCorrectionSet:missingSchemaField", ...
+                        "Correction-set data requires %s.", name);
+                end
+            end
+            allowed = [required "GenerationId" "ParentGenerationId" ...
+                "Lifecycle" "CreatedAt" "Convention" "Views" "Passes" ...
+                "Blocks" "Geometry" "Covariance" "Provenance" ...
+                "Diagnostics" "Failure"];
+            names = string(fieldnames(data));
+            unknown = names(~ismember(names, allowed));
+            if ~isempty(unknown)
+                error("ProjectionCorrectionSet:unknownField", ...
+                    "Unknown correction-set field %s.", unknown(1));
+            end
+        end
+
+        function format = validateFormat(format)
+            format = string(format);
+            if ~isscalar(format) || ismissing(format) || ...
+                    strlength(strip(format)) == 0 || format ~= strip(format)
+                error("ProjectionCorrectionSet:invalidFormat", ...
+                    "Correction-set Format must be a nonempty scalar string.");
+            end
+            if format ~= ProjectionCorrectionSet.FormatName
+                error("ProjectionCorrectionSet:unsupportedFormat", ...
+                    "Unsupported correction-set Format %s.", format);
+            end
+        end
+
+        function version = validateVersion(version)
+            if ~isnumeric(version) || ~isscalar(version) || ...
+                    ~isfinite(version) || fix(version) ~= version
+                error("ProjectionCorrectionSet:invalidVersion", ...
+                    "Correction-set Version must be a finite integer scalar.");
+            end
+            version = double(version);
+            if version ~= ProjectionCorrectionSet.SchemaVersion
+                error("ProjectionCorrectionSet:unsupportedVersion", ...
+                    "Unsupported correction-set Version %g.", version);
+            end
         end
 
         function convention = validateConvention(convention)

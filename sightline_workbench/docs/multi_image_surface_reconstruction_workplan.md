@@ -3,9 +3,9 @@
 Status: approved consolidated workplan. Backend Performance Packs 0-5, the
 dense-surface synthetic expansion, Multi-Image Foundation MI-0 through MI-3,
 A2 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion
-imagery, A3b measured motion playback, and S1 immutable CorrectionSet are
-complete. The read-only MATLAB SDK audit is also complete. The current
-fresh-class repository suite passes 539/539 tests. This
+imagery, A3b measured motion playback, S1 immutable CorrectionSet, and S2
+correction lifecycle/notification are complete. The read-only MATLAB SDK audit
+is also complete. The current fresh-class repository suite passes 547/547 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -976,7 +976,7 @@ named transition, run on the MATLAB client/UI thread, and cannot roll back a
 successful scientific operation when callback code fails. Expose queryable
 current/history APIs because callbacks are never authoritative storage.
 
-S2 shall harden the S1 value boundary before enabling mutation:
+S2 hardens the S1 value boundary before enabling mutation:
 
 - reject an incoming correction-set `Format` or schema `Version` that is
   missing where required, malformed, or unsupported; never overwrite an
@@ -1008,7 +1008,7 @@ S2 shall harden the S1 value boundary before enabling mutation:
   Their historical automatic-safe-apply behavior may remain for compatibility,
   but it must not become the new SDK lifecycle contract.
 
-S2 focused tests shall cover unsupported schema rejection, explicit geometry
+S2 focused tests cover unsupported schema rejection, explicit geometry
 revision handling for function-backed sources, every valid and invalid
 lifecycle transition, all-scope atomicity, corrected-fingerprint verification,
 exact revert, stale/wrong-parent/reapply protection, history queries, callback
@@ -1422,11 +1422,11 @@ These trees are coordinated but should remain separately reviewable.
    generation values include exact rotation lineage, complete OPK convention
    metadata, geometry fingerprints/stale checks, provenance, covariance status,
    diagnostics, MAT/portable JSON, legacy adapters, and a headless solve API.
-3. **S2 — Correction application and notification.** First enforce strict
-   schema and function-backed-geometry revision checks. Then validate and
-   atomically apply/revert compatible result generations, preserve immutable
-   authoritative history, distinguish proposal/acceptance/application, and add
-   post-transition failure-isolated embedding callbacks/events.
+3. **S2 — Correction application and notification — complete.** Strict schema
+   and function-backed-geometry revision checks precede mutation. Compatible
+   generations apply/revert atomically through immutable authoritative history;
+   proposal/acceptance/application remain distinct and post-transition callbacks
+   are ordered, reentrancy-protected, and failure-isolated.
 4. **S3 — Dense matcher base contract.** Add the request/result types, abstract
    matcher interface, common validation, cancellation, provenance, registry,
    and subclass conformance suite.
@@ -1473,13 +1473,13 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current fresh-class baseline, now 539/539 after S1.
+1. Preserve the current fresh-class baseline, now 547/547 after S2.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
 5. A3b motion playback and performance evidence — complete.
 6. S1 immutable `CorrectionSet`, MAT/JSON, stale protection, OPK adapter — complete.
-7. S2 callbacks and explicit apply/revert/generation lineage — authorized.
+7. S2 callbacks and explicit apply/revert/generation lineage — complete.
 8. A4 multi-view tracks and cycle diagnostics.
 9. A4 explainable pair graph and quality/max/all-pair controls.
 10. A5/A6 global constant-OPK network solve and pass-aware priors.
