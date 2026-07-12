@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 564/564 tests with zero
+- The latest fresh-class repository suite passes 567/567 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -65,6 +65,7 @@ As of July 11, 2026:
 | Multi-Image A4 conflict-safe tracks and path diagnostics | Complete |
 | Multi-Image A4 explainable quality pair graph | Complete |
 | Multi-Image A5 global constant-OPK network solve | Complete |
+| Multi-Image A6 pass-aware priors and reporting | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -175,7 +176,8 @@ pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
 A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5 global constant-OPK network solving is also complete. The next
-ordered work is A6 pass-aware priors/reporting, followed by precision validation,
+ordered work is the multi-image synthetic acceptance matrix, followed by
+precision validation,
 dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow
 in the explicit dependency order recorded there.
 
@@ -208,6 +210,17 @@ image region. Visible-layer workbench solves use this path; selected-pair
 solves preserve the established compatibility path. Network covariance and
 track/gauge provenance flow into the immutable CorrectionSet and existing
 atomic apply/revert lifecycle.
+
+A6 is complete. Balanced network coordinates now contain one explicit common
+OPK vector per pass plus per-image differentials with an algebraically exact,
+prior-precision-weighted zero mean. Single-pass, multiple-pass, and independent
+views/custom-prior configurations share the model and are exposed in the
+workbench. Independent pass commons are connected only by cross-pass evidence.
+Diagnostics retain pass common/differential/effective corrections, prior/data
+objective contribution and prior dominance, residual concentration by pass,
+time interval, region, and position correlation, and leave-one-pair-out
+sensitivity with missing/failed child state. Effective covariance and pass
+decomposition remain authoritative through CorrectionSet serialization.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused

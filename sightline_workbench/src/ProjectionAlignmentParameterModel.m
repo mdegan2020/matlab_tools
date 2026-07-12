@@ -20,6 +20,7 @@ classdef ProjectionAlignmentParameterModel
             model.OpkIndices = reshape(1:(3 * layerCount), 3, []).';
             startOpk = reshape( ...
                 [startCorrections.ViewVectorAngularOffsetsDegrees], 3, []).';
+            model.StartOpkDegrees = startOpk;
             model.PointingSigmaDegrees = ...
                 ProjectionAlignmentParameterModel.pointingSigmas( ...
                 model.LayerIds, options.PointingPriors);
@@ -39,17 +40,32 @@ classdef ProjectionAlignmentParameterModel
                     scene.layers(layerIndices(k)), options.Bounds);
             end
             model.BoundsDegrees(~model.ActiveOpkMask) = 0;
-
-            x0 = startOpk.';
-            x0 = x0(:);
-            bounds = model.BoundsDegrees.';
-            bounds = bounds(:);
-            labels = strings(numel(x0), 1);
-            for k = 1:layerCount
-                for p = 1:3
-                    labels(model.OpkIndices(k, p)) = ...
-                        "layer:" + model.LayerIds(k) + ":" + ...
-                        parameterNames(p);
+            model.PassParameterization = options.Network.Enabled && ...
+                options.Network.GaugePolicy == "balancedPriors";
+            model.AttitudeTransform = eye(3 * layerCount);
+            model.PassIds = ProjectionAlignmentParameterModel.passIds( ...
+                scene, layerIndices, options.Network.Configuration);
+            model.PassModel = struct("PassId", {}, "LayerPositions", {}, ...
+                "CommonParameterIndices", {}, ...
+                "DifferentialParameterIndices", {}, ...
+                "AnchorLayerPosition", {});
+            if model.PassParameterization
+                [model.AttitudeTransform, bounds, labels, model.PassModel] = ...
+                    ProjectionAlignmentParameterModel.passTransform( ...
+                    model, parameterNames);
+                x0 = zeros(3 * layerCount, 1);
+            else
+                x0 = startOpk.';
+                x0 = x0(:);
+                bounds = model.BoundsDegrees.';
+                bounds = bounds(:);
+                labels = strings(numel(x0), 1);
+                for k = 1:layerCount
+                    for p = 1:3
+                        labels(model.OpkIndices(k, p)) = ...
+                            "layer:" + model.LayerIds(k) + ":" + ...
+                            parameterNames(p);
+                    end
                 end
             end
 
@@ -111,7 +127,7 @@ classdef ProjectionAlignmentParameterModel
         end
 
         function [corrections, sharedScale] = corrections(model, x)
-            opk = reshape(x(model.OpkIndices.'), 3, []).';
+            opk = ProjectionAlignmentParameterModel.effectiveOpk(model, x);
             sharedScale = 1;
             if model.SharedScaleIndex > 0
                 sharedScale = x(model.SharedScaleIndex);
@@ -132,19 +148,54 @@ classdef ProjectionAlignmentParameterModel
             end
         end
 
+        function opk = effectiveOpk(model, x)
+            %effectiveOpk Map solver coordinates to per-layer effective OPK.
+            if model.PassParameterization
+                deltaVector = model.AttitudeTransform * ...
+                    x(1:(3 * model.LayerCount));
+                delta = reshape(deltaVector, 3, []).';
+                opk = model.StartOpkDegrees + delta;
+            else
+                opk = reshape(x(model.OpkIndices.'), 3, []).';
+            end
+        end
+
+        function parameters = attitudeParametersForEffective(model, opk)
+            %attitudeParametersForEffective Invert the effective OPK mapping.
+            if model.PassParameterization
+                delta = double(opk) - model.StartOpkDegrees;
+                parameters = model.AttitudeTransform \ reshape(delta.', [], 1);
+            else
+                parameters = reshape(double(opk).', [], 1);
+            end
+        end
+
+        function covariance = effectiveAttitudeCovariance( ...
+                model, parameterCovariance)
+            %effectiveAttitudeCovariance Transform solver covariance to views.
+            attitudeCount = 3 * model.LayerCount;
+            parameterBlock = parameterCovariance( ...
+                1:attitudeCount, 1:attitudeCount);
+            covariance = model.AttitudeTransform * parameterBlock * ...
+                model.AttitudeTransform.';
+            covariance = 0.5 * (covariance + covariance.');
+        end
+
         function residuals = regularizationResiduals(model, x)
             options = model.Options;
             regularization = options.Regularization;
-            startOpk = reshape( ...
-                [model.StartCorrections.ViewVectorAngularOffsetsDegrees], ...
-                3, []).';
-            opk = reshape(x(model.OpkIndices.'), 3, []).';
             parameterWeights = [regularization.OmegaWeight, ...
                 regularization.PhiWeight, regularization.KappaWeight];
-            weights = sqrt(regularization.OverallWeight) .* ...
-                sqrt(parameterWeights) ./ model.PointingSigmaDegrees;
-            residuals = (opk - startOpk) .* weights;
-            residuals = residuals(:);
+            if model.PassParameterization
+                residuals = ProjectionAlignmentParameterModel. ...
+                    passPriorResiduals(model, x, parameterWeights);
+            else
+                opk = ProjectionAlignmentParameterModel.effectiveOpk(model, x);
+                weights = sqrt(regularization.OverallWeight) .* ...
+                    sqrt(parameterWeights) ./ model.PointingSigmaDegrees;
+                residuals = (opk - model.StartOpkDegrees) .* weights;
+                residuals = residuals(:);
+            end
             if any(model.OffsetIndices(:) > 0)
                 startOffsets = reshape( ...
                     [model.StartCorrections.ProjectionOffsetMeters], 2, []).';
@@ -185,10 +236,47 @@ classdef ProjectionAlignmentParameterModel
             diagnostics.LayerDeltaDegrees = delta;
             diagnostics.CommonDeltaDegrees = common;
             diagnostics.DifferentialDeltaDegrees = delta - common;
+            diagnostics.Parameterization = "effectiveLayerOpk";
+            diagnostics.Passes = struct("PassId", {}, ...
+                "LayerIndices", {}, "LayerIds", {}, ...
+                "CommonDeltaDegrees", {}, ...
+                "DifferentialDeltaDegrees", {}, ...
+                "WeightedDifferentialMeanDegrees", {});
+            if model.PassParameterization
+                diagnostics.Parameterization = ...
+                    "passCommonPlusWeightedZeroMeanDifferential";
+            end
+            uniquePassIds = unique(model.PassIds, "stable");
+            for passIndex = 1:numel(uniquePassIds)
+                members = model.PassIds == uniquePassIds(passIndex);
+                passPrecision = precision(members, :);
+                passDelta = delta(members, :);
+                passCommon = sum(passPrecision .* passDelta, 1) ./ ...
+                    sum(passPrecision, 1);
+                passDifferential = passDelta - passCommon;
+                weightedMean = sum(passPrecision .* passDifferential, 1) ./ ...
+                    sum(passPrecision, 1);
+                diagnostics.Passes(passIndex) = struct( ...
+                    PassId=uniquePassIds(passIndex), ...
+                    LayerIndices=model.LayerIndices(members), ...
+                    LayerIds=model.LayerIds(members), ...
+                    CommonDeltaDegrees=passCommon, ...
+                    DifferentialDeltaDegrees=passDifferential, ...
+                    WeightedDifferentialMeanDegrees=weightedMean);
+            end
         end
 
         function [transform, labels, priorSupported, fixed] = ...
                 modeTransform(model)
+            if model.PassParameterization
+                transform = eye(numel(model.X0));
+                labels = reshape(model.ParameterLabels, 1, []);
+                fixed = abs(model.UpperBounds - model.LowerBounds).' <= ...
+                    1e-10;
+                priorSupported = ...
+                    ProjectionAlignmentParameterModel.modalPriorSupport(model);
+                return
+            end
             transform = zeros(numel(model.X0), 0);
             labels = strings(1, 0);
             priorSupported = false(1, 0);
@@ -323,6 +411,143 @@ classdef ProjectionAlignmentParameterModel
     end
 
     methods (Static, Access = private)
+        function passIds = passIds(scene, layerIndices, configuration)
+            switch configuration
+                case "singlePass"
+                    passIds = repmat("single-pass", 1, numel(layerIndices));
+                case "independentViewsCustomPriors"
+                    passIds = strings(1, numel(layerIndices));
+                    for position = 1:numel(layerIndices)
+                        layer = scene.layers(layerIndices(position));
+                        if isfield(layer, "ViewId")
+                            passIds(position) = "view:" + string(layer.ViewId);
+                        else
+                            passIds(position) = "layer:" + ...
+                                string(layerIndices(position));
+                        end
+                    end
+                otherwise
+                    passIds = strings(1, numel(layerIndices));
+                    for position = 1:numel(layerIndices)
+                        layer = scene.layers(layerIndices(position));
+                        if isfield(layer, "PassId") && ...
+                                strlength(string(layer.PassId)) > 0
+                            passIds(position) = string(layer.PassId);
+                        else
+                            passIds(position) = "default-pass";
+                        end
+                    end
+            end
+        end
+
+        function [transform, bounds, labels, passModel] = ...
+                passTransform(model, parameterNames)
+            attitudeCount = 3 * model.LayerCount;
+            transform = zeros(attitudeCount);
+            bounds = zeros(attitudeCount, 1);
+            labels = strings(attitudeCount, 1);
+            precision = 1 ./ model.PointingSigmaDegrees.^2;
+            passIds = unique(model.PassIds, "stable");
+            passModel = repmat(struct(PassId="", ...
+                LayerPositions=zeros(1, 0), ...
+                CommonParameterIndices=zeros(1, 3), ...
+                DifferentialParameterIndices=zeros(0, 3), ...
+                AnchorLayerPosition=0), 1, numel(passIds));
+            for passIndex = 1:numel(passIds)
+                members = find(model.PassIds == passIds(passIndex));
+                anchor = members(end);
+                commonIndices = zeros(1, 3);
+                differentialIndices = zeros(max(0, numel(members) - 1), 3);
+                for parameter = 1:3
+                    rows = model.OpkIndices(members, parameter);
+                    commonIndex = rows(1);
+                    commonIndices(parameter) = commonIndex;
+                    transform(rows, commonIndex) = 1;
+                    effectiveBounds = model.BoundsDegrees(members, parameter);
+                    if isscalar(members)
+                        bounds(commonIndex) = effectiveBounds(1);
+                    else
+                        bounds(commonIndex) = min(effectiveBounds) / 2;
+                    end
+                    labels(commonIndex) = "pass:" + passIds(passIndex) + ...
+                        ":common:" + parameterNames(parameter);
+                    for offset = 1:(numel(members) - 1)
+                        member = members(offset);
+                        differentialIndex = rows(offset + 1);
+                        differentialIndices(offset, parameter) = ...
+                            differentialIndex;
+                        ratio = precision(member, parameter) / ...
+                            precision(anchor, parameter);
+                        transform(model.OpkIndices(member, parameter), ...
+                            differentialIndex) = 1;
+                        transform(model.OpkIndices(anchor, parameter), ...
+                            differentialIndex) = -ratio;
+                        freeBound = model.BoundsDegrees(member, parameter) / 2;
+                        anchorBound = model.BoundsDegrees(anchor, parameter) / ...
+                            (2 * max(1, numel(members) - 1) * max(ratio, eps));
+                        bounds(differentialIndex) = ...
+                            min(freeBound, anchorBound);
+                        labels(differentialIndex) = "pass:" + ...
+                            passIds(passIndex) + ":differential:" + ...
+                            model.LayerIds(member) + ":" + ...
+                            parameterNames(parameter);
+                    end
+                end
+                passModel(passIndex) = struct( ...
+                    PassId=passIds(passIndex), LayerPositions=members, ...
+                    CommonParameterIndices=commonIndices, ...
+                    DifferentialParameterIndices=differentialIndices, ...
+                    AnchorLayerPosition=anchor);
+            end
+        end
+
+        function residuals = passPriorResiduals( ...
+                model, x, parameterWeights)
+            overall = sqrt(model.Options.Regularization.OverallWeight);
+            attitudeParameters = x(1:(3 * model.LayerCount));
+            deltaVector = model.AttitudeTransform * attitudeParameters;
+            delta = reshape(deltaVector, 3, []).';
+            residuals = zeros(0, 1);
+            for pass = model.PassModel
+                members = pass.LayerPositions;
+                for parameter = 1:3
+                    weight = overall * sqrt(parameterWeights(parameter));
+                    common = attitudeParameters( ...
+                        pass.CommonParameterIndices(parameter));
+                    commonResidual = weight * common / ...
+                        model.Options.Network.PassCommonSigmaDegrees(parameter);
+                    differential = delta(members, parameter) - common;
+                    differentialResiduals = weight * differential ./ ...
+                        (model.Options.Network. ...
+                        DifferentialSigmaDegrees(parameter) .* ...
+                        model.PointingSigmaDegrees(members, parameter));
+                    residuals = [residuals; commonResidual; ...
+                        differentialResiduals(:)]; %#ok<AGROW>
+                end
+            end
+        end
+
+        function supported = modalPriorSupport(model)
+            supported = false(1, numel(model.X0));
+            regularization = model.Options.Regularization;
+            if regularization.OverallWeight <= 0
+                return
+            end
+            parameterWeights = [regularization.OmegaWeight ...
+                regularization.PhiWeight regularization.KappaWeight];
+            names = ["omega" "phi" "kappa"];
+            for parameter = 1:3
+                mask = endsWith(model.ParameterLabels, ":" + names(parameter));
+                supported(mask) = parameterWeights(parameter) > 0;
+            end
+            offsetMask = contains(model.ParameterLabels, "projectionOffset");
+            supported(offsetMask) = regularization.ProjectionOffsetWeight > 0;
+            if model.SharedScaleIndex > 0
+                supported(model.SharedScaleIndex) = ...
+                    regularization.SharedScaleWeight > 0;
+            end
+        end
+
         function index = referenceLayerIndex( ...
                 scene, matchResult, layerIndices, options)
             if options.Network.Enabled && ...

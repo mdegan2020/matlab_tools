@@ -178,6 +178,7 @@ classdef ProjectionAlignmentNetworkSolver
                 DefaultResidual="epipolarCoplanarity", ...
                 ActiveResidual=result.Residuals.LossMode, ...
                 RayOriginsFixed=true, GaugePolicy=options.Network.GaugePolicy, ...
+                Configuration=options.Network.Configuration, ...
                 Evidence=evidence.Diagnostics, Components=components, ...
                 Gauge=gauge, WeakViews= ...
                 ProjectionAlignmentNetworkSolver.weakViews(scene, result), ...
@@ -189,7 +190,22 @@ classdef ProjectionAlignmentNetworkSolver
                 residualsByPass(scene, result), ...
                 ResidualsByImageRegion=ProjectionAlignmentNetworkSolver. ...
                 residualsByRegion(scene, result), ...
+                ResidualsByTimeInterval=ProjectionAlignmentNetworkSolver. ...
+                residualsByTimeInterval(scene, result), ...
+                PassCorrections=result.Diagnostics.AttitudeModel.Passes, ...
+                PriorContribution=result.Diagnostics.PriorContribution, ...
+                PriorDominanceByPass=ProjectionAlignmentNetworkSolver. ...
+                priorDominanceByPass(result), ...
+                PositionLikeResidual=ProjectionAlignmentNetworkSolver. ...
+                positionLikeResidual(result), ...
                 Robustification=result.Diagnostics.Robustification);
+            diagnostics.ConflictConcentration = ...
+                ProjectionAlignmentNetworkSolver.conflictConcentration( ...
+                diagnostics.ResidualsByPass, ...
+                diagnostics.ResidualsByTimeInterval);
+            diagnostics.LeaveOnePairOut = ...
+                ProjectionAlignmentNetworkSolver.leaveOnePairOut( ...
+                scene, result, evidence, options);
         end
 
         function weak = weakViews(scene, result)
@@ -211,9 +227,72 @@ classdef ProjectionAlignmentNetworkSolver
             end
         end
 
+        function values = priorDominanceByPass(result)
+            passes = result.Diagnostics.AttitudeModel.Passes;
+            modes = result.Diagnostics.Observability.Solution.Modes;
+            names = string({modes.Name});
+            statuses = string({modes.Status});
+            values = repmat(struct(PassId="", ModeCount=0, ...
+                PriorDominatedModeCount=0, DataObservedModeCount=0, ...
+                PriorDominated=false), 1, numel(passes));
+            for index = 1:numel(passes)
+                prefix = "pass:" + passes(index).PassId + ":";
+                mask = startsWith(names, prefix);
+                passStatuses = statuses(mask);
+                values(index) = struct(PassId=passes(index).PassId, ...
+                    ModeCount=nnz(mask), ...
+                    PriorDominatedModeCount= ...
+                    nnz(passStatuses == "priorDominated"), ...
+                    DataObservedModeCount=nnz(passStatuses == "dataObserved"), ...
+                    PriorDominated=~isempty(passStatuses) && ...
+                    all(ismember(passStatuses, ...
+                    ["priorDominated" "fixed"] )));
+            end
+        end
+
+        function value = positionLikeResidual(result)
+            records = result.Diagnostics.MatchRecords;
+            if isempty(records)
+                value = struct(CorrelationByCoordinate=nan(1, 4), ...
+                    MaximumAbsoluteCorrelation=NaN, Detected=false, ...
+                    Threshold=0.5);
+                return
+            end
+            residuals = [records.ResidualAfter].';
+            coordinates = [[records.MovingSourceRow].' ...
+                [records.MovingSourceColumn].' ...
+                [records.ReferenceSourceRow].' ...
+                [records.ReferenceSourceColumn].'];
+            correlations = nan(1, size(coordinates, 2));
+            for index = 1:size(coordinates, 2)
+                correlations(index) = ProjectionAlignmentNetworkSolver. ...
+                    correlation(residuals, coordinates(:, index));
+            end
+            maximum = max(abs(correlations), [], "omitnan");
+            if isempty(maximum)
+                maximum = NaN;
+            end
+            value = struct(CorrelationByCoordinate=correlations, ...
+                MaximumAbsoluteCorrelation=maximum, ...
+                Detected=isfinite(maximum) && maximum >= 0.5, Threshold=0.5);
+        end
+
+        function value = correlation(first, second)
+            first = double(first(:));
+            second = double(second(:));
+            first = first - mean(first);
+            second = second - mean(second);
+            denominator = norm(first) * norm(second);
+            if denominator <= eps
+                value = NaN;
+            else
+                value = dot(first, second) / denominator;
+            end
+        end
+
         function values = viewCovariance(scene, result)
             covariance = result.Diagnostics.Observability.Solution. ...
-                ParameterCovariance;
+                EffectiveAttitudeCovariance;
             values = repmat(struct(ViewId="", LayerId="", ...
                 Unit="degreesSquared", CovarianceDegreesSquared=zeros(3), ...
                 StandardDeviationDegrees=zeros(1, 3), Status="available"), ...
@@ -304,6 +383,176 @@ classdef ProjectionAlignmentNetworkSolver
             end
             summaries = ProjectionAlignmentNetworkSolver.summaries( ...
                 keys, before, after, "ViewRegionId");
+        end
+
+        function summaries = residualsByTimeInterval(scene, result)
+            [intervalIds, ~] = ...
+                ProjectionAlignmentNetworkSolver.timeIntervals(scene);
+            keys = strings(1, 0);
+            before = zeros(1, 0);
+            after = zeros(1, 0);
+            for record = result.MatchLedger
+                if ~record.StageMasks.SolverObservation
+                    continue
+                end
+                layerIndices = ProjectionAlignmentNetworkSolver. ...
+                    recordLayerIndices(scene, record);
+                for layerIndex = layerIndices
+                    keys(end + 1) = intervalIds(layerIndex); %#ok<AGROW>
+                    before(end + 1) = ...
+                        record.Residuals.ActiveResidualBefore; %#ok<AGROW>
+                    after(end + 1) = ...
+                        record.Residuals.ActiveResidualAfter; %#ok<AGROW>
+                end
+            end
+            summaries = ProjectionAlignmentNetworkSolver.summaries( ...
+                keys, before, after, "TimeIntervalId");
+        end
+
+        function [intervalIds, basis] = timeIntervals(scene)
+            intervalIds = strings(1, numel(scene.layers));
+            basis = strings(1, numel(scene.layers));
+            passIds = string({scene.layers.PassId});
+            for passId = unique(passIds, "stable")
+                members = find(passIds == passId);
+                order = members;
+                timingAvailable = false;
+                times = cell(1, numel(members));
+                for offset = 1:numel(members)
+                    layer = scene.layers(members(offset));
+                    if isfield(layer, "AcquisitionStartTime") && ...
+                            ~isempty(layer.AcquisitionStartTime)
+                        times{offset} = layer.AcquisitionStartTime;
+                    end
+                end
+                if all(~cellfun(@isempty, times))
+                    try
+                        [~, localOrder] = sort([times{:}]);
+                        order = members(localOrder);
+                        timingAvailable = true;
+                    catch
+                        % Stable scene order remains the explicit fallback.
+                    end
+                end
+                for rank = 1:numel(order)
+                    fraction = (rank - 0.5) / numel(order);
+                    interval = "middle";
+                    if fraction <= 1 / 3
+                        interval = "early";
+                    elseif fraction > 2 / 3
+                        interval = "late";
+                    end
+                    intervalIds(order(rank)) = passId + ":" + interval;
+                    basis(order(rank)) = "layerOrderFallback";
+                    if timingAvailable
+                        basis(order(rank)) = "acquisitionTime";
+                    end
+                end
+            end
+        end
+
+        function value = conflictConcentration(passSummaries, timeSummaries)
+            passConflict = ProjectionAlignmentNetworkSolver. ...
+                concentration(passSummaries, "PassId");
+            timeConflict = ProjectionAlignmentNetworkSolver. ...
+                concentration(timeSummaries, "TimeIntervalId");
+            value = struct(Pass=passConflict, TimeInterval=timeConflict, ...
+                Concentrated=passConflict.Concentrated || ...
+                timeConflict.Concentrated);
+        end
+
+        function value = concentration(summaries, keyName)
+            value = struct(GroupId="", RatioToMedian=NaN, ...
+                Concentrated=false);
+            if isempty(summaries)
+                return
+            end
+            rmsValues = [summaries.RmsAfter];
+            [worst, index] = max(rmsValues);
+            baseline = median(rmsValues(isfinite(rmsValues)));
+            ratio = worst / max(baseline, eps);
+            value.GroupId = string(summaries(index).(keyName));
+            value.RatioToMedian = ratio;
+            value.Concentrated = numel(summaries) > 1 && ratio >= 2;
+        end
+
+        function diagnostics = leaveOnePairOut( ...
+                scene, baseline, evidence, options)
+            diagnostics = struct("PairId", {}, "Status", {}, ...
+                "MaxAttitudeChangeDegrees", {}, ...
+                "RmsAttitudeChangeDegrees", {}, "MissingViewIds", {}, ...
+                "Explanation", {});
+            if ~options.Network.ComputeLeaveOnePairOut || ...
+                    numel(evidence.MatchResult.Matches) < 2
+                return
+            end
+            childOptions = options;
+            childOptions.Network.ComputeLeaveOnePairOut = false;
+            baselineIds = string({baseline.SolvedCorrections.LayerId});
+            baselineOpk = reshape([baseline.SolvedCorrections. ...
+                ViewVectorAngularOffsetsDegrees], 3, []).';
+            viewIds = ProjectionViewMetadata.ids(scene);
+            for pairIndex = 1:numel(evidence.MatchResult.Matches)
+                iterationOptions = childOptions;
+                omitted = evidence.MatchResult.Matches(pairIndex);
+                pairViewIds = viewIds(omitted.Pair);
+                identity = ProjectionViewMetadata.pairIdentity( ...
+                    pairViewIds(1), pairViewIds(2));
+                reduced = evidence.MatchResult;
+                reduced.Matches(pairIndex) = [];
+                retainedLayers = unique(reshape( ...
+                    [reduced.Matches.Pair], 1, []));
+                retainedLayerIds = string( ...
+                    {scene.layers(retainedLayers).LayerId});
+                priorMask = ismember( ...
+                    iterationOptions.PointingPriors.LayerIds, retainedLayerIds);
+                iterationOptions.PointingPriors.LayerIds = ...
+                    iterationOptions.PointingPriors.LayerIds(priorMask);
+                iterationOptions.PointingPriors.SigmaDegrees = ...
+                    iterationOptions.PointingPriors.SigmaDegrees(priorMask, :);
+                diagnostic = struct(PairId=identity.PairId, Status="failed", ...
+                    MaxAttitudeChangeDegrees=NaN, ...
+                    RmsAttitudeChangeDegrees=NaN, ...
+                    MissingViewIds=strings(1, 0), Explanation="");
+                try
+                    child = ProjectionAlignmentNetworkSolver.solve( ...
+                        scene, reduced, iterationOptions);
+                    if child.Status ~= "solved" || ...
+                            ~child.Convergence.Success
+                        error("ProjectionAlignmentNetworkSolver:looSolveFailed", ...
+                            "Leave-one-pair-out child solve did not converge.");
+                    end
+                    childIds = string({child.SolvedCorrections.LayerId});
+                    commonIds = intersect(baselineIds, childIds, "stable");
+                    changes = zeros(numel(commonIds), 1);
+                    for idIndex = 1:numel(commonIds)
+                        baselineIndex = find( ...
+                            baselineIds == commonIds(idIndex), 1, "first");
+                        childIndex = find( ...
+                            childIds == commonIds(idIndex), 1, "first");
+                        childOpk = child.SolvedCorrections(childIndex). ...
+                            ViewVectorAngularOffsetsDegrees;
+                        changes(idIndex) = norm( ...
+                            childOpk - baselineOpk(baselineIndex, :));
+                    end
+                    missingLayerIds = setdiff(baselineIds, childIds, "stable");
+                    missingViewIds = strings(1, numel(missingLayerIds));
+                    for missingIndex = 1:numel(missingLayerIds)
+                        layerIndex = find(string({scene.layers.LayerId}) == ...
+                            missingLayerIds(missingIndex), 1, "first");
+                        missingViewIds(missingIndex) = ...
+                            string(scene.layers(layerIndex).ViewId);
+                    end
+                    diagnostic.Status = "solved";
+                    diagnostic.MaxAttitudeChangeDegrees = max(changes);
+                    diagnostic.RmsAttitudeChangeDegrees = rms(changes);
+                    diagnostic.MissingViewIds = missingViewIds;
+                    diagnostic.Explanation = "none";
+                catch ME
+                    diagnostic.Explanation = string(ME.message);
+                end
+                diagnostics(end + 1) = diagnostic; %#ok<AGROW>
+            end
         end
 
         function indices = recordLayerIndices(scene, record)

@@ -148,6 +148,97 @@ classdef ProjectionAlignmentNetworkSolverTest < matlab.unittest.TestCase
             testCase.verifyNumElements( ...
                 robust.RejectionReasons, numel(result.Residuals.After));
         end
+
+        function testMultiplePassParameterizationHasExactWeightedZeroMean( ...
+                testCase)
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+            [scene, filtered] = ...
+                ProjectionAlignmentNetworkSolverTest.multiPassInputs();
+            options = ProjectionAlignmentNetworkSolverTest.options();
+            layerIds = string({scene.layers.LayerId});
+            options.PointingPriors = struct(LayerIds=layerIds, ...
+                SigmaDegrees=[10 1 1; 1 1 1; 2 1 1]);
+
+            result = ProjectionAlignmentNetworkSolver.solve( ...
+                scene, filtered, options);
+            model = result.Diagnostics.AttitudeModel;
+            network = result.Diagnostics.Network;
+
+            testCase.verifyEqual(model.Parameterization, ...
+                "passCommonPlusWeightedZeroMeanDifferential");
+            testCase.verifyNumElements(model.Passes, 2);
+            testCase.verifyEqual(string({model.Passes.PassId}), ...
+                ["pass-a" "pass-b"]);
+            for pass = model.Passes
+                testCase.verifyEqual( ...
+                    pass.WeightedDifferentialMeanDegrees, zeros(1, 3), ...
+                    AbsTol=1e-12);
+            end
+            testCase.verifyEqual(network.Configuration, "multiplePasses");
+            testCase.verifyNumElements(network.PassCorrections, 2);
+            testCase.verifyNumElements(network.PriorDominanceByPass, 2);
+            testCase.verifyNumElements(network.LeaveOnePairOut, 2);
+            testCase.verifyTrue(all(isfinite( ...
+                [network.LeaveOnePairOut.MaxAttitudeChangeDegrees])));
+            testCase.verifyNotEmpty(network.ResidualsByTimeInterval);
+            testCase.verifyTrue(isfinite(network.PriorContribution.Fraction));
+            testCase.verifyEqual(network.Components.PassIds, ...
+                ["pass-a" "pass-b"]);
+        end
+
+        function testSinglePassAndIndependentViewConfigurationsShareModel( ...
+                testCase)
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+            [scene, filtered] = ...
+                ProjectionAlignmentNetworkSolverTest.multiPassInputs();
+            singleOptions = ProjectionAlignmentNetworkSolverTest.options();
+            singleOptions.Network = struct(Configuration="singlePass", ...
+                ComputeLeaveOnePairOut=false);
+            independentOptions = ProjectionAlignmentNetworkSolverTest.options();
+            independentOptions.Network = struct( ...
+                Configuration="independentViewsCustomPriors", ...
+                ComputeLeaveOnePairOut=false);
+
+            single = ProjectionAlignmentNetworkSolver.solve( ...
+                scene, filtered, singleOptions);
+            independent = ProjectionAlignmentNetworkSolver.solve( ...
+                scene, filtered, independentOptions);
+
+            testCase.verifyNumElements( ...
+                single.Diagnostics.Network.PassCorrections, 1);
+            testCase.verifyNumElements( ...
+                independent.Diagnostics.Network.PassCorrections, 3);
+            testCase.verifyEqual( ...
+                independent.Diagnostics.Network.Configuration, ...
+                "independentViewsCustomPriors");
+            testCase.verifyTrue(all(arrayfun(@(pass) ...
+                size(pass.DifferentialDeltaDegrees, 1) == 1, ...
+                independent.Diagnostics.Network.PassCorrections)));
+        end
+
+        function testCorrectionSetReportsIndependentPassCommonValues(testCase)
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+            [scene, filtered] = ...
+                ProjectionAlignmentNetworkSolverTest.multiPassInputs();
+            options = ProjectionAlignmentNetworkSolverTest.options();
+            options.Network = struct(ComputeLeaveOnePairOut=false);
+
+            correctionSet = ProjectionAlignmentNetworkSolver.solveCorrectionSet( ...
+                scene, filtered, options, ...
+                struct(GenerationId="multipass-generation", ...
+                CreatedAt="2026-07-12T01:00:00.000Z"));
+
+            testCase.verifyNumElements(correctionSet.Passes, 2);
+            testCase.verifyEqual(string({correctionSet.Passes.PassId}), ...
+                ["pass-a" "pass-b"]);
+            for pass = correctionSet.Passes
+                passViews = correctionSet.Views( ...
+                    string({correctionSet.Views.PassId}) == pass.PassId);
+                common = reshape([passViews.CommonAttitudeRadians], 3, []);
+                testCase.verifyEqual(pass.CommonAttitudeRadians, ...
+                    mean(common, 2).', AbsTol=1e-12);
+            end
+        end
     end
 
     methods (Static, Access = private)
@@ -170,6 +261,15 @@ classdef ProjectionAlignmentNetworkSolverTest < matlab.unittest.TestCase
             filtered = ProjectionAlignmentMatchFilter.filter( ...
                 struct(Matches=matches, Diagnostics=struct()), ...
                 struct(FilterPipeline=struct(Stages="overlapMask")));
+        end
+
+        function [scene, filtered] = multiPassInputs()
+            [scene, filtered] = ...
+                ProjectionAlignmentNetworkSolverTest.triangleInputs();
+            scene.layers(1).PassId = "pass-a";
+            scene.layers(2).PassId = "pass-a";
+            scene.layers(3).PassId = "pass-b";
+            scene = ProjectionViewMetadata.ensureScene(scene);
         end
 
         function scene = makeScene(layerCount)

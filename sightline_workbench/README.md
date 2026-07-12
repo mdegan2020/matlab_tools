@@ -82,7 +82,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest fresh-class repository validation passes all 564 tests;
+- the latest fresh-class repository validation passes all 567 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -205,7 +205,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 564 passing tests with no failures or incomplete tests.
+baseline is 567 passing tests with no failures or incomplete tests.
 
 ## Correction-Result SDK
 
@@ -364,6 +364,27 @@ never silently fixed. Disconnected components without a fixed or prior gauge
 are rejected before optimization. The Alignment Workbench uses this path for
 visible-layer quality-graph solves and retains the legacy solver for a selected
 two-image pair.
+
+Balanced network solves use an explicit pass model rather than a reporting-only
+decomposition. Each pass has one common OPK vector and per-view differentials;
+one dependent differential is eliminated algebraically so the
+pointing-prior-precision-weighted differential mean is exactly zero. The same
+solver supports:
+
+- `singlePass` for one shared collection component;
+- `multiplePasses` for independent pass commons connected by cross-pass
+  observations; and
+- `independentViewsCustomPriors` for one common block per view with caller
+  priors.
+
+`Network.PassCommonSigmaDegrees` and
+`Network.DifferentialSigmaDegrees` control the two prior levels.
+`ComputeLeaveOnePairOut` retains pair-removal sensitivity by default. Network
+diagnostics also report common/differential/effective corrections by pass,
+prior-vs-data objective contribution and prior-dominated modes, residual
+concentration by pass and time interval, position-like residual correlation,
+and missing views or failed child solves. The workbench exposes the three
+network configurations in its Setup panel.
 The OPK adapter retains solver/match/gauge/precision/configuration provenance,
 bounds, conditioning, priors, observability, failure reasons, typed future
 blocks, and an explicit unavailable-covariance reason when the legacy solver
