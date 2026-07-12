@@ -32,6 +32,9 @@ classdef ProjectionAlignmentOpkSolver
             lowerBounds = parameterModel.LowerBounds;
             upperBounds = parameterModel.UpperBounds;
             commonPlane = scene.layers(layerIndices(1)).CurrentProjectionPlane;
+            options = ProjectionAlignmentOpkSolver.resolveRobustScale( ...
+                options, x0, scene, matchResult, parameterModel, commonPlane);
+            parameterModel.Options = options;
             residualFcn = @(x) ProjectionAlignmentOpkSolver.residualVector( ...
                 x, scene, matchResult, parameterModel, commonPlane, options);
             beforeResiduals = ProjectionAlignmentOpkSolver.dataResiduals( ...
@@ -524,7 +527,36 @@ classdef ProjectionAlignmentOpkSolver
                     sqrt(2 * scale * absResiduals(large) - scale^2);
             elseif regularization.RobustLoss == "bisquare"
                 residuals(large) = sign(residuals(large)) * scale;
+            elseif regularization.RobustLoss == "cauchy"
+                residuals = sign(residuals) .* scale .* ...
+                    sqrt(log1p((residuals ./ scale).^2));
             end
+        end
+
+        function options = resolveRobustScale(options, x0, scene, ...
+                matchResult, parameterModel, commonPlane)
+            if ~options.Network.Enabled || ...
+                    options.Network.RobustScaleMode ~= "auto" || ...
+                    options.Regularization.RobustLoss == "none"
+                return
+            end
+            raw = ProjectionAlignmentOpkSolver.dataResiduals( ...
+                x0, scene, matchResult, parameterModel, commonPlane, options);
+            raw = raw(isfinite(raw));
+            bounds = options.Network.RobustScaleBounds;
+            scale = bounds(1);
+            if ~isempty(raw)
+                center = median(raw);
+                estimate = 1.4826 * median(abs(raw - center));
+                if estimate <= eps
+                    estimate = median(abs(raw));
+                end
+                if isfinite(estimate) && estimate > 0
+                    scale = estimate;
+                end
+            end
+            options.Regularization.RobustScale = ...
+                min(bounds(2), max(bounds(1), scale));
         end
 
         function result = resultStruct(matchResult, parameterModel, xSolved, ...
@@ -589,6 +621,9 @@ classdef ProjectionAlignmentOpkSolver
                 ProjectionAlignmentParameterModel.decomposition( ...
                 parameterModel, xSolved);
             result.Diagnostics.Observability = observabilityDiagnostics;
+            result.Diagnostics.Robustification = ...
+                ProjectionAlignmentOpkSolver.robustificationDiagnostics( ...
+                afterResiduals, options);
             result.Diagnostics.RmsBefore = rms(result.Residuals.Before);
             result.Diagnostics.RmsAfter = rms(result.Residuals.After);
             result.Diagnostics.MaxResidualBefore = ...
@@ -612,6 +647,27 @@ classdef ProjectionAlignmentOpkSolver
                 result.Convergence.Message = result.Convergence.Message + ...
                     " One or more requested modes are unobservable and have no prior support.";
             end
+        end
+
+        function diagnostics = robustificationDiagnostics(residuals, options)
+            robust = ProjectionAlignmentOpkSolver.robustResiduals( ...
+                residuals, options.Regularization);
+            weights = ones(size(residuals));
+            nonzero = abs(residuals) > eps;
+            weights(nonzero) = (robust(nonzero) ./ residuals(nonzero)).^2;
+            reasons = strings(size(residuals));
+            downweighted = weights < 1 - 1e-12;
+            reasons(downweighted) = "robustDownweighted";
+            scaleMode = "fixed";
+            if options.Network.Enabled
+                scaleMode = options.Network.RobustScaleMode;
+            end
+            diagnostics = struct(Loss=options.Regularization.RobustLoss, ...
+                Scale=options.Regularization.RobustScale, ...
+                ScaleMode=scaleMode, ...
+                ScaleBounds=options.Network.RobustScaleBounds, ...
+                Weights=weights, DownweightedMask=downweighted, ...
+                RejectionReasons=reasons);
         end
 
         function diagnostics = residualDiagnostics(matchResult, perPairResiduals)
@@ -1077,6 +1133,24 @@ classdef ProjectionAlignmentOpkSolver
                     minus, options.Regularization);
                 jacobian(:, k) = (plus(:) - minus(:)) / (2 * steps(k));
             end
+            priorBase = ...
+                ProjectionAlignmentParameterModel.regularizationResiduals( ...
+                parameterModel, x);
+            priorJacobian = zeros(numel(priorBase), numel(x));
+            for k = 1:numel(x)
+                xPlus = x;
+                xMinus = x;
+                xPlus(k) = xPlus(k) + steps(k);
+                xMinus(k) = xMinus(k) - steps(k);
+                priorPlus = ...
+                    ProjectionAlignmentParameterModel.regularizationResiduals( ...
+                    parameterModel, xPlus);
+                priorMinus = ...
+                    ProjectionAlignmentParameterModel.regularizationResiduals( ...
+                    parameterModel, xMinus);
+                priorJacobian(:, k) = ...
+                    (priorPlus(:) - priorMinus(:)) / (2 * steps(k));
+            end
             modeJacobian = jacobian * transform;
             [~, singularMatrix, rightVectors] = svd(modeJacobian);
             singularValues = diag(singularMatrix).';
@@ -1133,12 +1207,21 @@ classdef ProjectionAlignmentOpkSolver
                 conditionNumber = Inf;
             end
             statuses = string({modes.Status});
+            normalMatrix = jacobian.' * jacobian + ...
+                priorJacobian.' * priorJacobian;
+            parameterCovariance = pinv(normalMatrix);
+            parameterCovariance = ...
+                0.5 * (parameterCovariance + parameterCovariance.');
             diagnostics = struct(JacobianSize=size(modeJacobian), ...
                 SingularValues=singularValues, Rank=rankValue, ...
                 RankTolerance=tolerance, ConditionNumber=conditionNumber, ...
                 Modes=modes, WeakModes=labels(~ismember(statuses, ...
                 ["dataObserved", "fixed"])), ...
-                HasUnsupportedUnobservableMode=any(statuses == "unobservable"));
+                HasUnsupportedUnobservableMode=any(statuses == "unobservable"), ...
+                CovarianceMethod="weightedNormalMatrixPseudoinverse", ...
+                ParameterCovariance=parameterCovariance, ...
+                ParameterStandardDeviation=sqrt(max(0, ...
+                diag(parameterCovariance))).');
         end
 
         function steps = observabilitySteps(parameterModel)

@@ -198,6 +198,8 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual( ...
                 diagnostics.Request.SchedulingStrategy, "qualityGraph");
             testCase.verifyEqual( ...
+                diagnostics.Request.LossMode, "epipolarCoplanarity");
+            testCase.verifyEqual( ...
                 diagnostics.Request.PairGraphQualitySpeed, "quality");
             testCase.verifyEqual(diagnostics.Request.PairGraphMaxPairs, 3);
             testCase.verifyTrue( ...
@@ -269,6 +271,47 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(pairTable.Parent.Parent, pairPanel);
             testCase.verifyEqual(matchTable.Parent.Parent, matchPanel);
             testCase.verifyEqual(diagnostics.Parent.Parent, diagnosticsPanel);
+        end
+
+        function testVisibleLayerSolveUsesGlobalNetworkEntryPoint(testCase)
+            capabilities = ProjectionAlignmentFeatureMatcher.capabilities();
+            testCase.assumeTrue(ismember("sift", capabilities.AvailableDetectors));
+            testCase.assumeTrue(exist("lsqnonlin", "file") == 2);
+            scene = ProjectionViewerAlignmentWorkflowTest.makeTexturedScene( ...
+                true, 3);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = ProjectionViewerAlignmentWorkflowTest.findViewerFigure();
+            scopeDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentScopeDropDown");
+            detectorDropDown = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentDetectorDropDown");
+            matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentMatchButton");
+            solveButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentSolveButton");
+
+            detectorDropDown.Value = "sift";
+            scopeDropDown.Value = "visibleLayers";
+            scopeDropDown.ValueChangedFcn(scopeDropDown, struct());
+            matchButton.ButtonPushedFcn(matchButton, struct());
+            drawnow
+            ProjectionViewerAlignmentWorkflowTest.filterMatches();
+            solveButton.ButtonPushedFcn(solveButton, struct());
+            drawnow
+            diagnostics = app.alignmentDiagnostics();
+
+            testCase.verifyEqual( ...
+                diagnostics.LastSolve.RequestSummary.SolverMode, ...
+                "globalConstantOpkNetwork");
+            testCase.verifyEqual(diagnostics.LastSolve.LossMode, ...
+                "epipolarCoplanarity");
+            testCase.verifyEqual(diagnostics.LastSolve.Network.Model, ...
+                "globalConstantOpk");
+            testCase.verifyTrue( ...
+                diagnostics.LastSolve.Network.RayOriginsFixed);
         end
 
         function testPairTableCanDisableAlignmentPairs(testCase)

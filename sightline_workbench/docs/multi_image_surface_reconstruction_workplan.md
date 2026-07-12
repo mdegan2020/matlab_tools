@@ -6,8 +6,8 @@ A2 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion
 imagery, A3b measured motion playback, S1 immutable CorrectionSet, and S2
 correction lifecycle/notification are complete. The read-only MATLAB SDK audit
 is also complete. Both A4 track/path-consistency and explainable quality
-pair-graph packs are complete, and the current fresh-class repository suite
-passes 557/557 tests. This
+pair-graph packs and A5 global constant-OPK network solve are complete, and the
+current fresh-class repository suite passes 564/564 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1377,8 +1377,11 @@ These trees are coordinated but should remain separately reviewable.
    spanning forest plus complementary loop chords, with forced overrides,
    quality/speed, hard maximum, all-plausible, predicted-cost, component,
    degree, cycle-basis, rejection, and connectivity diagnostics.
-7. **A5 — Global constant-OPK solve.** Make robust epipolar network adjustment
-   the primary solve when ray geometry is available.
+7. **A5 — Global constant-OPK solve — complete.** Robust epipolar network
+   adjustment is the primary visible-layer solve when ray geometry is
+   available. Unique track evidence, fixed ray origins, explicit gauge
+   preflight, bounded robustification, covariance, component/weak-view, and
+   track/pass/region residual diagnostics are retained.
 8. **A6 — Same-pass/multi-pass priors.** Add pass-common/differential reporting,
    independent pass components, and conflict diagnostics.
 9. **A7 — Time-varying correction research.** Add tangent-space spline OPK
@@ -1478,7 +1481,7 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current fresh-class baseline, now 557/557 after A4.
+1. Preserve the current fresh-class baseline, now 564/564 after A5.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
@@ -1487,7 +1490,7 @@ complete. The ordered implementation queue is:
 7. S2 callbacks and explicit apply/revert/generation lineage — complete.
 8. A4 multi-view tracks and cycle diagnostics — complete.
 9. A4 explainable pair graph and quality/max/all-pair controls — complete.
-10. A5/A6 global constant-OPK network solve and pass-aware priors.
+10. A5 global constant-OPK network solve — complete; A6 pass-aware priors next.
 11. Multi-image synthetic acceptance matrix.
 12. P0/P1 precision inventory and required/stretch range validation.
 13. S3 dense-matcher base and current SGM adapter.

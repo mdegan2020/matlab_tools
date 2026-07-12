@@ -908,15 +908,16 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 557 of 557 fresh-class tests
+At the date of this draft, the repository reports 564 of 564 fresh-class tests
 passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
 cross-system pass, dense-surface synthetic milestones, and multi-image
 foundation MI-0 through MI-3, pair viewpoint, focus-aware keyboard controls,
 manual and measured motion imagery, MATLAB SDK S1 and S2, and both A4
-conflict-safe track/path-consistency and explainable quality pair-graph packs
-are complete. The SDK audit is complete.
+conflict-safe track/path-consistency and explainable quality pair-graph packs,
+and A5 global constant-OPK network solving are complete. The SDK audit is
+complete.
 
 This snapshot is informative and may become stale. project_status.md is the
 authoritative implementation-status record.

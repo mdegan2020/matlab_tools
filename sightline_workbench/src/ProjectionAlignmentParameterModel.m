@@ -13,7 +13,7 @@ classdef ProjectionAlignmentParameterModel
             model.LayerCount = layerCount;
             model.ReferenceLayerIndex = ...
                 ProjectionAlignmentParameterModel.referenceLayerIndex( ...
-                matchResult, layerIndices);
+                scene, matchResult, layerIndices, options);
             model.StartCorrections = startCorrections;
             model.Options = options;
 
@@ -323,7 +323,25 @@ classdef ProjectionAlignmentParameterModel
     end
 
     methods (Static, Access = private)
-        function index = referenceLayerIndex(matchResult, layerIndices)
+        function index = referenceLayerIndex( ...
+                scene, matchResult, layerIndices, options)
+            if options.Network.Enabled && ...
+                    options.Network.GaugePolicy == "fixedReference"
+                viewIds = strings(1, numel(scene.layers));
+                for layerIndex = 1:numel(scene.layers)
+                    if isfield(scene.layers(layerIndex), "ViewId")
+                        viewIds(layerIndex) = ...
+                            string(scene.layers(layerIndex).ViewId);
+                    end
+                end
+                index = find(viewIds == ...
+                    options.Network.FixedReferenceViewId, 1, "first");
+                if isempty(index) || ~ismember(index, layerIndices)
+                    error("ProjectionAlignmentParameterModel:unknownFixedReference", ...
+                        "FixedReferenceViewId is not part of the network solve.");
+                end
+                return
+            end
             index = layerIndices(ceil(numel(layerIndices) / 2));
             if isfield(matchResult, "Schedule") && ...
                     isfield(matchResult.Schedule, "ReferenceLayerIndex") && ...

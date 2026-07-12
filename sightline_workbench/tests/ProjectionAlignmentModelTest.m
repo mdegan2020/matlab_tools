@@ -36,6 +36,12 @@ classdef ProjectionAlignmentModelTest < matlab.unittest.TestCase
             testCase.verifyFalse(options.Scheduling.AllPlausiblePairs);
             testCase.verifyEmpty(options.Scheduling.ForcedIncludePairIds);
             testCase.verifyEmpty(options.Scheduling.ForcedExcludePairIds);
+            testCase.verifyFalse(options.Network.Enabled);
+            testCase.verifyEqual(options.Network.GaugePolicy, "balancedPriors");
+            testCase.verifyTrue(options.Network.UseUniqueTrackEvidence);
+            testCase.verifyEqual(options.Network.RobustScaleMode, "auto");
+            testCase.verifyEqual(options.Network.RobustScaleBounds, ...
+                [1e-6 0.05], AbsTol=ProjectionAlignmentModelTest.Tol);
             testCase.verifyEqual(options.MovableParameters.Parameters, ...
                 ["omega", "phi", "kappa"]);
             testCase.verifyTrue(options.MovableParameters.AllowReferenceMotion);

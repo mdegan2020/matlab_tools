@@ -491,6 +491,19 @@ classdef ProjectionViewerApp < handle
                 app.effectiveLayerVisibilityMask();
             diagnostics.StereoEyes = app.activeStereoEyeAssignment();
             diagnostics.PairViewpoint = app.pairViewpointDiagnostics();
+            diagnostics.LastSolve = struct();
+            if app.hasAlignmentResult()
+                lastResult = app.AlignmentResult;
+                networkDiagnostics = struct();
+                if isfield(lastResult.Diagnostics, "Network")
+                    networkDiagnostics = lastResult.Diagnostics.Network;
+                end
+                diagnostics.LastSolve = struct( ...
+                    Status=lastResult.Status, ...
+                    LossMode=lastResult.Residuals.LossMode, ...
+                    RequestSummary=lastResult.RequestSummary, ...
+                    Network=networkDiagnostics);
+            end
 
             try
                 request = app.currentAlignmentRequest();
@@ -1128,7 +1141,7 @@ classdef ProjectionViewerApp < handle
                 Items=cellstr(["Selected pair", "Visible layers"]), ...
                 ItemsData=["selectedPair", "visibleLayers"], ...
                 Value="selectedPair", ...
-                ValueChangedFcn=@(~, ~) app.alignmentSetupChanged(true), ...
+                ValueChangedFcn=@(~, ~) app.alignmentScopeChanged(), ...
                 Tag="ProjectionViewerAlignmentScopeDropDown");
             app.AlignmentScopeDropDown.Layout.Row = 3;
             app.AlignmentScopeDropDown.Layout.Column = 4;
@@ -2301,13 +2314,30 @@ classdef ProjectionViewerApp < handle
                 request = app.AlignmentRequest;
                 request.Options = options;
                 app.AlignmentRequest = request;
-                result = ProjectionAlignmentOpkSolver.solve( ...
-                    app.Scene, solveMatches, options, struct( ...
-                    CancellationFcn=@() ...
-                    app.alignmentCancellationRequested()));
+                runtimeControl = struct(CancellationFcn=@() ...
+                    app.alignmentCancellationRequested());
+                if schedule.Strategy == "qualityGraph"
+                    result = ProjectionAlignmentNetworkSolver.solve( ...
+                        app.Scene, solveMatches, options, runtimeControl);
+                else
+                    result = ProjectionAlignmentOpkSolver.solve( ...
+                        app.Scene, solveMatches, options, runtimeControl);
+                end
+                networkSummary = struct();
+                if isfield(result.Diagnostics, "Network")
+                    networkSummary = struct( ...
+                        SolverMode=result.RequestSummary.SolverMode, ...
+                        GaugePolicy=result.RequestSummary.GaugePolicy);
+                end
                 emptyResult = ProjectionAlignmentResult.empty( ...
                     app.AlignmentRequest);
                 result.RequestSummary = emptyResult.RequestSummary;
+                if ~isempty(fieldnames(networkSummary))
+                    result.RequestSummary.SolverMode = ...
+                        networkSummary.SolverMode;
+                    result.RequestSummary.GaugePolicy = ...
+                        networkSummary.GaugePolicy;
+                end
                 result = ProjectionAlignmentSafeSolvePolicy.apply( ...
                     result, solveMatches, options);
                 app.AlignmentSession.storeSolve(result);
@@ -2695,6 +2725,16 @@ classdef ProjectionViewerApp < handle
             app.setAlignmentActionEnabled(false);
             app.clearAlignmentOverlays();
             app.setAlignmentStatus("Setup changed. Run Match again.");
+        end
+
+        function alignmentScopeChanged(app)
+            if app.alignmentScope() == "visibleLayers"
+                app.AlignmentLossDropDown.Value = "epipolarCoplanarity";
+            elseif string(app.AlignmentLossDropDown.Value) == ...
+                    "epipolarCoplanarity"
+                app.AlignmentLossDropDown.Value = "projectionPlane2D";
+            end
+            app.alignmentSetupChanged(true);
         end
 
         function alignmentFilterSettingChanged(app)

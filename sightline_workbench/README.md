@@ -82,7 +82,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest fresh-class repository validation passes all 557 tests;
+- the latest fresh-class repository validation passes all 564 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -205,7 +205,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current fresh-class
-baseline is 557 passing tests with no failures or incomplete tests.
+baseline is 564 passing tests with no failures or incomplete tests.
 
 ## Correction-Result SDK
 
@@ -329,6 +329,41 @@ availability, budget truncation, and infeasible-connectivity status. The
 Alignment Workbench exposes Fast/Balanced/Quality, hard `Max pairs`, and `All
 plausible` controls. Explicit legacy strategies and the selected-pair
 two-image direction remain supported.
+
+## Global Multi-Image Alignment
+
+`ProjectionAlignmentNetworkSolver` is the constant-OPK multi-image entry point.
+It rebuilds track identity from the current edited evidence, retains one
+spanning-tree edge per track so cycle closures are not counted as duplicate
+physical residuals, and optimizes every retained view simultaneously. When the
+caller does not explicitly choose a loss, normalized epipolar coplanarity is
+used; source-ray origins remain fixed.
+
+```matlab
+options = struct(Network=struct( ...
+    GaugePolicy="balancedPriors", ...
+    UseUniqueTrackEvidence=true, ...
+    RobustScaleMode="auto", ...
+    RobustScaleBounds=[1e-6 0.05]), ...
+    Regularization=struct(RobustLoss="huber"));
+
+result = ProjectionAlignmentNetworkSolver.solve( ...
+    scene, filteredMatches, options);
+correctionSet = ProjectionAlignmentNetworkSolver.solveCorrectionSet( ...
+    scene, filteredMatches, options, ...
+    struct(GenerationId="network-adjustment-001"));
+```
+
+The robust scale is estimated from initial physical residuals, clamped to the
+declared bounds, and frozen for the solve; parameter priors stay outside robust
+weighting. Advanced callers may request Cauchy for comparison. Results retain
+component/gauge status, weak views, weighted-normal per-view OPK covariance,
+robust weights/reasons, and before/after summaries by pair, track, pass, and
+image quadrant. A named fixed-reference gauge is explicit; the first view is
+never silently fixed. Disconnected components without a fixed or prior gauge
+are rejected before optimization. The Alignment Workbench uses this path for
+visible-layer quality-graph solves and retains the legacy solver for a selected
+two-image pair.
 The OPK adapter retains solver/match/gauge/precision/configuration provenance,
 bounds, conditioning, priors, observability, failure reasons, typed future
 blocks, and an explicit unavailable-covariance reason when the legacy solver

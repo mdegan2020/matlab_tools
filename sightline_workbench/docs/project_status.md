@@ -21,7 +21,7 @@ As of July 11, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest fresh-class repository suite passes 557/557 tests with zero
+- The latest fresh-class repository suite passes 564/564 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -64,6 +64,7 @@ As of July 11, 2026:
 | MATLAB SDK S2 correction lifecycle and notification | Complete |
 | Multi-Image A4 conflict-safe tracks and path diagnostics | Complete |
 | Multi-Image A4 explainable quality pair graph | Complete |
+| Multi-Image A5 global constant-OPK network solve | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -173,8 +174,8 @@ approved consolidated implementation queue is now
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
 A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
-complete. The next ordered work is A5/A6 global constant-OPK network solving
-with pass-aware priors, followed by precision validation,
+complete. A5 global constant-OPK network solving is also complete. The next
+ordered work is A6 pass-aware priors/reporting, followed by precision validation,
 dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow
 in the explicit dependency order recorded there.
 
@@ -196,6 +197,17 @@ budget, all-plausible, and forced include/exclude controls. Diagnostics expose
 tree/chord roles, components, degrees, cycle basis, rejections, signal
 availability, predicted cost, and infeasible connectivity while preserving
 legacy explicit strategies and two-image role direction.
+
+A5 is complete. `ProjectionAlignmentNetworkSolver` rebuilds current track
+evidence, removes cycle-duplicate residuals, defaults to epipolar coplanarity,
+holds ray origins fixed, and jointly optimizes all retained views. It provides
+bounded frozen robust scale, Huber/Cauchy weighting evidence, balanced-prior or
+named fixed-reference gauge preflight, components and weak views,
+weighted-normal OPK covariance, and residual summaries by track, pass, and
+image region. Visible-layer workbench solves use this path; selected-pair
+solves preserve the established compatibility path. Network covariance and
+track/gauge provenance flow into the immutable CorrectionSet and existing
+atomic apply/revert lifecycle.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused
