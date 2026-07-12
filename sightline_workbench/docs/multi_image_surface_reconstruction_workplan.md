@@ -976,6 +976,45 @@ named transition, run on the MATLAB client/UI thread, and cannot roll back a
 successful scientific operation when callback code fails. Expose queryable
 current/history APIs because callbacks are never authoritative storage.
 
+S2 shall harden the S1 value boundary before enabling mutation:
+
+- reject an incoming correction-set `Format` or schema `Version` that is
+  missing where required, malformed, or unsupported; never overwrite an
+  incompatible portable schema and interpret it as the current version;
+- require every function-backed source geometry to expose a stable
+  serializable geometry revision/fingerprint token, or classify compatibility
+  as unverifiable and reject Apply. Do not serialize function workspaces or
+  private fixture values merely to identify a closure;
+- allow only explicit valid lifecycle transitions. Proposal, acceptance,
+  rejection, application, supersession, and historical/reverted state are
+  immutable records; no transition mutates an earlier result in place;
+- reject failed, rejected, superseded, historical, wrong-parent, stale,
+  identity-mismatched, pass-mismatched, convention-mismatched, or
+  dimension-mismatched results before any scene mutation;
+- validate the complete declared view scope first, apply to a scene copy,
+  recompute and compare every corrected geometry fingerprint, and publish the
+  new scene/current generation only after all checks pass;
+- revert by restoring and verifying the exact parent generation/fingerprints,
+  never by negating a correction. Reapply is idempotent or explicitly
+  rejected and can never double-compose a rotation;
+- keep a graphics-independent authoritative generation store with queries for
+  current proposed/accepted/applied state and named history. GUI state and
+  callbacks are clients, not the history owner;
+- deliver accepted/applied/reverted callbacks only after the corresponding
+  transition commits, on the MATLAB client/UI thread, with deterministic
+  ordering and reentrancy protection. Callback exceptions are reported and
+  retained in diagnostics but never roll back scientific state; and
+- preserve the existing legacy runner/degree APIs through explicit adapters.
+  Their historical automatic-safe-apply behavior may remain for compatibility,
+  but it must not become the new SDK lifecycle contract.
+
+S2 focused tests shall cover unsupported schema rejection, explicit geometry
+revision handling for function-backed sources, every valid and invalid
+lifecycle transition, all-scope atomicity, corrected-fingerprint verification,
+exact revert, stale/wrong-parent/reapply protection, history queries, callback
+ordering/reentrancy/failure isolation, headless use, GUI integration, and
+legacy behavior.
+
 ### 14.2 Dense-correspondence extension API
 
 Provide an abstract MATLAB base class from which
@@ -1383,9 +1422,11 @@ These trees are coordinated but should remain separately reviewable.
    generation values include exact rotation lineage, complete OPK convention
    metadata, geometry fingerprints/stale checks, provenance, covariance status,
    diagnostics, MAT/portable JSON, legacy adapters, and a headless solve API.
-3. **S2 — Correction application and notification.** Validate and explicitly
-   apply compatible result generations; distinguish proposed, accepted, and
-   applied state; add optional embedding callbacks/events.
+3. **S2 — Correction application and notification.** First enforce strict
+   schema and function-backed-geometry revision checks. Then validate and
+   atomically apply/revert compatible result generations, preserve immutable
+   authoritative history, distinguish proposal/acceptance/application, and add
+   post-transition failure-isolated embedding callbacks/events.
 4. **S3 — Dense matcher base contract.** Add the request/result types, abstract
    matcher interface, common validation, cancellation, provenance, registry,
    and subclass conformance suite.
@@ -1432,13 +1473,13 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Review the completed MI-0 through MI-3 baseline and preserve 496/496.
+1. Preserve the current fresh-class baseline, now 539/539 after S1.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
 5. A3b motion playback and performance evidence — complete.
 6. S1 immutable `CorrectionSet`, MAT/JSON, stale protection, OPK adapter — complete.
-7. S2 callbacks and explicit apply/revert/generation lineage.
+7. S2 callbacks and explicit apply/revert/generation lineage — authorized.
 8. A4 multi-view tracks and cycle diagnostics.
 9. A4 explainable pair graph and quality/max/all-pair controls.
 10. A5/A6 global constant-OPK network solve and pass-aware priors.
@@ -1460,6 +1501,32 @@ complete. The ordered implementation queue is:
 Time-varying OPK A7 begins only after constant global alignment and dense
 observation support have measurable evidence. The full C++ dense backend begins
 only after the MATLAB dense/fusion product contract is selected.
+
+### Continuous execution authorization
+
+Beginning with S2, a worker is authorized to continue through this ordered
+queue without requesting permission after each green pack. For every coherent
+pack, it shall inspect current state, implement only the ordered scope, run
+focused tests and checkcode, run the full fresh-class suite through the MATLAB
+MCP server, update directly relevant documentation, commit, push, confirm a
+clean worktree, and proceed to the next item.
+
+Pack completion, a clean validation result, or a choice already resolved by
+this workplan/SRS is not a reason to wait. Stop and request direction only for
+a genuine design ambiguity that would materially change the product, overlapping
+user/concurrent changes that cannot be preserved, a repeated required MATLAB
+MCP failure, a validation failure requiring user judgment, unavailable
+external data/hardware that is essential to the next dependency, invalid
+repository authentication, or another unsafe/irreversible action outside the
+approved scope. Hardware-gated GPU work shall not block independent ordered CPU
+work, but the worker shall not silently skip an unresolved dependency.
+
+MATLAB execution remains MCP-only for unattended work. Never launch MATLAB
+through a shell, request an out-of-sandbox MATLAB process, or use GUI-launch
+workarounds. Git add, commit, and push shall be separate direct noninteractive
+commands with explicit paths/messages; use the already approved narrow
+escalation for parent Git metadata or sandboxed network access rather than
+waiting for the user to run Git.
 
 ## 20. Remaining Evidence, Hardware, And Later-Parameter Gates
 

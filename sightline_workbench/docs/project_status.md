@@ -167,6 +167,23 @@ precision validation,
 dense/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work follow
 in the explicit dependency order recorded there.
 
+S2 is authorized to proceed without another design checkpoint. Its mandatory
+entry hardening is recorded in the consolidated workplan and SRS: portable
+correction sets must reject unsupported formats/versions rather than coerce
+them; function-backed source geometry must supply a stable serializable
+revision/fingerprint token or fail compatibility; Apply/Revert must validate
+the complete scope and publish atomically after corrected/parent fingerprint
+verification; lifecycle/history records remain immutable and graphics
+independent; and post-transition callbacks are ordered, reentrancy-protected,
+failure-isolated, and never authoritative storage.
+
+The worker is also authorized to continue through subsequent ordered green
+packs without waiting after each commit. Each pack still requires focused
+validation, checkcode, a full fresh-class MATLAB-MCP suite, documentation,
+commit, push, and clean status. The explicit stop conditions and unattended
+MATLAB/Git rules are recorded under `Continuous execution authorization` in
+the consolidated workplan.
+
 The cross-system pass retained CPU viewer/alignment paths, preserved the Pack 2
 prerequisite for backend threading, and added optional capability-checked GPU
 SGM with CPU fallback. See `docs/cross_system_acceleration_report.md`.

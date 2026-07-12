@@ -602,6 +602,16 @@ preview planes, or object ownership.
 | FR-SDK-COR-015 | Callback failure shall be reported but shall not roll back or corrupt a successful scientific transition. | Approved | T |
 | FR-SDK-COR-016 | Callbacks shall be supplementary to queryable correction history and shall not be the authoritative result store. | Approved | T, I |
 | FR-SDK-COR-017 | CorrectionSet shall support MAT persistence and compact JSON metadata or a portable JSON representation according to the selected schema. | Approved | T |
+| FR-SDK-COR-018 | Reading or constructing a portable CorrectionSet shall reject malformed or unsupported Format and Version values and shall never coerce an incompatible schema to the current version. | Approved | T |
+| FR-SDK-COR-019 | Function-backed source geometry shall provide a stable serializable geometry revision or fingerprint token before a portable correction may be applied; an unverifiable closure shall fail compatibility. | Approved | T, I |
+| FR-SDK-COR-020 | Geometry identity shall not serialize function workspaces, runtime closures, or private fixture values in order to establish compatibility. | Approved | T, I |
+| FR-SDK-COR-021 | Proposal, acceptance, rejection, application, supersession, and historical or reverted state shall be represented by immutable lifecycle records; an earlier record shall never be mutated in place. | Approved | T |
+| FR-SDK-COR-022 | A graphics-independent authoritative store shall expose current proposed, accepted, and applied generations and named history without requiring an open GUI. | Approved | T |
+| FR-SDK-COR-023 | Apply shall validate the entire declared view scope before mutation, operate on a scene copy, verify every corrected geometry fingerprint, and publish the new scene and current generation atomically. | Approved | T |
+| FR-SDK-COR-024 | Apply shall reject failed, rejected, superseded, historical, wrong-parent, stale, identity/pass/convention-mismatched, or dimension-incompatible results before any authoritative mutation. | Approved | T |
+| FR-SDK-COR-025 | Revert shall restore and verify the exact parent generation; reapply shall be idempotent or rejected and shall never double-compose a correction. | Approved | T |
+| FR-SDK-COR-026 | Accepted, applied, and reverted callbacks shall execute after transition commit on the MATLAB client/UI thread with deterministic ordering and reentrancy protection. | Approved | T |
+| FR-SDK-COR-027 | Callback exceptions shall be retained in diagnostics without rolling back scientific state, and queryable history shall remain authoritative. | Approved | T |
 
 ### 5.16 Dense-matcher SDK
 
@@ -755,7 +765,7 @@ preview planes, or object ownership.
 | --- | --- | --- | --- |
 | QR-COMP-001 | Existing PlanarProjection and Projection-prefixed behavior shall remain covered by regression tests. | Core | T |
 | QR-COMP-002 | Existing scene, viewer-state, backend-job, and alignment-result schemas shall retain their documented compatibility or fail with a version-specific explanation. | Core | T |
-| QR-COMP-003 | New SDK request/result schemas shall be independently versioned and shall provide round-trip and stale-version tests. | Approved | T |
+| QR-COMP-003 | New SDK request/result schemas shall be independently versioned, shall reject unsupported formats and versions without coercion, and shall provide round-trip, malformed-schema, and stale-version tests. | Approved | T |
 | QR-COMP-004 | Basic headless scientific workflows shall not require desktop UI state. | Core | T |
 | QR-COMP-005 | Optional GPU, file-backed source, plugin, DEM, and timing capabilities shall not make unrelated CPU/in-memory workflows unavailable. | Core | T |
 | QR-COMP-006 | Third-party algorithms shall be replaceable through documented contracts rather than workbench-specific branching. | Approved | T, I |
@@ -898,12 +908,14 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 496 of 496 fresh-class tests
+At the date of this draft, the repository reports 539 of 539 fresh-class tests
 passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
 cross-system pass, dense-surface synthetic milestones, and multi-image
-foundation MI-0 through MI-3 are complete. The SDK audit is complete.
+foundation MI-0 through MI-3, pair viewpoint, focus-aware keyboard controls,
+manual and measured motion imagery, and MATLAB SDK S1 are complete. The SDK
+audit is complete.
 
 This snapshot is informative and may become stale. project_status.md is the
 authoritative implementation-status record.
