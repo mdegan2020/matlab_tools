@@ -9,8 +9,8 @@ is also complete. Both A4 track/path-consistency and explainable quality
 pair-graph packs, A5 global constant-OPK network solve, A6 pass-aware priors,
 the multi-image synthetic acceptance matrix, P0/P1 precision validation, S3
 dense matcher SDK/current-SGM adapter, B0 truth-aware SGM audit, and B1 dense
-pair/search planning are complete. The current grouped fresh-class repository
-suite passes 609/609 tests. This
+pair/search planning and B2 classical template matching are complete. The
+current grouped fresh-class repository suite passes 618/618 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1402,8 +1402,10 @@ These trees are coordinated but should remain separately reviewable.
 2. **B1 — Sparse-seeded pair scheduler — complete.** Independent explainable
    dense pair scheduling and regional seeded/unseeded/no-support search priors
    retain cost, memory, validation-view, uncertainty, and track provenance.
-3. **B2 — Dense template matcher.** Implement multi-scale epipolar/local-strip
-   search with explicit confidence and occlusion.
+3. **B2 — Dense template matcher — complete.** Deterministic multi-scale local
+   strip search provides four classical costs, uniqueness/tie/texture,
+   subpixel, bidirectional consistency, prediction residual, confidence, and
+   explicit state evidence with continuous full-source output.
 4. **B3 — Pairwise point covariance.** Propagate geometry and match uncertainty
    and expose conditioning.
 5. **B4 — Volumetric fusion research spike.** Compare sparse voxel occupancy,
@@ -1491,7 +1493,7 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current grouped fresh-class baseline, now 609/609 after B1.
+1. Preserve the current grouped fresh-class baseline, now 618/618 after B2.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
@@ -1505,8 +1507,8 @@ complete. The ordered implementation queue is:
 12. P0/P1 precision inventory and required/stretch range validation — complete.
 13. S3 dense-matcher base and current SGM adapter — complete.
 14. B0 truth-aware SGM audit — complete.
-15. B1 sparse-seeded dense pair/search planning — complete; B2 classical
-    template matcher remains next.
+15. B1 sparse-seeded dense pair/search planning and B2 classical template
+    matcher — complete.
 16. B3/B5 multi-ray reconstruction and initial uncertainty.
 17. S6/B4 surface-fusion SDK and bounded voxel spike.
 18. B6 Surface Workbench.

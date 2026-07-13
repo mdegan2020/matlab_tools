@@ -1,9 +1,8 @@
 # Dense Matcher MATLAB SDK
 
 Status: S3 complete. The graphics-independent base contract, request/result
-schemas, common lifecycle, explicit registry, conformance fixture, and current
-SGM adapter are implemented. The future classical template matcher remains in
-the ordered B1/B2 work.
+schemas, common lifecycle, explicit registry, conformance fixture, current SGM
+adapter, and B2 classical template matcher are implemented.
 
 ## Core Types
 

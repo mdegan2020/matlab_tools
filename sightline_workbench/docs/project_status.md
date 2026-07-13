@@ -21,7 +21,7 @@ As of July 12, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 609/609 tests with zero
+- The latest grouped fresh-class repository suite passes 618/618 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -73,6 +73,7 @@ As of July 12, 2026:
 | MATLAB SDK S3 dense matcher base/current SGM adapter | Complete |
 | B0 truth-aware SGM audit | Complete |
 | B1 dense pair and sparse-seeded search planning | Complete |
+| B2 classical dense template matcher | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -184,8 +185,8 @@ A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5/A6 global constant-OPK network solving and the multi-image
 synthetic acceptance matrix and P0/P1 precision validation are also complete.
-The next ordered work is B2 classical template matching, followed by
-multi-ray/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work
+The next ordered work is B3/B5 pairwise uncertainty and multi-ray association,
+followed by fusion/DEM SDKs, the mathematical specification, and C++/CUDA work
 in the explicit dependency order recorded there.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
@@ -274,6 +275,13 @@ with operator overrides and held-out validation-view reporting. Sparse accepted
 observations now produce deterministic regional disparity/direction/depth
 search priors with track provenance, uncertainty widening, explicit unseeded or
 no-support states, and no forced surface. See `docs/dense_search_planning.md`.
+
+B2 is complete. `ProjectionDenseTemplateMatcher` adds bounded deterministic
+multi-scale local-strip matching with ZNCC, gradient, census/rank, and
+phase-only costs. It retains uniqueness/ties, texture, subpixel fit,
+forward/backward consistency, prediction residual, uncalibrated confidence,
+explicit states, cancellation, provenance, and continuous full-source
+coordinates. See `docs/dense_template_matcher.md`.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused
