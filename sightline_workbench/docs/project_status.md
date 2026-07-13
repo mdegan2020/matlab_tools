@@ -21,7 +21,7 @@ As of July 12, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 594/594 tests with zero
+- The latest grouped fresh-class repository suite passes 601/601 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -71,6 +71,7 @@ As of July 12, 2026:
 | P0 precision inventory | Complete |
 | P1 viewer long-range precision validation | Complete |
 | MATLAB SDK S3 dense matcher base/current SGM adapter | Complete |
+| B0 truth-aware SGM audit | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -182,8 +183,8 @@ A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5/A6 global constant-OPK network solving and the multi-image
 synthetic acceptance matrix and P0/P1 precision validation are also complete.
-The next ordered work is B0 truth-aware SGM audit, followed by the classical
-template matcher, multi-ray/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work
+The next ordered work is B1/B2 sparse-seeded classical template matching,
+followed by multi-ray/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work
 in the explicit dependency order recorded there.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
@@ -257,6 +258,14 @@ caller-owned explicit registry. The current SGM extractor is available through
 `ProjectionDenseSgmMatcher`, which converts legacy output to full-source
 observations and explicit states without returning a surface as correspondence
 output. See `docs/dense_matcher_sdk.md`.
+
+B0 is complete. An 11-case deterministic held-out matrix now audits the current
+SGM extractor across range/angle, relief/occlusion, radiometry, reported
+navigation/rectification error, texture, disparity, and execution request. It
+records completeness, gross outliers, subpixel disparity and height errors,
+left/right consistency, occlusion behavior, runtime, memory, and GPU fallback.
+The evidence retains SGM for bounded textured well-rectified use but does not
+authorize an automatic `Best` matcher. See `docs/dense_sgm_truth_audit.md`.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused

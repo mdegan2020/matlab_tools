@@ -908,7 +908,7 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 594 of 594 grouped
+At the date of this draft, the repository reports 601 of 601 grouped
 fresh-class tests passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
@@ -917,8 +917,9 @@ foundation MI-0 through MI-3, pair viewpoint, focus-aware keyboard controls,
 manual and measured motion imagery, MATLAB SDK S1 and S2, and both A4
 conflict-safe track/path-consistency and explainable quality pair-graph packs,
 and A5 global constant-OPK network solving, A6 pass-aware priors/reporting, and
-the multi-image synthetic acceptance matrix, P0/P1 precision validation, and S3
-dense matcher SDK/current-SGM adapter are complete. The SDK audit and logical
+the multi-image synthetic acceptance matrix, P0/P1 precision validation, S3
+dense matcher SDK/current-SGM adapter, and B0 truth-aware SGM audit are
+complete. The SDK audit and logical
 test-suite grouping refactor are complete.
 
 This snapshot is informative and may become stale. project_status.md is the
