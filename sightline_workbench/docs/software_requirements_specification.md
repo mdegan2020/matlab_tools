@@ -708,6 +708,13 @@ golden production-parity tests.
 | FR-CPP-013 | Each C++ stage shall pass independent unit tests, adversarial geometry tests, MATLAB parity, determinism checks, memory/error-policy review, and profiling before becoming authoritative. | Gated | T, A, I |
 | FR-CPP-014 | Production NITF output shall remain gated until the scientific pipeline and production data contract are stable. | Gated | I |
 
+Realization note: the platform-independent D0 foundation partially realizes
+FR-CPP-001 through FR-CPP-006 and FR-CPP-013 with a dependency-free C++17 CPU
+reference, stable C ABI, reproducible CMake presets, installable package,
+independent C/C++ tests, a hash-pinned Eigen probe, and a public MATLAB/native
+geometry fixture. macOS evidence is complete. Native Windows/WSL, Ceres,
+MATLAB/MEX, CUDA, and final dependency selections remain gated and unclaimed.
+
 ## 6. Quality requirements
 
 ### 6.1 Correctness and scientific integrity
@@ -918,7 +925,7 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 716 of 716 grouped
+At the date of this draft, the repository reports 719 of 719 grouped
 fresh-class tests passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
@@ -941,7 +948,9 @@ application gate are complete. Production time-varying application remains
 gated on physical local observability and stability. C0-C3 notation,
 code-independent IEEE manuscript/PDF, procedural two-image/anaglyph oracle,
 golden parity, and multi-image/dense appendices are complete. The SDK audit and
-logical test-suite grouping refactor are complete.
+logical test-suite grouping refactor are complete. The portable D0 native
+C++17 CPU/C ABI/CMake foundation and public geometry fixture are complete on
+macOS; Windows/WSL/Ceres/MEX/CUDA evidence remains gated.
 
 This snapshot is informative and may become stale. project_status.md is the
 authoritative implementation-status record.

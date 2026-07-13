@@ -21,7 +21,7 @@ As of July 13, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 716/716 tests with zero
+- The latest grouped fresh-class repository suite passes 719/719 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -85,6 +85,7 @@ As of July 13, 2026:
 | C1 IEEE-style mathematical manuscript and compiled PDF | Complete |
 | C2 procedural two-image/anaglyph oracle and golden parity | Complete |
 | C3 multi-image/dense mathematical appendices | Complete |
+| D0 portable native CPU/C ABI/CMake foundation | Complete on macOS; Windows/WSL/Ceres evidence gated |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -196,11 +197,12 @@ A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5/A6 global constant-OPK network solving and the multi-image
 synthetic acceptance matrix and P0/P1 precision validation are also complete.
-The next ordered work is target-hardware Windows MATLAB-managed GPU validation,
-followed by the D1/P3 CUDA/MEX dense-cost spike and the staged C++ port in the
-explicit dependency order recorded there. C0-C3 are complete. A7 research is
-complete; production time-varying application remains gated on physical local
-observability and stability.
+Target-hardware Windows MATLAB-managed GPU validation and the D1/P3 CUDA/MEX
+dense-cost spike remain external and unclaimed. The independent portable D0
+native foundation is complete on macOS; D2 geometry and two-image procedural
+parity is the next independent CPU stage in the explicit dependency order.
+C0-C3 are complete. A7 research is complete; production time-varying
+application remains gated on physical local observability and stability.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
 immutable history, viewer integration, callback safeguards, and legacy
@@ -383,6 +385,15 @@ identity, and display offsets with production components, bringing the grouped
 baseline to 716/716. See `docs/mathematical_reference/README.md` and
 `output/pdf/sightline_mathematical_specification.pdf`.
 
+The platform-independent D0 foundation adds a C++17 dependency-free CPU
+geometry reference, stable plain-C ABI, warning-as-error CMake presets,
+installable `Sightline::core` package, public MATLAB-generated CSV/JSON golden
+fixture, independent C++ and true-C tests, and an optional hash-pinned Eigen
+5.0.1 probe. Three MATLAB fixture/manifest tests bring the grouped baseline to
+719/719. The macOS base and Eigen presets and an out-of-tree install consumer
+pass; native Windows/WSL, Ceres 2.2, MATLAB/MEX, and CUDA evidence remain
+explicitly unclaimed. See `docs/cpp_backend_d0.md`.
+
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused
 validation, checkcode, every grouped fresh-class MATLAB-MCP suite,
@@ -500,8 +511,9 @@ hardware-gated:
   `PlanarProjection.triangulateRays` APIs; and
 - custom GPU kernels, only if profiling shows a bottleneck not addressed by
   CPU tiling, thread execution, and MATLAB-managed GPU operations; and
-- a production C++ backend and NITF output; current prototyping may keep all
-  inputs/outputs in memory and perform one final TIFF/PNG write.
+- later C++ stages beyond the completed portable D0 foundation and eventual
+  NITF output; current prototyping may keep all inputs/outputs in memory and
+  perform one final TIFF/PNG write.
 
 ## Sources Of Truth
 

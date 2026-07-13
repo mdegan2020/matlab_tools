@@ -1,0 +1,121 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "SIGHTLINE_BUILD_TESTS": "ON",
+        "SIGHTLINE_BUILD_BENCHMARKS": "ON",
+        "SIGHTLINE_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "macos-clang",
+      "displayName": "macOS Apple Clang CPU reference",
+      "inherits": "base",
+      "generator": "Unix Makefiles",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "macos-clang-eigen",
+      "displayName": "macOS Apple Clang with hash-pinned Eigen probe",
+      "inherits": "macos-clang",
+      "cacheVariables": {
+        "SIGHTLINE_ENABLE_EIGEN_PROBE": "ON",
+        "SIGHTLINE_FETCH_EIGEN": "ON"
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "displayName": "Native Windows x64 MSVC CPU reference",
+      "inherits": "base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "wsl-gcc",
+      "displayName": "WSL 2/Linux GCC CPU reference",
+      "inherits": "base",
+      "generator": "Unix Makefiles",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "macos-clang",
+      "configurePreset": "macos-clang"
+    },
+    {
+      "name": "macos-clang-eigen",
+      "configurePreset": "macos-clang-eigen"
+    },
+    {
+      "name": "windows-msvc-release",
+      "configurePreset": "windows-msvc",
+      "configuration": "Release"
+    },
+    {
+      "name": "wsl-gcc",
+      "configurePreset": "wsl-gcc"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "macos-clang",
+      "configurePreset": "macos-clang",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "macos-clang-eigen",
+      "configurePreset": "macos-clang-eigen",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-msvc-release",
+      "configurePreset": "windows-msvc",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "wsl-gcc",
+      "configurePreset": "wsl-gcc",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

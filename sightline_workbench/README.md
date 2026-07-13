@@ -58,7 +58,9 @@ src/ProjectionBackendProcessor.m Backend job invocation facade
 tests/PlanarProjectionTest.m    Class-based unit tests
 tests/ProjectionAlignment*.m    Alignment model, matching, solver, GUI, and backend tests
 tests/ProjectionProceduralAnaglyphTest.m C2 direct/production golden parity
+tests/ProjectionCppGoldenFixtureTest.m D0 MATLAB/native geometry-fixture parity
 proceduralTwoImageAnaglyph.m    Direct two-image/anaglyph translation oracle
+native/                         D0 portable C++17 CPU/C ABI/CMake foundation
 runProjectionViewer.m           Programmatic launcher for real image/geometry data
 runProjectionViewerPrototype.m  Launcher for the local prototype TIFF
 runSyntheticAlignmentPrototype.m Launcher for red/blue synthetic alignment scenes
@@ -79,6 +81,7 @@ docs/test_suite_grouping.md       Logical fresh-class suite groups and MCP polic
 docs/time_varying_opk_research.md A7 model, audit, SDK gate, and decision
 docs/mathematical_reference/    C0/C1/C3 notation, IEEEtran source, and build
 output/pdf/sightline_mathematical_specification.pdf Compiled mathematical specification
+docs/cpp_backend_d0.md          D0 native requirements, dependency, license, and build evidence
 docs/precision_inventory_and_long_range_validation.md P0/P1 precision evidence
 docs/dense_matcher_sdk.md          Dense matcher extension and SGM adapter guide
 docs/dense_sgm_truth_audit.md      B0 held-out SGM evidence and retention decision
@@ -110,7 +113,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 716 tests;
+- the latest grouped fresh-class repository validation passes all 719 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -233,7 +236,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 716 passing tests with no failures or incomplete
+fresh-class baseline is 719 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate

@@ -1,0 +1,6 @@
+case_id,p0_x,p0_y,p0_z,normal_x,normal_y,normal_z,basis_x_x,basis_x_y,basis_x_z,basis_y_x,basis_y_y,basis_y_z,origin_x,origin_y,origin_z,direction_x,direction_y,direction_z,expected_range,expected_world_x,expected_world_y,expected_world_z,expected_plane_x,expected_plane_y,valid,status
+horizontal_normal,0,0,0,0,0,1,1,0,0,0,1,0,1,2,10,0,0,-1,10,1,2,0,1,2,1,ok
+horizontal_oblique,100,-50,3,0,0,1,1,0,0,0,1,0,1,2,11,0.59999999999999998,0,-0.80000000000000004,10,7,2,3,-93,52,1,ok
+large_oblique,1000,-2000,300,0.51961524227066325,-0.69282032302755092,0.5,0.80000000000000004,0.59999999999999998,0,-0.29999999999999999,0.40000000000000002,0.8660254037844386,999.90192378864668,-1996.5358983848623,294.90192378864668,0.51961524227066325,-0.69282032302755092,0.5,5,1002.5,-2000,297.40192378864668,2,-3,1,ok
+parallel,0,0,0,0,0,1,1,0,0,0,1,0,0,0,1,1,0,0,nan,nan,nan,nan,nan,nan,0,parallel
+behind,0,0,0,0,0,1,1,0,0,0,1,0,0,0,-1,0,0,-1,nan,nan,nan,nan,nan,nan,0,behind

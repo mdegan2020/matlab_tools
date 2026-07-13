@@ -1,0 +1,27 @@
+{
+  "format": "SightlineNativeGoldenFixture",
+  "version": 1,
+  "fixture": "geometry_plane_intersections.csv",
+  "source": "scripts/exportCppGeometryGoldenFixture.m",
+  "equation_ids": ["GEO-004", "GEO-005"],
+  "coordinate_contract": {
+    "world_frame": "project-world",
+    "plane_coordinates": "column vector [x,y] in the declared physical-plane basis",
+    "source_ray": "origin + range * direction",
+    "direction_requirement": "unit vector",
+    "ray_domain": "forward-only"
+  },
+  "units": {
+    "world": "meters",
+    "plane": "meters",
+    "range": "meters",
+    "angles": "radians"
+  },
+  "precision": "IEEE-754 binary64",
+  "tolerances": {
+    "absolute": 1e-11,
+    "relative": 1e-12,
+    "parallel_denominator": 1e-12
+  },
+  "invalid_status": ["parallel", "behind"]
+}

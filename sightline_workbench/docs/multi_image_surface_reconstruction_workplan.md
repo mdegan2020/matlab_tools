@@ -14,9 +14,12 @@ covariance, B5 dense multi-view reconstruction, S6/B4 surface fusion, B6
 Surface Workbench, S7/B7 DEM ingestion and registration, and B8 explicit DEM
 position application and the bounded A7 time-varying OPK research pack are
 complete. C0-C3 notation, manuscript, procedural-reference, and appendix work
-is also complete. A7 remains research-only; production application is still gated on
+is also complete. The platform-independent D0 native CPU/C-ABI/CMake foundation
+and public MATLAB/native geometry fixture are complete on macOS; native
+Windows/WSL, Ceres, MATLAB/MEX, and CUDA evidence remain explicitly unclaimed.
+A7 remains research-only; production application is still gated on
 physical local observability and stability. The current grouped fresh-class
-repository suite passes 716/716 tests. This
+repository suite passes 719/719 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1500,8 +1503,12 @@ These trees are coordinated but should remain separately reviewable.
 
 ### Tree D: C++ Production Backend
 
-1. **D0 — Requirements, Eigen/Ceres/BLAS/OpenCV/dependency, licensing,
-   Windows/WSL build, and benchmark study.**
+1. **D0 — portable CPU foundation complete; target-host evidence gated.**
+   Requirements and dependency/license study, CMake presets, stable C ABI,
+   independent C/C++ tests, public MATLAB/native geometry fixtures, install
+   package, and Eigen probe are complete on macOS. Native Windows/WSL builds,
+   the Ceres probe, and final dependency/package-manager selections remain
+   unclaimed pending their required environments.
 2. **D1 — MATLAB-hosted CUDA/MEX kernel spike on the target Windows GPU.**
 3. **D2 — Geometry and two-image procedural parity spike.**
 4. **D3 — Full inverse renderer and prototype TIFF/PNG output.**
@@ -1530,7 +1537,8 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current grouped fresh-class baseline, now 716/716 after C0-C3.
+1. Preserve the current grouped fresh-class baseline, now 719/719 after the D0
+   portable native foundation.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
@@ -1555,16 +1563,21 @@ complete. The ordered implementation queue is:
 21. A7 time-varying OPK research — complete; production application remains
     gated on physical local observability and stability.
 22. C0-C3 manuscript/procedural oracle at stable checkpoints — complete.
-23. Windows MATLAB-managed GPU validation, then D1/P3 CUDA/MEX dense-cost spike.
-24. D0 and staged C++ port after corresponding MATLAB contracts/fixtures freeze.
+23. Windows MATLAB-managed GPU validation, then D1/P3 CUDA/MEX dense-cost spike
+    — external target-hardware gate; unclaimed.
+24. D0 and staged C++ port after corresponding MATLAB contracts/fixtures freeze
+    — platform-independent D0 foundation complete; D2 is the next independent
+    CPU stage.
 
 The bounded A7 research study is complete because constant global alignment and
 dense observation contracts are available. Its synthetic audit is not physical
 observability evidence, so production time-varying application remains gated.
 The C0-C3 reference pack freezes the implementation-independent equations and
-adds a direct, tested two-image translation oracle. The next ordered item is
-the external Windows MATLAB-managed GPU gate, followed by D1/P3 only when the
-required target hardware is available.
+adds a direct, tested two-image translation oracle. The Windows MATLAB-managed
+GPU gate and D1/P3 remain unclaimed until the target hardware is available.
+Because that hardware gate does not block independent ordered CPU work, the D0
+portable foundation was completed on macOS; D2 geometry and two-image
+procedural parity is the next independent stage.
 The full C++ dense backend begins only after the MATLAB dense/fusion product
 contract is selected.
 

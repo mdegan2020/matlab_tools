@@ -22,6 +22,9 @@ artifacts/alignment_feature_repeatability/*
 artifacts/alignment_filter_model_evaluation/*
 artifacts/alignment_reliability_validation/*
 
+# Native C++ build products and fetched dependency probes
+native/out/
+
 # Local development notes
 tracked_issues.md
 Agents.md
