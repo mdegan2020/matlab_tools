@@ -13,9 +13,10 @@ pair/search planning, B2 classical template matching, B3 pairwise point
 covariance, B5 dense multi-view reconstruction, S6/B4 surface fusion, B6
 Surface Workbench, S7/B7 DEM ingestion and registration, and B8 explicit DEM
 position application and the bounded A7 time-varying OPK research pack are
-complete. A7 remains research-only; production application is still gated on
+complete. C0-C3 notation, manuscript, procedural-reference, and appendix work
+is also complete. A7 remains research-only; production application is still gated on
 physical local observability and stability. The current grouped fresh-class
-repository suite passes 708/708 tests. This
+repository suite passes 716/716 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1446,13 +1447,22 @@ These trees are coordinated but should remain separately reviewable.
 
 ### Tree C: Mathematical And Procedural References
 
-1. **C0 — Notation and equation inventory.** Freeze frames, transforms,
-   objectives, and presentation/scientific distinctions.
-2. **C1 — IEEE-style LaTeX manuscript.** Write and compile the code-independent
-   mathematical document.
-3. **C2 — Procedural two-image/anaglyph oracle.** Implement the transparent
-   MATLAB path and golden parity tests.
-4. **C3 — Multi-image/dense appendices.** Extend equations as Trees A/B stabilize.
+1. **C0 — Notation and equation inventory — complete.** Frozen frames,
+   transforms, objectives, degeneracy states, precision boundaries, stable
+   equation identifiers, and presentation/scientific distinctions are recorded
+   in `docs/mathematical_reference/notation_and_equation_inventory.md`.
+2. **C1 — IEEE-style LaTeX manuscript — complete.** The self-contained,
+   code-independent IEEEtran source, bibliography, reproducible build script,
+   and six-page compiled PDF are committed under `docs/mathematical_reference/`
+   and `output/pdf/`.
+3. **C2 — Procedural two-image/anaglyph oracle — complete.** The direct
+   `proceduralTwoImageAnaglyph` path visibly implements double-precision grid,
+   inverse-map, full-source sampling, eye, display-offset, mask, and red/cyan
+   algebra; eight golden tests compare it with production components.
+4. **C3 — Multi-image/dense appendices — complete.** The manuscript appendices
+   cover Jacobians, observability, dense costs, multi-image association,
+   fusion/registration, the procedural companion, and cross-language
+   conformance.
 
 ### Tree S: MATLAB SDK
 
@@ -1520,7 +1530,7 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current grouped fresh-class baseline, now 708/708 after A7.
+1. Preserve the current grouped fresh-class baseline, now 716/716 after C0-C3.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
@@ -1544,13 +1554,17 @@ complete. The ordered implementation queue is:
 20. B8 explicit DEM-derived position-correction application — complete.
 21. A7 time-varying OPK research — complete; production application remains
     gated on physical local observability and stability.
-22. C0-C3 manuscript/procedural oracle at stable checkpoints.
+22. C0-C3 manuscript/procedural oracle at stable checkpoints — complete.
 23. Windows MATLAB-managed GPU validation, then D1/P3 CUDA/MEX dense-cost spike.
 24. D0 and staged C++ port after corresponding MATLAB contracts/fixtures freeze.
 
 The bounded A7 research study is complete because constant global alignment and
 dense observation contracts are available. Its synthetic audit is not physical
 observability evidence, so production time-varying application remains gated.
+The C0-C3 reference pack freezes the implementation-independent equations and
+adds a direct, tested two-image translation oracle. The next ordered item is
+the external Windows MATLAB-managed GPU gate, followed by D1/P3 only when the
+required target hardware is available.
 The full C++ dense backend begins only after the MATLAB dense/fusion product
 contract is selected.
 

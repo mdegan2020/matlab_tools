@@ -684,6 +684,11 @@ and stability have not been demonstrated; research CorrectionSets cannot Apply.
 | FR-REF-009 | Golden tests shall compare procedural and production MATLAB outputs for values, masks, eye assignment, plane coordinates, and stereo controls. | Approved | T, A |
 | FR-REF-010 | The procedural reference shall serve as an executable companion to the mathematical manuscript and as the first C++ translation oracle. | Approved | I |
 
+Realization note: C0-C3 satisfy FR-REF-001 through FR-REF-010 with the frozen
+inventory, IEEEtran source and compiled PDF under `docs/mathematical_reference/`
+and `output/pdf/`, the direct `proceduralTwoImageAnaglyph` companion, and eight
+golden production-parity tests.
+
 ### 5.20 Future C++ and CUDA backend
 
 | ID | Requirement | Class | Verify |
@@ -913,7 +918,7 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 708 of 708 grouped
+At the date of this draft, the repository reports 716 of 716 grouped
 fresh-class tests passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
@@ -933,8 +938,10 @@ explicit atomic source-origin application/exact revert with mandatory
 dependency invalidation and recomputation, and bounded A7 time-varying OPK
 research with held-out audit, automatic coarsening, and a research-only
 application gate are complete. Production time-varying application remains
-gated on physical local observability and stability. The SDK audit and logical
-test-suite grouping refactor are complete.
+gated on physical local observability and stability. C0-C3 notation,
+code-independent IEEE manuscript/PDF, procedural two-image/anaglyph oracle,
+golden parity, and multi-image/dense appendices are complete. The SDK audit and
+logical test-suite grouping refactor are complete.
 
 This snapshot is informative and may become stale. project_status.md is the
 authoritative implementation-status record.

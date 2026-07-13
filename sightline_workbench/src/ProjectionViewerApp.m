@@ -8418,13 +8418,10 @@ classdef ProjectionViewerApp < handle
                 return
             end
 
-            gray = app.normalizedGrayscaleDisplayTexture(texture);
-            texture = app.AnaglyphOffChannelFloor * ...
-                ones([size(gray, 1), size(gray, 2), 3], "single");
             channelIndex = app.anaglyphChannelForLayer(layerIndex);
-            texture(:, :, channelIndex) = min(1, ...
-                app.AnaglyphOffChannelFloor + ...
-                app.AnaglyphChannelGain * gray);
+            texture = ProjectionAnaglyphModel.channelTexture(texture, ...
+                channelIndex, app.AnaglyphChannelGain, ...
+                app.AnaglyphOffChannelFloor);
         end
 
         function alpha = previewFaceAlphaForLayer(app, alpha, layerIndex)
@@ -8528,26 +8525,6 @@ classdef ProjectionViewerApp < handle
                 "redblueanaglyph");
         end
 
-        function gray = normalizedGrayscaleDisplayTexture(~, texture)
-            if ismatrix(texture)
-                gray = texture;
-            elseif isinteger(texture)
-                gray = cast(round(mean(double(texture), 3)), class(texture));
-            elseif islogical(texture)
-                gray = any(texture, 3);
-            else
-                gray = mean(texture, 3);
-            end
-            if isinteger(gray)
-                gray = single(gray) / single(intmax(class(gray)));
-            elseif islogical(gray)
-                gray = single(gray);
-            else
-                gray = single(gray);
-                gray = min(max(gray, 0), 1);
-            end
-        end
-
         function [X, Y, Z] = previewSurfaceCoordinates(app, mesh, layerIndex)
             offset = app.previewLayerDepthOffset(layerIndex) + ...
                 app.anaglyphPresentationOffset(layerIndex);
@@ -8569,13 +8546,12 @@ classdef ProjectionViewerApp < handle
 
             rightVector = app.anaglyphPresentationRightVector();
             channelIndex = app.anaglyphChannelForLayer(layerIndex);
-            eyeSign = -1 + 2 * double(channelIndex == 3);
             [viewWidth, ~] = app.cameraViewWorldSize();
-            separationShift = (app.AnaglyphStereoExaggeration - 1) * ...
-                app.AnaglyphStereoBaseSeparationFraction * viewWidth;
-            parallaxShift = eyeSign * (separationShift + ...
-                app.AnaglyphScreenDepthOffsetMeters);
-            offset = parallaxShift * rightVector;
+            offset = ProjectionAnaglyphModel.presentationOffset( ...
+                rightVector, channelIndex, viewWidth, ...
+                app.AnaglyphStereoExaggeration, ...
+                app.AnaglyphScreenDepthOffsetMeters, ...
+                app.AnaglyphStereoBaseSeparationFraction);
         end
 
         function offsets = anaglyphPresentationOffsets(app)

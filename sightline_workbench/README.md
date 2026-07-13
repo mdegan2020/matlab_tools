@@ -42,6 +42,7 @@ src/ProjectionDemGrid.m       Strict WGS84/DTED2 DEM datum/uncertainty value
 src/ProjectionSurfaceRegistration*.m S7 registration SDK, service, and audit
 src/ProjectionDemCorrectionAdapter.m B8 live-scene binding/apply contract
 src/ProjectionTimeVaryingOpk*.m A7 tangent-spline study and held-out audit
+src/ProjectionAnaglyphModel.m Production red/cyan presentation algebra
 src/ProjectionDenseSurfaceSynthetic*.m Truth-aware fixture configuration and planning
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionGpuSupport.m      Shared optional gpuArray capability checks
@@ -56,6 +57,8 @@ src/ProjectionBackendTiledRenderer.m Bounded serial/thread tile pipeline
 src/ProjectionBackendProcessor.m Backend job invocation facade
 tests/PlanarProjectionTest.m    Class-based unit tests
 tests/ProjectionAlignment*.m    Alignment model, matching, solver, GUI, and backend tests
+tests/ProjectionProceduralAnaglyphTest.m C2 direct/production golden parity
+proceduralTwoImageAnaglyph.m    Direct two-image/anaglyph translation oracle
 runProjectionViewer.m           Programmatic launcher for real image/geometry data
 runProjectionViewerPrototype.m  Launcher for the local prototype TIFF
 runSyntheticAlignmentPrototype.m Launcher for red/blue synthetic alignment scenes
@@ -74,6 +77,8 @@ docs/multi_image_surface_reconstruction_workplan.md Active consolidated multi-im
 docs/software_requirements_specification.md Project-wide normative software requirements
 docs/test_suite_grouping.md       Logical fresh-class suite groups and MCP policy
 docs/time_varying_opk_research.md A7 model, audit, SDK gate, and decision
+docs/mathematical_reference/    C0/C1/C3 notation, IEEEtran source, and build
+output/pdf/sightline_mathematical_specification.pdf Compiled mathematical specification
 docs/precision_inventory_and_long_range_validation.md P0/P1 precision evidence
 docs/dense_matcher_sdk.md          Dense matcher extension and SGM adapter guide
 docs/dense_sgm_truth_audit.md      B0 held-out SGM evidence and retention decision
@@ -105,7 +110,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 708 tests;
+- the latest grouped fresh-class repository validation passes all 716 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -228,13 +233,35 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 708 passing tests with no failures or incomplete
+fresh-class baseline is 716 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
 fresh-class calls; never run the
 aggregate suite in one MCP call.
 See `docs/test_suite_grouping.md` for ownership and build task details.
+
+## Mathematical And Procedural Reference
+
+C0-C3 provide a frozen notation/equation inventory, a code-independent
+IEEEtran manuscript with derivations and multi-image/dense appendices, and the
+direct `proceduralTwoImageAnaglyph` executable companion. The companion accepts
+two in-memory images plus explicit plane, camera, source-geometry, output, and
+stereo values; it performs the full double-precision inverse-map, full-source
+sampling/masking, physical-eye, display-only offset, and canonical red/cyan
+path without GUI or hidden runtime state.
+
+Build the manuscript with:
+
+```sh
+docs/mathematical_reference/build_pdf.sh
+```
+
+The final artifact is
+`output/pdf/sightline_mathematical_specification.pdf`; build intermediates stay
+under `tmp/pdfs/`. Eight golden tests compare the procedural values, masks,
+coordinates, eye assignment, and presentation controls with independent
+production components. See `docs/mathematical_reference/README.md`.
 
 ## Dense Matcher SDK
 
