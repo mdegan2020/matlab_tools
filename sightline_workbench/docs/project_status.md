@@ -21,7 +21,7 @@ As of July 13, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 700/700 tests with zero
+- The latest grouped fresh-class repository suite passes 708/708 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -80,6 +80,7 @@ As of July 13, 2026:
 | B6 Surface Workbench and runtime-only 3-D viewer | Complete |
 | S7 DEM-registration extension and B7 robust DEM registration | Complete |
 | B8 explicit DEM-derived position-correction application | Complete |
+| A7 bounded time-varying OPK research | Complete; production apply gated |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -191,9 +192,10 @@ A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5/A6 global constant-OPK network solving and the multi-image
 synthetic acceptance matrix and P0/P1 precision validation are also complete.
-The next ordered work is A7 time-varying OPK research, followed by the C0-C3
-mathematical/procedural specification and C++/CUDA work in the explicit
-dependency order recorded there.
+The next ordered work is C0-C3 mathematical/procedural specification, followed
+by C++/CUDA work in the explicit dependency order recorded there. A7 research
+is complete; production time-varying application remains gated on physical
+local observability and stability.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
 immutable history, viewer integration, callback safeguards, and legacy
@@ -352,6 +354,17 @@ a durable invalidation/recompute manifest. Viewer integration clears matches,
 filters, solves, and dense products after both apply and revert. The nine B8
 tests bring the grouped baseline to 700/700. See
 `docs/dem_registration_sdk.md`.
+
+A7 research is complete. `ProjectionTimeVaryingOpkResearch` fits truth-free
+linearized residuals with local tangent rotation vectors, open-uniform cubic
+splines nominally spaced every 128 full-source columns, second-difference
+priors, and explicit pass-common plus per-image terms. It automatically
+coarsens when data support, rank, or conditioning is inadequate and labels a
+per-column model as an analysis upper bound. The held-out audit recovers the
+dense synthetic case while a sparse case fails closed after coarsening.
+Research CorrectionSet blocks retain generation/frame/unit/provenance contracts
+but are rejected before Apply. The eight A7 tests bring the grouped baseline to
+708/708. See `docs/time_varying_opk_research.md`.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused

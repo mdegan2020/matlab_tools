@@ -12,8 +12,10 @@ dense matcher SDK/current-SGM adapter, B0 truth-aware SGM audit, and B1 dense
 pair/search planning, B2 classical template matching, B3 pairwise point
 covariance, B5 dense multi-view reconstruction, S6/B4 surface fusion, B6
 Surface Workbench, S7/B7 DEM ingestion and registration, and B8 explicit DEM
-position application are complete. The current grouped fresh-class repository
-suite passes 700/700 tests. This
+position application and the bounded A7 time-varying OPK research pack are
+complete. A7 remains research-only; production application is still gated on
+physical local observability and stability. The current grouped fresh-class
+repository suite passes 708/708 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1393,9 +1395,13 @@ These trees are coordinated but should remain separately reviewable.
    multiple passes, and independent/custom-prior configurations. Independent
    pass components, prior dominance, systematic pass/time/region/position
    conflicts, and leave-one-pair-out sensitivity are reported.
-9. **A7 — Time-varying correction research.** Add tangent-space spline OPK
-   posts initially every 128 columns only after dense support and observability
-   are demonstrated.
+9. **A7 — Time-varying correction research — complete.** The truth-free
+   linearized study uses local tangent rotation vectors, cubic spline posts
+   nominally every 128 columns, second-difference priors, pass-common plus
+   per-image terms, support/rank/condition-driven coarsening, and a held-out
+   truth audit. Per-column fitting is an analysis upper bound. Portable
+   research CorrectionSet blocks are reviewable but explicitly cannot Apply;
+   production promotion remains gated on physical observability and stability.
 
 ### Tree B: Multi-View Dense Surface
 
@@ -1514,7 +1520,7 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current grouped fresh-class baseline, now 700/700 after B8.
+1. Preserve the current grouped fresh-class baseline, now 708/708 after A7.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
@@ -1536,14 +1542,17 @@ complete. The ordered implementation queue is:
 18. B6 Surface Workbench — complete.
 19. S7/B7 DEM ingestion, uncertainty, registration, preview translation — complete.
 20. B8 explicit DEM-derived position-correction application — complete.
-21. A7 time-varying OPK research.
+21. A7 time-varying OPK research — complete; production application remains
+    gated on physical local observability and stability.
 22. C0-C3 manuscript/procedural oracle at stable checkpoints.
 23. Windows MATLAB-managed GPU validation, then D1/P3 CUDA/MEX dense-cost spike.
 24. D0 and staged C++ port after corresponding MATLAB contracts/fixtures freeze.
 
-Time-varying OPK A7 begins only after constant global alignment and dense
-observation support have measurable evidence. The full C++ dense backend begins
-only after the MATLAB dense/fusion product contract is selected.
+The bounded A7 research study is complete because constant global alignment and
+dense observation contracts are available. Its synthetic audit is not physical
+observability evidence, so production time-varying application remains gated.
+The full C++ dense backend begins only after the MATLAB dense/fusion product
+contract is selected.
 
 ### Continuous execution authorization
 

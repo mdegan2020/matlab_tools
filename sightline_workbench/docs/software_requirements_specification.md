@@ -450,6 +450,11 @@ preview planes, or object ownership.
 
 ### 5.8 Time-varying correction
 
+The bounded A7 research implementation exercises the tangent-spline,
+coarsening, truth-audit, and portable-result contracts below. These requirements
+remain Gated for production application because physical local observability
+and stability have not been demonstrated; research CorrectionSets cannot Apply.
+
 | ID | Requirement | Class | Verify |
 | --- | --- | --- | --- |
 | FR-TVC-001 | Time-varying attitude correction shall be introduced only after constant network alignment and dense observation support demonstrate local observability. | Gated | A, I |
@@ -908,7 +913,7 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 700 of 700 grouped
+At the date of this draft, the repository reports 708 of 708 grouped
 fresh-class tests passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
@@ -925,7 +930,10 @@ reconstruction, S6/B4 surface-fusion SDK/bounded voxel audit, B6 separate
 Surface Workbench/runtime-only 3-D viewer, and S7/B7 strict DEM ingestion,
 uncertainty-aware robust registration, proposed correction, preview, and B8
 explicit atomic source-origin application/exact revert with mandatory
-dependency invalidation and recomputation are complete. The SDK audit and logical
+dependency invalidation and recomputation, and bounded A7 time-varying OPK
+research with held-out audit, automatic coarsening, and a research-only
+application gate are complete. Production time-varying application remains
+gated on physical local observability and stability. The SDK audit and logical
 test-suite grouping refactor are complete.
 
 This snapshot is informative and may become stale. project_status.md is the

@@ -41,6 +41,7 @@ src/ProjectionSurface3DViewer.m Runtime-only product comparison viewer
 src/ProjectionDemGrid.m       Strict WGS84/DTED2 DEM datum/uncertainty value
 src/ProjectionSurfaceRegistration*.m S7 registration SDK, service, and audit
 src/ProjectionDemCorrectionAdapter.m B8 live-scene binding/apply contract
+src/ProjectionTimeVaryingOpk*.m A7 tangent-spline study and held-out audit
 src/ProjectionDenseSurfaceSynthetic*.m Truth-aware fixture configuration and planning
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionGpuSupport.m      Shared optional gpuArray capability checks
@@ -72,6 +73,7 @@ docs/performance_optimization_workplan.md Viewer/backend optimization packs
 docs/multi_image_surface_reconstruction_workplan.md Active consolidated multi-image/SDK/surface roadmap
 docs/software_requirements_specification.md Project-wide normative software requirements
 docs/test_suite_grouping.md       Logical fresh-class suite groups and MCP policy
+docs/time_varying_opk_research.md A7 model, audit, SDK gate, and decision
 docs/precision_inventory_and_long_range_validation.md P0/P1 precision evidence
 docs/dense_matcher_sdk.md          Dense matcher extension and SGM adapter guide
 docs/dense_sgm_truth_audit.md      B0 held-out SGM evidence and retention decision
@@ -103,7 +105,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 700 tests;
+- the latest grouped fresh-class repository validation passes all 708 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -226,7 +228,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 700 passing tests with no failures or incomplete
+fresh-class baseline is 708 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -300,6 +302,14 @@ explicit source origins, and uses the existing immutable S2 lifecycle for
 explicit accept/apply/exact-revert. Corrected fingerprints are verified before
 publication. Apply/revert invalidate alignment, dense, fusion, surface, and DEM
 registration evidence and require recomputation; neither path is automatic.
+
+A7 adds a research-only local-tangent attitude model with cubic B-spline posts
+nominally every 128 full-source columns, pass-common and per-image components,
+second-difference priors, support/rank/condition-driven coarsening, and a
+truth-separated held-out audit. Per-column fitting is labeled as an analysis
+upper bound. Its portable CorrectionSet blocks may be reviewed and accepted,
+but application is explicitly rejected until physical dense observations prove
+local observability and stability. See `docs/time_varying_opk_research.md`.
 
 ## Correction-Result SDK
 
