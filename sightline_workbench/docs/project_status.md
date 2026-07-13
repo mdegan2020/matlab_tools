@@ -21,7 +21,7 @@ As of July 12, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 618/618 tests with zero
+- The latest grouped fresh-class repository suite passes 625/625 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -74,6 +74,7 @@ As of July 12, 2026:
 | B0 truth-aware SGM audit | Complete |
 | B1 dense pair and sparse-seeded search planning | Complete |
 | B2 classical dense template matcher | Complete |
+| B3 pairwise point covariance and conditioning | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -185,7 +186,7 @@ A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5/A6 global constant-OPK network solving and the multi-image
 synthetic acceptance matrix and P0/P1 precision validation are also complete.
-The next ordered work is B3/B5 pairwise uncertainty and multi-ray association,
+The next ordered work is B5 dense multi-ray association,
 followed by fusion/DEM SDKs, the mathematical specification, and C++/CUDA work
 in the explicit dependency order recorded there.
 
@@ -282,6 +283,12 @@ phase-only costs. It retains uniqueness/ties, texture, subpixel fit,
 forward/backward consistency, prediction residual, uncalibrated confidence,
 explicit states, cancellation, provenance, and continuous full-source
 coordinates. See `docs/dense_template_matcher.md`.
+
+B3 is complete. Pairwise reconstruction now reports forward ray parameters,
+separation, angle/conditioning, and provisional points while central numerical
+Jacobians propagate full-source localization and correlated ray-state geometry
+uncertainty into symmetric world-frame covariance. Missing or weak covariance
+is explicitly unavailable/unreliable. See `docs/pairwise_point_covariance.md`.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused
