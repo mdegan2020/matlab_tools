@@ -578,7 +578,7 @@ preview planes, or object ownership.
 | FR-DEM-012 | Registration shall not reuse DEM-constrained points as independent validation evidence. | Approved | A, I |
 | FR-DEM-013 | Registration shall report transform direction/frame, covariance, coverage, support/rejections, residual distribution, mask sensitivity, datum assumptions, and ambiguity. | Approved | T, A |
 | FR-DEM-014 | Registration shall return a proposed correction and preview product and shall never automatically apply it to source geometry. | Approved | T |
-| FR-DEM-015 | A later explicit DEM-derived correction Apply shall be atomic and revertible, validate frame/scope, update compatible origins, invalidate dependent evidence/products, and require recomputation. | Gated | T |
+| FR-DEM-015 | A later explicit DEM-derived correction Apply shall be atomic and revertible, validate frame/scope, update compatible origins, invalidate dependent evidence/products, and require recomputation. | Approved | T |
 | FR-DEM-016 | Rotation, per-pass translation, and trajectory terms shall remain gated until truth demonstrates that they are distinguishable from gauge and datum errors. | Gated | A |
 
 ### 5.15 MATLAB correction SDK
@@ -908,7 +908,7 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 691 of 691 grouped
+At the date of this draft, the repository reports 700 of 700 grouped
 fresh-class tests passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
@@ -923,8 +923,9 @@ pair/sparse-seeded search planning, B2 classical template matching, B3
 pairwise point covariance, B5 dense multi-view association/robust multi-ray
 reconstruction, S6/B4 surface-fusion SDK/bounded voxel audit, B6 separate
 Surface Workbench/runtime-only 3-D viewer, and S7/B7 strict DEM ingestion,
-uncertainty-aware robust registration, proposed correction, and preview are
-complete. The SDK audit and logical
+uncertainty-aware robust registration, proposed correction, preview, and B8
+explicit atomic source-origin application/exact revert with mandatory
+dependency invalidation and recomputation are complete. The SDK audit and logical
 test-suite grouping refactor are complete.
 
 This snapshot is informative and may become stale. project_status.md is the

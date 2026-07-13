@@ -40,6 +40,7 @@ src/ProjectionSurfaceWorkbench*.m Portable B6 model and separate floating app
 src/ProjectionSurface3DViewer.m Runtime-only product comparison viewer
 src/ProjectionDemGrid.m       Strict WGS84/DTED2 DEM datum/uncertainty value
 src/ProjectionSurfaceRegistration*.m S7 registration SDK, service, and audit
+src/ProjectionDemCorrectionAdapter.m B8 live-scene binding/apply contract
 src/ProjectionDenseSurfaceSynthetic*.m Truth-aware fixture configuration and planning
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionGpuSupport.m      Shared optional gpuArray capability checks
@@ -102,7 +103,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 691 tests;
+- the latest grouped fresh-class repository validation passes all 700 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -225,7 +226,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 691 passing tests with no failures or incomplete
+fresh-class baseline is 700 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -292,6 +293,13 @@ rejections, residuals, mask sensitivity, ambiguity, a complete preview, and a
 proposed non-auto-applied `CorrectionSet`. DEM, registered, and difference
 products integrate with the Surface Workbench while the imagery-only product
 remains unchanged. See `docs/dem_registration_sdk.md`.
+
+B8 binds an S7 proposal to the current scene and correction generation,
+validates world frame plus exact view/pass scope, updates compatible sampled and
+explicit source origins, and uses the existing immutable S2 lifecycle for
+explicit accept/apply/exact-revert. Corrected fingerprints are verified before
+publication. Apply/revert invalidate alignment, dense, fusion, surface, and DEM
+registration evidence and require recomputation; neither path is automatic.
 
 ## Correction-Result SDK
 

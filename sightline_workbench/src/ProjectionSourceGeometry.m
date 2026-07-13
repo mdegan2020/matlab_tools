@@ -2,6 +2,70 @@ classdef ProjectionSourceGeometry
     %ProjectionSourceGeometry Source-geometry adapters for projection layers.
 
     methods (Static)
+        function sourceGeometry = translateOrigins(sourceGeometry, translation)
+            %translateOrigins Shift compatible sensor origins in world coordinates.
+            if ~isstruct(sourceGeometry) || ~isscalar(sourceGeometry)
+                error("ProjectionSourceGeometry:invalidGeometry", ...
+                    "Source geometry must be a scalar struct.");
+            end
+            if ~isnumeric(translation) || numel(translation) ~= 3 || ...
+                    any(~isfinite(translation))
+                error("ProjectionSourceGeometry:invalidTranslation", ...
+                    "Origin translation must be a finite three-vector.");
+            end
+            revision = ProjectionGeometryFingerprint.sourceRevisionStatus( ...
+                sourceGeometry);
+            if ~revision.Verifiable
+                error("ProjectionSourceGeometry:unverifiableGeometry", ...
+                    "%s", revision.Explanation);
+            end
+            translation = reshape(double(translation), 3, 1);
+            originFields = ["Origins" "ViewVectorOrigins" "SensorOrigins" ...
+                "TrajectoryOrigins" "ReferenceOrigin" "G0" ...
+                "GeometryOffset"];
+            translatedValue = false;
+            for field = originFields
+                if isfield(sourceGeometry, field)
+                    sourceGeometry.(field) = ProjectionSourceGeometry. ...
+                        translateOriginArray(sourceGeometry.(field), ...
+                        translation, field);
+                    translatedValue = true;
+                end
+            end
+            if isfield(sourceGeometry, "Metadata") && ...
+                    isstruct(sourceGeometry.Metadata) && ...
+                    isscalar(sourceGeometry.Metadata)
+                for field = originFields
+                    if isfield(sourceGeometry.Metadata, field)
+                        sourceGeometry.Metadata.(field) = ...
+                            ProjectionSourceGeometry.translateOriginArray( ...
+                            sourceGeometry.Metadata.(field), translation, ...
+                            "Metadata." + field);
+                    end
+                end
+            end
+            functionFields = ["SampleFcn" "SampleRayFcn"];
+            for field = functionFields
+                if isfield(sourceGeometry, field)
+                    sampleFcn = sourceGeometry.(field);
+                    if ~isa(sampleFcn, "function_handle")
+                        error("ProjectionSourceGeometry:invalidGeometry", ...
+                            "%s must be a function handle.", field);
+                    end
+                    sourceGeometry.(field) = ProjectionSourceGeometry. ...
+                        translatedFunction(sampleFcn, translation);
+                    translatedValue = true;
+                end
+            end
+            if ~translatedValue
+                error("ProjectionSourceGeometry:unsupportedPositionCorrection", ...
+                    "Source geometry exposes no compatible sensor origins.");
+            end
+            sourceGeometry.GeometryRevisionToken = ...
+                ProjectionGeometryFingerprint.deriveSourceRevision( ...
+                sourceGeometry);
+        end
+
         function sourceGeometry = fromGrid(imageSize, rowPostIndices, ...
                 columnPostIndices, origins, viewVectors, options)
             %fromGrid Build a SampleFcn-backed source geometry from sparse posts.
@@ -63,6 +127,32 @@ classdef ProjectionSourceGeometry
     end
 
     methods (Static, Access = private)
+        function translatedFcn = translatedFunction(sampleFcn, translation)
+            translatedFcn = @(rows, columns) ...
+                ProjectionSourceGeometry.translatedSample( ...
+                sampleFcn, translation, rows, columns);
+        end
+
+        function value = translateOriginArray(value, translation, name)
+            if ~isnumeric(value) || isempty(value) || ...
+                    size(value, 1) ~= 3 || any(~isfinite(value), "all")
+                error("ProjectionSourceGeometry:invalidOriginField", ...
+                    "%s must be a finite nonempty 3-by-N array.", name);
+            end
+            value = double(value) + translation;
+        end
+
+        function [origins, vectors] = translatedSample( ...
+                sampleFcn, translation, rows, columns)
+            [origins, vectors] = sampleFcn(rows, columns);
+            if ~isnumeric(origins) || size(origins, 1) ~= 3 || ...
+                    any(~isfinite(origins), "all")
+                error("ProjectionSourceGeometry:invalidSampleOrigins", ...
+                    "Source sampler returned invalid origins during translation.");
+            end
+            origins = double(origins) + translation;
+        end
+
         function options = mergeOptions(options)
             if isempty(options)
                 options = struct();

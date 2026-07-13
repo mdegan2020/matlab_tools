@@ -395,6 +395,24 @@ classdef ProjectionViewerApp < handle
             proposed = app.CorrectionStore.propose(correctionSet);
         end
 
+        function proposed = proposeDemCorrection(app, registration, options)
+            %proposeDemCorrection Bind an S7 preview to the current scene.
+            if nargin < 3
+                options = struct();
+            end
+            if ~isstruct(options) || ~isscalar(options)
+                error("ProjectionViewerApp:invalidDemCorrectionOptions", ...
+                    "DEM correction options must be a scalar struct.");
+            end
+            if ~isfield(options, "ParentGenerationId")
+                options.ParentGenerationId = ...
+                    app.CorrectionStore.currentGenerationId();
+            end
+            correctionSet = ProjectionDemCorrectionAdapter.bind( ...
+                app.Scene, registration, options);
+            proposed = app.CorrectionStore.propose(correctionSet);
+        end
+
         function accepted = acceptCorrection(app, generationId)
             %acceptCorrection Accept a current portable proposal.
             accepted = app.CorrectionStore.accept(generationId);
@@ -403,17 +421,21 @@ classdef ProjectionViewerApp < handle
         function applied = applyCorrection(app, generationId)
             %applyCorrection Atomically apply a reviewed portable generation.
             previousScene = app.Scene;
-            [app.Scene, applied] = app.CorrectionStore.apply(generationId);
+            [app.Scene, applied, effects] = ...
+                app.CorrectionStore.apply(generationId);
+            app.applyGeometryEffects(effects);
             app.refreshCorrectionScene(previousScene);
         end
 
         function reverted = revertCorrection(app, generationId)
             %revertCorrection Restore an exact parent correction generation.
             previousScene = app.Scene;
-            [app.Scene, reverted] = app.CorrectionStore.revert(generationId);
+            [app.Scene, reverted, effects] = ...
+                app.CorrectionStore.revert(generationId);
             if string(generationId) == app.AlignmentAppliedGenerationId
                 app.AlignmentAppliedGenerationId = "";
             end
+            app.applyGeometryEffects(effects);
             app.refreshCorrectionScene(previousScene);
         end
 
@@ -889,6 +911,34 @@ classdef ProjectionViewerApp < handle
             app.refreshProjectionLayers( ...
                 layerIndices, app.DefaultMeshSampling, false);
             app.updateControlsFromSelectedLayer();
+        end
+
+        function applyGeometryEffects(app, effects)
+            if ~isstruct(effects) || ~isscalar(effects) || ...
+                    ~isfield(effects, "Kind") || ...
+                    string(effects.Kind) ~= "demPositionCorrection"
+                return
+            end
+            app.AlignmentSession.clearComputation();
+            app.closeDenseSurfaceWindows();
+            app.DenseSurfaceDiagnostics = struct(Status="invalidated", ...
+                Reason="demPositionCorrection", ...
+                RecomputeRequired=true, ...
+                RequiredRecomputation=effects.RequiredRecomputation, ...
+                InvalidatedProducts=effects.InvalidatedProducts);
+            app.AlignmentAppliedGenerationId = "";
+            app.clearAlignmentOverlays();
+            app.clearSelectedAlignmentMatchOverlay();
+            app.setAlignmentFilterEnabled(false);
+            app.setAlignmentSolveEnabled(false);
+            app.setAlignmentActionEnabled(false);
+            app.refreshDenseSurfaceButton();
+            app.updateAlignmentMatchTable([], []);
+            app.refreshAlignmentSessionIndicators();
+            app.setAlignmentStatus( ...
+                "DEM position correction changed source origins. " + ...
+                "Re-run Match, Filter, Solve, dense reconstruction, " + ...
+                "fusion, and DEM registration.");
         end
 
 
@@ -2598,7 +2648,9 @@ classdef ProjectionViewerApp < handle
                     app.layerProjectionOffset(currentLayer)) || ...
                     ~isequaln( ...
                     app.layerViewVectorAngularOffsetsDegrees(previousLayer), ...
-                    app.layerViewVectorAngularOffsetsDegrees(currentLayer));
+                    app.layerViewVectorAngularOffsetsDegrees(currentLayer)) || ...
+                    ProjectionGeometryFingerprint.layer(previousLayer) ~= ...
+                    ProjectionGeometryFingerprint.layer(currentLayer);
             end
             layerIndices = find(changedMask);
         end

@@ -15,6 +15,12 @@ classdef ProjectionCorrectionStore < handle
             "GenerationId", {}, "Identifier", {}, "Message", {})
         InTransition logical = false
         Sequence double = 0
+        LastGeometryEffects struct = struct(Kind="none", ...
+            Transition="", GeometryChanged=false, ...
+            InvalidatedProducts=strings(1, 0), ...
+            RequiredRecomputation=strings(1, 0), ...
+            RecomputeRequired=false, ScopeViewIds=strings(1, 0), ...
+            SourcePointSetGenerationId="")
     end
 
     methods
@@ -100,7 +106,8 @@ classdef ProjectionCorrectionStore < handle
             value = struct(CurrentGenerationId=store.currentGenerationId(), ...
                 HistoryCount=numel(store.Entries), ...
                 CallbackFailures=store.CallbackFailures, ...
-                TransitionInProgress=store.InTransition);
+                TransitionInProgress=store.InTransition, ...
+                LastGeometryEffects=store.LastGeometryEffects);
         end
 
         function synchronizeScene(store, scene, generationId)
@@ -184,7 +191,7 @@ classdef ProjectionCorrectionStore < handle
             store.clearCurrentIndex(index);
         end
 
-        function [scene, applied] = apply(store, generationId)
+        function [scene, applied, effects] = apply(store, generationId)
             %apply Atomically validate, apply, verify, and publish a generation.
             guard = store.beginTransition(); %#ok<NASGU>
             generationId = ProjectionCorrectionStore.scalarString( ...
@@ -231,11 +238,14 @@ classdef ProjectionCorrectionStore < handle
             store.CurrentAppliedIndex = store.append(applied, "apply", ...
                 parentScene, candidateScene, parentAppliedSet);
             store.CurrentAcceptedIndex = 0;
+            effects = ProjectionDemCorrectionAdapter.effects( ...
+                applied, "apply");
+            store.LastGeometryEffects = effects;
             scene = store.SceneState;
             store.deliverCallbacks("applied", applied);
         end
 
-        function [scene, reverted] = revert(store, generationId)
+        function [scene, reverted, effects] = revert(store, generationId)
             %revert Restore and verify the exact parent generation atomically.
             guard = store.beginTransition(); %#ok<NASGU>
             generationId = ProjectionCorrectionStore.scalarString( ...
@@ -264,6 +274,9 @@ classdef ProjectionCorrectionStore < handle
                     "restoreParentAfterRevert", priorEntry.ParentScene, ...
                     parentScene, priorEntry.ParentAppliedSet);
             end
+            effects = ProjectionDemCorrectionAdapter.effects( ...
+                reverted, "revert");
+            store.LastGeometryEffects = effects;
             scene = store.SceneState;
             store.deliverCallbacks("reverted", reverted);
         end
@@ -325,6 +338,8 @@ classdef ProjectionCorrectionStore < handle
         end
 
         function scene = applyToCopy(scene, correctionSet)
+            positionPlan = ProjectionDemCorrectionAdapter. ...
+                applicationPlan(correctionSet);
             for index = 1:numel(correctionSet.Views)
                 record = correctionSet.Views(index);
                 layerIndex = ProjectionViewMetadata.indexForId( ...
@@ -333,6 +348,13 @@ classdef ProjectionCorrectionStore < handle
                     rad2deg(record.EffectiveAttitudeRadians(:));
                 scene.layers(layerIndex).ProjectionOffsetMeters = ...
                     record.EffectiveProjectionOffsetMeters(:);
+                if positionPlan.Available && ...
+                        ismember(record.ViewId, positionPlan.ScopeViewIds)
+                    scene.layers(layerIndex).SourceGeometry = ...
+                        ProjectionSourceGeometry.translateOrigins( ...
+                        scene.layers(layerIndex).SourceGeometry, ...
+                        positionPlan.TranslationWorldMeters);
+                end
             end
         end
 

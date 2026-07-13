@@ -11,8 +11,9 @@ the multi-image synthetic acceptance matrix, P0/P1 precision validation, S3
 dense matcher SDK/current-SGM adapter, B0 truth-aware SGM audit, and B1 dense
 pair/search planning, B2 classical template matching, B3 pairwise point
 covariance, B5 dense multi-view reconstruction, S6/B4 surface fusion, B6
-Surface Workbench, and S7/B7 DEM ingestion and registration are complete. The
-current grouped fresh-class repository suite passes 691/691 tests. This
+Surface Workbench, S7/B7 DEM ingestion and registration, and B8 explicit DEM
+position application are complete. The current grouped fresh-class repository
+suite passes 700/700 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1432,8 +1433,10 @@ These trees are coordinated but should remain separately reviewable.
    HAE/MSL-EGM96 normalization, shared DEM uncertainty, robust global ENU
    point-to-normal translation, mask/ambiguity evidence, complete preview, and
    Workbench products preserve the imagery-only points.
-9. **B8 — Explicit DEM position-correction apply.** Return proposed translation
-   through the SDK; add separately gated atomic geometry application/recompute.
+9. **B8 — Explicit DEM position-correction apply — complete.** Live-scene
+   binding validates generation/frame/view/pass scope and position-only terms;
+   S2 applies compatible source origins atomically with fingerprint proof and
+   exact revert, then invalidates dependent evidence and requires recomputation.
 
 ### Tree C: Mathematical And Procedural References
 
@@ -1511,7 +1514,7 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current grouped fresh-class baseline, now 691/691 after S7/B7.
+1. Preserve the current grouped fresh-class baseline, now 700/700 after B8.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
@@ -1532,7 +1535,7 @@ complete. The ordered implementation queue is:
     remains diagnostic and robust multi-ray remains authoritative.
 18. B6 Surface Workbench — complete.
 19. S7/B7 DEM ingestion, uncertainty, registration, preview translation — complete.
-20. B8 explicit DEM-derived position-correction application.
+20. B8 explicit DEM-derived position-correction application — complete.
 21. A7 time-varying OPK research.
 22. C0-C3 manuscript/procedural oracle at stable checkpoints.
 23. Windows MATLAB-managed GPU validation, then D1/P3 CUDA/MEX dense-cost spike.
