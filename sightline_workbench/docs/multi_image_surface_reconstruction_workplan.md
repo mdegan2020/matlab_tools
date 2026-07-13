@@ -10,8 +10,8 @@ pair-graph packs, A5 global constant-OPK network solve, A6 pass-aware priors,
 the multi-image synthetic acceptance matrix, P0/P1 precision validation, S3
 dense matcher SDK/current-SGM adapter, B0 truth-aware SGM audit, and B1 dense
 pair/search planning, B2 classical template matching, B3 pairwise point
-covariance, and B5 dense multi-view reconstruction are complete. The current
-grouped fresh-class repository suite passes 638/638 tests. This
+covariance, B5 dense multi-view reconstruction, and S6/B4 surface fusion are
+complete. The current grouped fresh-class repository suite passes 653/653 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1411,9 +1411,12 @@ These trees are coordinated but should remain separately reviewable.
    triangulation exposes separation/conditioning and propagates full-source
    observation plus correlated ray-state geometry covariance into explicit
    world-frame point covariance and reliability status.
-5. **B4 — Volumetric fusion research spike.** Compare sparse voxel occupancy,
-   uncertainty-weighted splats, and direct multi-ray reconstruction on bounded
-   truth-aware ROIs.
+5. **B4 — Volumetric fusion research spike — complete.** The bounded held-out
+   roof/parapet audit compares sparse hard occupancy, uncertainty-weighted
+   Gaussian splats, and direct multi-ray reconstruction over GSD-derived scale
+   sweeps. All preserve competing modes and ignore pair multiplicity, but the
+   voxel variants do not improve the authoritative point accuracy/completeness;
+   they remain diagnostic only and authoritative promotion is abandoned.
 6. **B5 — Dense multi-view association and multi-ray solve — complete.** Stable
    full-source observations form deterministic conflict-safe tracks; unique
    view/pass evidence drives robust multi-ray points with rejected-ray,
@@ -1459,8 +1462,10 @@ These trees are coordinated but should remain separately reviewable.
    documented external-style matcher example.
 6. **S5 — SDK guide and compatibility suite.** Document end-to-end automation
    and extension examples and establish schema/API compatibility tests.
-7. **S6 — Surface-fusion extension.** Add abstract fusion request/result/base,
-   built-in multi-ray/voxel/Gaussian adapters, example, and conformance suite.
+7. **S6 — Surface-fusion extension — complete.** Strict request/result values,
+   a sealed base lifecycle, explicit registry, built-in multi-ray/hard-voxel/
+   Gaussian adapters, external-style example, persistence, and conformance
+   tests are present.
 8. **S7 — DEM-registration extension.** Add headless service, abstract
    registration algorithm, robust translation adapter, and correction output.
 9. **S8 — Scene-suitability extension.** Add masks/quality results, deterministic
@@ -1498,7 +1503,7 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current grouped fresh-class baseline, now 638/638 after B5.
+1. Preserve the current grouped fresh-class baseline, now 653/653 after S6/B4.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
@@ -1515,7 +1520,8 @@ complete. The ordered implementation queue is:
 15. B1 sparse-seeded dense pair/search planning and B2 classical template
     matcher — complete.
 16. B3/B5 multi-ray reconstruction and initial uncertainty — complete.
-17. S6/B4 surface-fusion SDK and bounded voxel spike.
+17. S6/B4 surface-fusion SDK and bounded voxel spike — complete; voxel evidence
+    remains diagnostic and robust multi-ray remains authoritative.
 18. B6 Surface Workbench.
 19. S7/B7 DEM ingestion, uncertainty, registration, preview translation.
 20. B8 explicit DEM-derived position-correction application.
@@ -1562,8 +1568,9 @@ gates are deliberately resolved by implementation evidence or later user input:
 
 1. Final numerical thresholds after the recorded precision and truth studies.
 2. Which dense matcher(s) and pair policies survive truth-aware audit.
-3. Whether voxel fusion adds value beyond multi-ray reconstruction and in what
-   role; abandon it if it does not.
+3. Voxel fusion retention — resolved for the initial bounded spike. It preserves
+   modes and provides diagnostic evidence but adds no accuracy/completeness
+   value over robust multi-ray, so authoritative promotion is abandoned.
 4. Cloud/water screening methods after suitable data exists.
 5. Per-pass position/rotation and time-varying OPK density after observability.
 6. Stop-sign/curved-orbit radii, leg counts, turns, and independent-pass

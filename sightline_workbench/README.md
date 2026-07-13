@@ -35,6 +35,7 @@ src/ProjectionAlignment*.m      Feature-based alignment models, matching, solvin
 src/ProjectionDenseSurface*.m   Analysis-only SGM extraction and result viewers
 src/ProjectionDenseObservationAssociator.m Stable dense observation/track association
 src/ProjectionMultiRayReconstructor.m Robust provenance-rich multi-ray point set
+src/ProjectionSurfaceFusion*.m Surface-fusion SDK, built-ins, and held-out audit
 src/ProjectionDenseSurfaceSynthetic*.m Truth-aware fixture configuration and planning
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionGpuSupport.m      Shared optional gpuArray capability checks
@@ -73,6 +74,7 @@ docs/dense_search_planning.md      B1 dense-pair and sparse-seeded search contra
 docs/dense_template_matcher.md     B2 classical multi-scale template matcher
 docs/pairwise_point_covariance.md  B3 pairwise geometry and covariance contract
 docs/dense_multi_view_reconstruction.md B5 dense association and multi-ray contract
+docs/surface_fusion_sdk.md       S6/B4 fusion SDK and bounded voxel decision
 docs/matlab_sdk_audit.md          Completed MATLAB public/headless API inventory
 docs/project_status.md           Current completion state and outstanding work
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
@@ -94,7 +96,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 638 tests;
+- the latest grouped fresh-class repository validation passes all 653 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -217,7 +219,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 638 passing tests with no failures or incomplete
+fresh-class baseline is 653 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -260,6 +262,14 @@ rejects inconsistent pair/ray evidence, preserves two-view and competing-mode
 tracks, and returns a provenance-rich robust multi-ray point set with explicit
 residual, conditioning, visibility, radiometry, and covariance status. See
 `docs/dense_multi_view_reconstruction.md`.
+
+S6/B4 adds a derivable surface-fusion request/result/base lifecycle, an explicit
+registry, robust multi-ray/hard-voxel/Gaussian-splat built-ins, a minimal
+external-style example, and MAT plus compact-JSON persistence. The bounded
+held-out roof/parapet audit preserves competing modes and proves pair-count
+invariance, but the voxel variants do not improve accuracy or completeness over
+the authoritative robust points. They remain diagnostic only. See
+`docs/surface_fusion_sdk.md`.
 
 ## Correction-Result SDK
 

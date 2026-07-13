@@ -21,7 +21,7 @@ As of July 13, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 638/638 tests with zero
+- The latest grouped fresh-class repository suite passes 653/653 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -76,6 +76,7 @@ As of July 13, 2026:
 | B2 classical dense template matcher | Complete |
 | B3 pairwise point covariance and conditioning | Complete |
 | B5 dense multi-view association and robust multi-ray solve | Complete |
+| S6 surface-fusion extension and B4 bounded voxel audit | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -187,8 +188,8 @@ A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5/A6 global constant-OPK network solving and the multi-image
 synthetic acceptance matrix and P0/P1 precision validation are also complete.
-The next ordered work is S6/B4 surface-fusion SDK and bounded voxel evidence,
-followed by the Surface Workbench, fusion/DEM SDKs, the mathematical
+The next ordered work is B6 Surface Workbench, followed by the DEM SDK and
+registration packs, the mathematical
 specification, and C++/CUDA work in the explicit dependency order recorded
 there.
 
@@ -301,6 +302,19 @@ depth modes, and reports complete contributor, residual, conditioning,
 radiometry, visibility, and assumed/unavailable covariance provenance. Full MAT
 plus compact JSON persistence is available. See
 `docs/dense_multi_view_reconstruction.md`.
+
+S6/B4 is complete. The graphics-independent surface-fusion SDK provides strict
+request/result values, a sealed lifecycle, an explicit trusted registry,
+progress/cancellation/failure classification, robust multi-ray, sparse hard
+occupancy and covariance-informed Gaussian adapters, a minimal external-style
+example, resource limits, explicit precision, and MAT plus compact-JSON
+persistence. A bounded held-out roof/parapet audit sweeps GSD-derived scales,
+preserves competing urban modes, and proves that pair multiplicity cannot
+inflate evidence. Robust multi-ray achieved `0.0935` m RMSE versus `0.2115` m
+hard voxel and `0.2081` m Gaussian at their best scale, all with full fixture
+completeness. The explicit decision abandons authoritative voxel promotion;
+voxel results remain diagnostic/research products. See
+`docs/surface_fusion_sdk.md`.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused
