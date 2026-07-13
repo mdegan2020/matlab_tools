@@ -18,7 +18,13 @@ catalog distinguishes:
 - per-scale sparse voxel evidence;
 - optional mesh/TIN and gridded products; and
 - explicit unavailable placeholders for DEM, registered, and DEM-difference
-  products until S7/B7 supplies them.
+  products when no S7/B7 registration result is supplied.
+
+`ProjectionSurfaceProductCatalog.registrationProducts` supplies those three
+S7/B7 products from a normalized `ProjectionDemGrid` and a successful or
+reviewable registration result. The registered preview keeps full-source links,
+adds translation covariance, records point-to-DEM differences, and leaves the
+authoritative imagery-only product unchanged.
 
 Every available point keeps stable identity, world coordinates, independent
 view/pass counts, residual, uncertainty, conditioning, fusion method,

@@ -908,7 +908,7 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 668 of 668 grouped
+At the date of this draft, the repository reports 691 of 691 grouped
 fresh-class tests passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
@@ -921,8 +921,10 @@ the multi-image synthetic acceptance matrix, P0/P1 precision validation, S3
 dense matcher SDK/current-SGM adapter, B0 truth-aware SGM audit, and B1 dense
 pair/sparse-seeded search planning, B2 classical template matching, B3
 pairwise point covariance, B5 dense multi-view association/robust multi-ray
-reconstruction, S6/B4 surface-fusion SDK/bounded voxel audit, and B6 separate
-Surface Workbench/runtime-only 3-D viewer are complete. The SDK audit and logical
+reconstruction, S6/B4 surface-fusion SDK/bounded voxel audit, B6 separate
+Surface Workbench/runtime-only 3-D viewer, and S7/B7 strict DEM ingestion,
+uncertainty-aware robust registration, proposed correction, and preview are
+complete. The SDK audit and logical
 test-suite grouping refactor are complete.
 
 This snapshot is informative and may become stale. project_status.md is the

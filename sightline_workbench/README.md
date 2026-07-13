@@ -38,6 +38,8 @@ src/ProjectionMultiRayReconstructor.m Robust provenance-rich multi-ray point set
 src/ProjectionSurfaceFusion*.m Surface-fusion SDK, built-ins, and held-out audit
 src/ProjectionSurfaceWorkbench*.m Portable B6 model and separate floating app
 src/ProjectionSurface3DViewer.m Runtime-only product comparison viewer
+src/ProjectionDemGrid.m       Strict WGS84/DTED2 DEM datum/uncertainty value
+src/ProjectionSurfaceRegistration*.m S7 registration SDK, service, and audit
 src/ProjectionDenseSurfaceSynthetic*.m Truth-aware fixture configuration and planning
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionGpuSupport.m      Shared optional gpuArray capability checks
@@ -78,6 +80,7 @@ docs/pairwise_point_covariance.md  B3 pairwise geometry and covariance contract
 docs/dense_multi_view_reconstruction.md B5 dense association and multi-ray contract
 docs/surface_fusion_sdk.md       S6/B4 fusion SDK and bounded voxel decision
 docs/surface_workbench.md        B6 product, Workbench, and 3-D viewer contract
+docs/dem_registration_sdk.md     S7/B7 DEM ingestion and registration contract
 docs/matlab_sdk_audit.md          Completed MATLAB public/headless API inventory
 docs/project_status.md           Current completion state and outstanding work
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
@@ -99,7 +102,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 668 tests;
+- the latest grouped fresh-class repository validation passes all 691 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -222,7 +225,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 668 passing tests with no failures or incomplete
+fresh-class baseline is 691 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -280,6 +283,15 @@ viewer renders and compares point, voxel, mesh, and grid products; colors by
 scientific/provenance fields; links selected points to full-source
 observations; bounds uncertainty glyphs and display decimation; and retains the
 complete authoritative product. See `docs/surface_workbench.md`.
+
+S7/B7 adds strict WGS84/DTED2 DEM ingestion with explicit HAE or MSL/EGM96
+datum handling, accuracy precedence, shared-dataset uncertainty, and reversible
+scene-local ENU/project-world transforms. A derivable headless registration SDK
+and robust point-to-normal translation adapter return covariance, support,
+rejections, residuals, mask sensitivity, ambiguity, a complete preview, and a
+proposed non-auto-applied `CorrectionSet`. DEM, registered, and difference
+products integrate with the Surface Workbench while the imagery-only product
+remains unchanged. See `docs/dem_registration_sdk.md`.
 
 ## Correction-Result SDK
 

@@ -21,7 +21,7 @@ As of July 13, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 668/668 tests with zero
+- The latest grouped fresh-class repository suite passes 691/691 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -78,6 +78,7 @@ As of July 13, 2026:
 | B5 dense multi-view association and robust multi-ray solve | Complete |
 | S6 surface-fusion extension and B4 bounded voxel audit | Complete |
 | B6 Surface Workbench and runtime-only 3-D viewer | Complete |
+| S7 DEM-registration extension and B7 robust DEM registration | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -189,8 +190,8 @@ A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5/A6 global constant-OPK network solving and the multi-image
 synthetic acceptance matrix and P0/P1 precision validation are also complete.
-The next ordered work is the S7/B7 DEM SDK and registration pack, followed by
-explicit B8 DEM-derived correction application, the mathematical
+The next ordered work is explicit B8 DEM-derived correction application,
+followed by the mathematical
 specification, and C++/CUDA work in the explicit dependency order recorded
 there.
 
@@ -319,13 +320,26 @@ voxel results remain diagnostic/research products. See
 
 B6 is complete. `ProjectionSurfaceProductCatalog` strictly adapts B5 raw and
 authoritative points, S6 fused/voxel outputs, optional mesh/grid products, and
-future DEM/registered placeholders without runtime handles. A headless model
+DEM/registered placeholders without runtime handles. A headless model
 owns portable selection state, product statistics, relative work/memory
 estimates, deterministic color/decimation payloads, and full-source links. The
 separate responsive Workbench provides selection, processing, diagnostics,
 progress, and cancel controls; its lazy 3-D viewer renders and compares
 point/voxel/mesh/grid products, shows selected-only covariance axes, and never
 overwrites the complete result. See `docs/surface_workbench.md`.
+
+S7/B7 is complete. `ProjectionDemGrid` strictly ingests WGS84 grids and DTED2-
+oriented values, makes HAE versus MSL/EGM96 explicit, applies caller/dataset/
+DTED2 accuracy precedence, records Gaussian conversion and shared-cell
+correlation assumptions, and preserves reversible WGS84/ECEF/scene-ENU/project
+transforms. The sealed derivable registration lifecycle, explicit registry,
+direct headless service, robust point-to-normal translation adapter, and
+external-style example produce covariance, coverage, support/rejections,
+residuals, mask sensitivity, datum, ambiguity, persistence, a complete preview,
+and a proposed non-auto-applied `CorrectionSet`. Workbench adapters expose DEM,
+registered, and difference products without changing imagery-only points. The
+23 focused tests include held-out deterministic and Monte Carlo truth audits;
+the full grouped baseline is 691/691. See `docs/dem_registration_sdk.md`.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused
