@@ -21,7 +21,7 @@ As of July 13, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 653/653 tests with zero
+- The latest grouped fresh-class repository suite passes 668/668 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -77,6 +77,7 @@ As of July 13, 2026:
 | B3 pairwise point covariance and conditioning | Complete |
 | B5 dense multi-view association and robust multi-ray solve | Complete |
 | S6 surface-fusion extension and B4 bounded voxel audit | Complete |
+| B6 Surface Workbench and runtime-only 3-D viewer | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -188,8 +189,8 @@ A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5/A6 global constant-OPK network solving and the multi-image
 synthetic acceptance matrix and P0/P1 precision validation are also complete.
-The next ordered work is B6 Surface Workbench, followed by the DEM SDK and
-registration packs, the mathematical
+The next ordered work is the S7/B7 DEM SDK and registration pack, followed by
+explicit B8 DEM-derived correction application, the mathematical
 specification, and C++/CUDA work in the explicit dependency order recorded
 there.
 
@@ -315,6 +316,16 @@ hard voxel and `0.2081` m Gaussian at their best scale, all with full fixture
 completeness. The explicit decision abandons authoritative voxel promotion;
 voxel results remain diagnostic/research products. See
 `docs/surface_fusion_sdk.md`.
+
+B6 is complete. `ProjectionSurfaceProductCatalog` strictly adapts B5 raw and
+authoritative points, S6 fused/voxel outputs, optional mesh/grid products, and
+future DEM/registered placeholders without runtime handles. A headless model
+owns portable selection state, product statistics, relative work/memory
+estimates, deterministic color/decimation payloads, and full-source links. The
+separate responsive Workbench provides selection, processing, diagnostics,
+progress, and cancel controls; its lazy 3-D viewer renders and compares
+point/voxel/mesh/grid products, shows selected-only covariance axes, and never
+overwrites the complete result. See `docs/surface_workbench.md`.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused
