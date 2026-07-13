@@ -65,6 +65,7 @@ docs/multi_image_surface_reconstruction_workplan.md Active consolidated multi-im
 docs/software_requirements_specification.md Project-wide normative software requirements
 docs/test_suite_grouping.md       Logical fresh-class suite groups and MCP policy
 docs/precision_inventory_and_long_range_validation.md P0/P1 precision evidence
+docs/dense_matcher_sdk.md          Dense matcher extension and SGM adapter guide
 docs/matlab_sdk_audit.md          Completed MATLAB public/headless API inventory
 docs/project_status.md           Current completion state and outstanding work
 artifacts/backend_evaluation/ Ignored backend evaluation output directory
@@ -86,7 +87,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 585 tests;
+- the latest grouped fresh-class repository validation passes all 594 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate; and
@@ -209,12 +210,23 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 585 passing tests with no failures or incomplete
+fresh-class baseline is 594 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
-`backendSurface`, `viewerUiWorkflows`, and `viewerPerformancePrecision`
-through `runTestGroup` in five separate fresh-class calls; never run the
+`backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
+`viewerPerformancePrecision` through `runTestGroup` in six separate
+fresh-class calls; never run the
 aggregate suite in one MCP call.
 See `docs/test_suite_grouping.md` for ownership and build task details.
+
+## Dense Matcher SDK
+
+`ProjectionDenseMatcher` provides the graphics-independent extension boundary
+for dense correspondence algorithms. Requests/results use stable view identity,
+full-source coordinate maps, explicit observation states, deterministic
+provenance, cancellation, and capability reporting. Matchers are supplied
+through `ProjectionDenseMatcherRegistry`; the repository never scans paths or
+constructs untrusted class names. `ProjectionDenseSgmMatcher` adapts the current
+SGM extractor. See `docs/dense_matcher_sdk.md`.
 
 ## Correction-Result SDK
 

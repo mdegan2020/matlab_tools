@@ -29,10 +29,16 @@ function testBackendSurfaceTask(~)
 runTestGroup("backendSurface");
 end
 
-function testViewerUiWorkflowsTask(~)
-%testViewerUiWorkflowsTask Run viewer UI workflow tests.
+function testViewerAlignmentUiTask(~)
+%testViewerAlignmentUiTask Run viewer alignment and app UI tests.
 
-runTestGroup("viewerUiWorkflows");
+runTestGroup("viewerAlignmentUi");
+end
+
+function testViewerPresentationWorkflowsTask(~)
+%testViewerPresentationWorkflowsTask Run viewer presentation workflows.
+
+runTestGroup("viewerPresentationWorkflows");
 end
 
 function testViewerPerformancePrecisionTask(~)
