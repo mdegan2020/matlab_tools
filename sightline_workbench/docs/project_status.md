@@ -21,7 +21,7 @@ As of July 12, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 601/601 tests with zero
+- The latest grouped fresh-class repository suite passes 609/609 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -72,6 +72,7 @@ As of July 12, 2026:
 | P1 viewer long-range precision validation | Complete |
 | MATLAB SDK S3 dense matcher base/current SGM adapter | Complete |
 | B0 truth-aware SGM audit | Complete |
+| B1 dense pair and sparse-seeded search planning | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -183,8 +184,8 @@ A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5/A6 global constant-OPK network solving and the multi-image
 synthetic acceptance matrix and P0/P1 precision validation are also complete.
-The next ordered work is B1/B2 sparse-seeded classical template matching,
-followed by multi-ray/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work
+The next ordered work is B2 classical template matching, followed by
+multi-ray/fusion/DEM SDKs, the mathematical specification, and C++/CUDA work
 in the explicit dependency order recorded there.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
@@ -266,6 +267,13 @@ records completeness, gross outliers, subpixel disparity and height errors,
 left/right consistency, occlusion behavior, runtime, memory, and GPU fallback.
 The evidence retains SGM for bounded textured well-rectified use but does not
 authorize an automatic `Best` matcher. See `docs/dense_sgm_truth_audit.md`.
+
+B1 is complete. Dense pair scheduling is independent of the alignment graph and
+scores overlap, conditioning, texture, radiometry, visibility, cost, and memory
+with operator overrides and held-out validation-view reporting. Sparse accepted
+observations now produce deterministic regional disparity/direction/depth
+search priors with track provenance, uncertainty widening, explicit unseeded or
+no-support states, and no forced surface. See `docs/dense_search_planning.md`.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused

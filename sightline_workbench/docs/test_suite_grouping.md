@@ -10,12 +10,12 @@ to exactly one group.
 | --- | --- | ---: |
 | `coreGeometryState` | Geometry, identities, state, metadata, caches, and non-UI controllers | 139 |
 | `alignment` | Sparse matching/filtering, track and graph logic, global network solving, synthetic acceptance, and correction SDK | 165 |
-| `backendSurface` | Backend jobs/rendering, dense matcher SDK/audit, dense surface, synthetic truth, inverse warp, and raster paths | 148 |
+| `backendSurface` | Backend jobs/rendering, dense matcher/search/audit, dense surface, synthetic truth, inverse warp, and raster paths | 156 |
 | `viewerAlignmentUi` | Viewer alignment, active-pair, and general app interaction | 70 |
 | `viewerPresentationWorkflows` | Viewer motion, framing, harness, and stereo workflows | 46 |
 | `viewerPerformancePrecision` | Viewer performance evidence and long-range precision | 33 |
 
-The validated July 13, 2026 baseline is 601/601 with zero failures and zero
+The validated July 13, 2026 baseline is 609/609 with zero failures and zero
 incomplete tests.
 
 The viewer suite is intentionally subdivided. A combined viewer/UI/
