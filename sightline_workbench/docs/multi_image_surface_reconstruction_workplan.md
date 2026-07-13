@@ -9,9 +9,9 @@ is also complete. Both A4 track/path-consistency and explainable quality
 pair-graph packs, A5 global constant-OPK network solve, A6 pass-aware priors,
 the multi-image synthetic acceptance matrix, P0/P1 precision validation, S3
 dense matcher SDK/current-SGM adapter, B0 truth-aware SGM audit, and B1 dense
-pair/search planning, B2 classical template matching, and B3 pairwise point
-covariance are complete. The current grouped fresh-class repository suite
-passes 625/625 tests. This
+pair/search planning, B2 classical template matching, B3 pairwise point
+covariance, and B5 dense multi-view reconstruction are complete. The current
+grouped fresh-class repository suite passes 638/638 tests. This
 `/private/tmp` file is
 the editing master; the synchronized committed copy is the implementation
 source of truth. Only explicitly dispatched packs are active implementation
@@ -1414,9 +1414,11 @@ These trees are coordinated but should remain separately reviewable.
 5. **B4 — Volumetric fusion research spike.** Compare sparse voxel occupancy,
    uncertainty-weighted splats, and direct multi-ray reconstruction on bounded
    truth-aware ROIs.
-6. **B5 — Dense multi-view association and multi-ray solve.** Fuse observations
-   before surface formation, retaining any useful volumetric representation as
-   an optional product or auxiliary objective.
+6. **B5 — Dense multi-view association and multi-ray solve — complete.** Stable
+   full-source observations form deterministic conflict-safe tracks; unique
+   view/pass evidence drives robust multi-ray points with rejected-ray,
+   conditioning, radiometry, visibility, covariance, two-view, competing-mode,
+   raw-pair provenance, and MAT/compact-JSON records.
 7. **B6 — Surface Workbench and 3-D viewer.** Inspect raw, fused, uncertain, and
    derived products without cluttering the main viewer.
 8. **B7 — DEM registration.** Add uncertainty-weighted robust alignment while
@@ -1496,7 +1498,7 @@ These trees are coordinated but should remain separately reviewable.
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
 complete. The ordered implementation queue is:
 
-1. Preserve the current grouped fresh-class baseline, now 625/625 after B3.
+1. Preserve the current grouped fresh-class baseline, now 638/638 after B5.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
@@ -1512,7 +1514,7 @@ complete. The ordered implementation queue is:
 14. B0 truth-aware SGM audit — complete.
 15. B1 sparse-seeded dense pair/search planning and B2 classical template
     matcher — complete.
-16. B3/B5 multi-ray reconstruction and initial uncertainty.
+16. B3/B5 multi-ray reconstruction and initial uncertainty — complete.
 17. S6/B4 surface-fusion SDK and bounded voxel spike.
 18. B6 Surface Workbench.
 19. S7/B7 DEM ingestion, uncertainty, registration, preview translation.

@@ -6,7 +6,7 @@ should not be mistaken for unfinished implementation.
 
 ## Current Baseline
 
-As of July 12, 2026:
+As of July 13, 2026:
 
 - The project directory and main application title are `sightline_workbench`
   and **Sightline Workbench**.
@@ -21,7 +21,7 @@ As of July 12, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 625/625 tests with zero
+- The latest grouped fresh-class repository suite passes 638/638 tests with zero
   failures and zero incomplete tests.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
@@ -75,6 +75,7 @@ As of July 12, 2026:
 | B1 dense pair and sparse-seeded search planning | Complete |
 | B2 classical dense template matcher | Complete |
 | B3 pairwise point covariance and conditioning | Complete |
+| B5 dense multi-view association and robust multi-ray solve | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -186,9 +187,10 @@ A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
 complete. A5/A6 global constant-OPK network solving and the multi-image
 synthetic acceptance matrix and P0/P1 precision validation are also complete.
-The next ordered work is B5 dense multi-ray association,
-followed by fusion/DEM SDKs, the mathematical specification, and C++/CUDA work
-in the explicit dependency order recorded there.
+The next ordered work is S6/B4 surface-fusion SDK and bounded voxel evidence,
+followed by the Surface Workbench, fusion/DEM SDKs, the mathematical
+specification, and C++/CUDA work in the explicit dependency order recorded
+there.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
 immutable history, viewer integration, callback safeguards, and legacy
@@ -289,6 +291,16 @@ separation, angle/conditioning, and provisional points while central numerical
 Jacobians propagate full-source localization and correlated ray-state geometry
 uncertainty into symmetric world-frame covariance. Missing or weak covariance
 is explicitly unavailable/unreliable. See `docs/pairwise_point_covariance.md`.
+
+B5 is complete. Stable view-qualified observations are associated before
+surface formation with explicit quality, forward-geometry, visibility, and
+duplicate-view conflict reasons. The robust multi-ray point set counts unique
+views and equalized pass evidence rather than pair multiplicity, rejects
+inconsistent rays, retains labeled two-view tracks, splits supported competing
+depth modes, and reports complete contributor, residual, conditioning,
+radiometry, visibility, and assumed/unavailable covariance provenance. Full MAT
+plus compact JSON persistence is available. See
+`docs/dense_multi_view_reconstruction.md`.
 
 The worker is also authorized to continue through subsequent ordered green
 packs without waiting after each commit. Each pack still requires focused
