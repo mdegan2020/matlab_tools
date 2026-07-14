@@ -19,18 +19,19 @@ and public MATLAB/native geometry fixture are complete on macOS; native
 Windows/WSL, Ceres, MATLAB/MEX, and CUDA evidence remain explicitly unclaimed.
 A7 remains research-only; production application is still gated on
 physical local observability and stability. The current grouped fresh-class
-repository suite passes 719/719 tests. This
-`/private/tmp` file is
-the editing master; the synchronized committed copy is the implementation
-source of truth. Only explicitly dispatched packs are active implementation
-work, and hardware/evidence gates remain explicit.
+repository suite passes 719/719 tests. This committed file is the consolidated
+implementation source of truth; no `/private/tmp` planning copy is
+authoritative. The active top-priority corrective queue is
+`docs/real_data_validation_followup_workpack.md`, which precedes independent D2
+work and reserves its first pack for the current operator findings.
+Hardware/evidence gates remain explicit.
 
 ## 1. Purpose
 
-Sightline Workbench already supports multiple image layers, pair-oriented
-alignment operations, stereo presentation, a global alignment foundation, and
-an exploratory two-view dense surface. The next product-level step is to make
-the multi-image model explicit and coherent across:
+At this plan's inception, Sightline Workbench supported multiple image layers,
+pair-oriented alignment operations, stereo presentation, a global alignment
+foundation, and an exploratory two-view dense surface. The product-level goal
+was to make the multi-image model explicit and coherent across:
 
 - same-pass and independent-pass collections;
 - pairwise inspection and correspondence generation;
@@ -1535,7 +1536,11 @@ These trees are coordinated but should remain separately reviewable.
 ## 19. Dependency And Recommended Order
 
 The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
-complete. The ordered implementation queue is:
+complete. The following list is the historical implementation record and
+remaining native/hardware order. Before independent D2 work, complete the
+top-priority corrective queue in
+`docs/real_data_validation_followup_workpack.md` after the pending operator
+findings are incorporated:
 
 1. Preserve the current grouped fresh-class baseline, now 719/719 after the D0
    portable native foundation.
@@ -1588,8 +1593,7 @@ queue without requesting permission after each green pack. For every coherent
 pack, it shall inspect current state, implement only the ordered scope, run
 focused tests and checkcode, run every logical fresh-class suite group through
 separate MATLAB MCP calls, update directly relevant documentation, commit,
-push, confirm a
-clean worktree, and proceed to the next item.
+push, confirm a clean worktree, and proceed to the next item.
 
 Pack completion, a clean validation result, or a choice already resolved by
 this workplan/SRS is not a reason to wait. Stop and request direction only for
@@ -1610,8 +1614,10 @@ waiting for the user to run Git.
 
 ## 20. Remaining Evidence, Hardware, And Later-Parameter Gates
 
-No unresolved design question blocks the ordered CPU/MATLAB queue. Remaining
-gates are deliberately resolved by implementation evidence or later user input:
+No unresolved design question blocks independent D2 CPU work. The active
+corrective queue intentionally awaits the user's July 13 operator findings so
+they can be ordered at its top before implementation. Other remaining gates are
+deliberately resolved by implementation evidence or later user input:
 
 1. Final numerical thresholds after the recorded precision and truth studies.
 2. Which dense matcher(s) and pair policies survive truth-aware audit.

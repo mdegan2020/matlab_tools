@@ -441,12 +441,15 @@ preview planes, or object ownership.
 | FR-NET-018 | The solver shall initially use interpretable Huber robustification with a physically bounded scale and shall keep parameter priors outside observation robustification. | Approved | T, A |
 | FR-NET-019 | Final robust weights and rejection reasons shall remain inspectable; an advanced Cauchy comparison may be provided without changing the default. | Approved | T |
 | FR-NET-020 | The solver shall diagnose gauge deficiency, rank weakness, disconnected components, bound hits, prior dominance, position-like residual structure, and systematic regional/time/pass residuals. | Approved | T, A |
-| FR-NET-021 | The solver shall report common/differential/effective corrections, before/after residuals by pair/track/pass/region, weak images, components, and leave-one-pair-out sensitivity. | Approved | T, A |
+| FR-NET-021 | The solver shall report common/differential/effective corrections, before/after residuals by pair/track/pass/region, weak images, and components; when leave-one-pair-out sensitivity is requested, it shall report complete, partial, cancelled, failed, or not-requested state explicitly. | Approved | T, A |
 | FR-NET-022 | A disconnected component shall be solved only when it has a valid gauge; otherwise the operation shall stop for that component and explain the deficiency. | Approved | T |
 | FR-NET-023 | Re-match shall create a new ledger generation from current geometry, preserve the prior generation, and invalidate dependent filter/solve state. | Approved | T |
 | FR-NET-024 | Global preview and Apply shall operate atomically across all solved images and shall provide one network-level exact revert. | Approved | T |
 | FR-NET-025 | Editing evidence, gauge, priors, or parameter scope after a solve shall require a new solve and shall not relabel edited numbers as solver output. | Approved | T, I |
 | FR-NET-026 | The system shall provide Single pass, Multiple passes, and Independent views/custom-priors configurations over one solver model. | Approved | T, D |
+| FR-NET-027 | An ordinary interactive network solve shall return and present its primary solution without implicitly requiring one additional full optimization per retained pair; exhaustive sensitivity work shall be explicit, bounded, cancellable, and separately stateful. | Approved | T, A, D |
+| FR-NET-028 | Constant-OPK network optimization shall compile and reuse parameter-independent observation origins, directions, identities, and lookup state for the current geometry generation, with a direct reference path retained for parity. | Approved | T, A |
+| FR-NET-029 | Network solving shall provide bounded-cadence runtime progress and cancellation across primary optimization and optional diagnostics without serializing callbacks or partial optimizer state. | Approved | T, D |
 
 ### 5.8 Time-varying correction
 
@@ -754,6 +757,7 @@ MATLAB/MEX, CUDA, and final dependency selections remain gated and unclaimed.
 | QR-PERF-006 | Representative Windows validation shall cover primarily single-channel 100-150 MP imagery, 1080p and 4K displays, 512 versus 1024 display tiles, and one, two, and four visible layers. | Gated | A |
 | QR-PERF-007 | The provisional display tile side shall remain 1024 until the target Windows evidence supports another default. | Core | A, I |
 | QR-PERF-008 | GPU or CUDA recommendations shall be based on target-hardware measurements including transfer and synchronization cost, not kernel time alone. | Gated | A |
+| QR-PERF-009 | Interactive network-solve reports shall separate primary optimization, residual sampling, observability/covariance, comparison diagnostics, and sensitivity-child work and shall expose bounded work counts in addition to elapsed time. | Approved | T, A, I |
 
 ### 6.4 Reliability and recovery
 
@@ -832,15 +836,27 @@ The following gates do not block unrelated CPU/MATLAB requirements:
 1. Representative 100-150 MP Windows viewer testing at 1080p and 4K.
 2. MATLAB-managed GPU and CPU-equivalence testing on a supported Windows NVIDIA
    system.
-3. Required 100 km and stretch min(200 km, geometric horizon) precision tests.
-4. Dense-matcher selection after truth-aware comparison.
-5. Volumetric-fusion retention or abandonment after bounded truth studies.
-6. Time-varying correction density and additional trajectory parameters after
-   observability evidence.
-7. Curved-orbit and independent-pass fixture details after their parameter
-   space is approved.
-8. C++ dependency, toolchain, CUDA, and production-output selection after
-   parity, performance, license, and deployment review.
+3. Native Windows/WSL, Ceres, MATLAB/MEX, and CUDA evidence for the D0-and-later
+   C++ path on the intended target environments.
+
+The following gates from the initial draft have since been resolved and are not
+current external gates:
+
+- P0/P1 completed the required 100 km and stretch
+  `min(200 km, geometric horizon)` precision validation.
+- B0 retained the current SGM implementation for bounded textured,
+  well-rectified use without authorizing an automatic `Best` matcher; B2 added
+  a classical alternative behind the SDK.
+- S6/B4 abandoned authoritative voxel promotion after the bounded truth study;
+  robust multi-ray remains authoritative and voxel output remains diagnostic.
+- A7 completed the bounded time-varying OPK research study. Production
+  application and post density remain gated on physical local observability and
+  stability.
+
+Curved-orbit/independent-pass parameters, automatic dense-matcher promotion,
+production time-varying correction, and final C++ dependency/output choices
+remain later evidence or parameter decisions rather than claims of missing
+repository implementation.
 
 ## 8. Requirements traceability
 
@@ -850,9 +866,9 @@ The following gates do not block unrelated CPU/MATLAB requirements:
 | --- | --- |
 | CON, DEP, DATA-STATE | project_status.md; viewer_development_plan.md |
 | IF-MAT, FR-GEO, DATA-GEO | README.md; viewer_development_plan.md |
-| FR-VIEW, QR-PERF | viewer_development_plan.md; performance_optimization_workplan.md |
+| FR-VIEW, QR-PERF | viewer_development_plan.md; performance_optimization_workplan.md; real_data_validation_followup_workpack.md |
 | FR-PAIR, FR-ALIGN | alignment_workflow_hardening_plan.md |
-| FR-PVIEW, FR-MOTION, FR-NET, FR-TVC | multi_image_surface_reconstruction_workplan.md, Tree A |
+| FR-PVIEW, FR-MOTION, FR-NET, FR-TVC | multi_image_surface_reconstruction_workplan.md, Tree A; real_data_validation_followup_workpack.md |
 | FR-BE, IF-BE | viewer_development_plan.md; performance_optimization_workplan.md |
 | FR-DENSE, FR-SURF, FR-SWB | dense_surface_feature_pack.md; multi_image_surface_reconstruction_workplan.md, Tree B |
 | FR-UNC, FR-DEM | multi_image_surface_reconstruction_workplan.md, sections 11-13 and Tree B |
@@ -953,4 +969,8 @@ C++17 CPU/C ABI/CMake foundation and public geometry fixture are complete on
 macOS; Windows/WSL/Ceres/MEX/CUDA evidence remains gated.
 
 This snapshot is informative and may become stale. project_status.md is the
-authoritative implementation-status record.
+authoritative implementation-status record. The July 13 corrective queue is
+`docs/real_data_validation_followup_workpack.md`; it tracks an open
+`FR-VIEW-022` explicit-plane initial-camera orientation regression and bounded
+multi-image network-solve performance/progress work while reserving its first
+pack for additional operator findings.

@@ -84,8 +84,10 @@ serialized backend alignment.
 After the durable matrix and documentation were finalized, all 15 named
 regressions passed, the alignment-focused suite passed 141/141, and the Pack 8
 fresh repository suite passed 383/383 with no failures or incomplete tests.
-Dense Surface Pack 1 subsequently raised the current repository baseline to
-386/386 without changing the alignment results or acceptance policy.
+Dense Surface Pack 1 subsequently raised the repository baseline to 386/386 at
+that historical checkpoint without changing the alignment results
+or acceptance policy. The maintained repository total is recorded in
+`docs/project_status.md`.
 
 ## Conclusions And Remaining External Gate
 

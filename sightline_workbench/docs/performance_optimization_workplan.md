@@ -11,9 +11,9 @@ expected `15000 x 10000` through `30000 x 20000` source and output sizes.
 
 ## Status
 
-The audit and local measurements are complete. Performance implementation is in
-progress and was explicitly prioritized on July 10, 2026. Viewer Performance
-Packs 0-8 are complete: the app now exposes bounded runtime diagnostics and
+The audit, local measurements, and selected performance implementation are
+complete. Viewer Performance Packs 0-8 are complete: the app now exposes
+bounded runtime diagnostics and
 the repeatable evaluation harness exercises alpha, crosshair, twist, pan,
 slow/fast/reversing LOD-boundary zoom, WASD, and OPK scenarios. Crosshair motion
 is demand-activated and no longer restacks overlay lines during steady pointer
@@ -49,13 +49,16 @@ retains CPU viewer/alignment execution, keeps new backend threading dependent
 on bounded serial streaming, and adds optional capability-checked GPU SGM with
 CPU fallback. Backend Performance Pack 2 now provides bounded serial tiled-TIFF
 output, Pack 3 adds bounded thread submission/consumption, and Pack 4 defines
-output radiometry/precision, and Pack 5 adds file-backed source regions. The
-current fresh-class repository baseline is 416/416 passing tests. See
+output radiometry/precision, and Pack 5 adds file-backed source regions. This
+workstream first reached 416/416 at its historical completion checkpoint. The
+current grouped fresh-class repository baseline is 719/719. See
 `docs/project_status.md` for the concise cross-workstream status.
 
-Use the selected project queue and the backend dependency order in this
-document. Commit each coherent, validated pack separately. Do not push unless
-the user explicitly asks.
+The pack order below is now a completed historical record, not the active
+implementation queue. Current delivery and push authorization are governed by
+`docs/project_status.md`, `docs/real_data_validation_followup_workpack.md`, and
+the consolidated multi-image workplan. Each future corrective pack must still
+remain coherent, separately validated, and independently reviewable.
 
 ## Non-Negotiable Contracts
 
@@ -1728,13 +1731,13 @@ The completed viewer sequence was:
 Viewer Packs 0-8, Backend Packs 0-5, the Viewer Orientation and Anaglyph
 Presentation Pack, and the Alignment Workbench Usability and Offset-Semantics
 Pack, and the Cross-System Acceleration Pass are complete. The remaining
-implementation queue is the approved dense-surface synthetic expansion in
-`docs/dense_surface_synthetic_expansion_plan.md`; required fixture decisions
-are captured in the ignored local configuration. Backend performance packs are
-complete; bounded serial/thread behavior retains CPU equivalence, and optional
-GPU work remains capability-checked. The representative 100-150 MP Windows
-viewer/tile-size matrix remains an external validation gate rather than an
-additional viewer pack.
+performance-era queue item, the approved dense-surface synthetic expansion, is
+also complete. Backend performance packs retain bounded serial/thread CPU
+equivalence, and optional GPU work remains capability-checked. The active
+corrective queue is now `docs/real_data_validation_followup_workpack.md`, which
+includes bounded multi-image network-solve cost and progress. The representative
+100-150 MP Windows viewer/tile-size matrix remains an external validation gate
+rather than an additional viewer pack.
 
 Do not mix the viewer quick wins and backend renderer rewrite into one commit.
 Each pack should remain independently reviewable, validated, and reversible.

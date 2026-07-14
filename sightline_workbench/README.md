@@ -76,7 +76,9 @@ docs/dense_surface_synthetic_expansion_plan.md Completed truth-aware synthetic f
 docs/cross_system_acceleration_report.md Cross-system CPU/thread/GPU decision record
 docs/performance_optimization_workplan.md Viewer/backend optimization packs
 docs/multi_image_surface_reconstruction_workplan.md Active consolidated multi-image/SDK/surface roadmap
+docs/real_data_validation_followup_workpack.md Active real-data regression/performance corrective queue
 docs/software_requirements_specification.md Project-wide normative software requirements
+docs/architecture_concept_recommendations.md Non-authoritative future architecture concept record
 docs/test_suite_grouping.md       Logical fresh-class suite groups and MCP policy
 docs/time_varying_opk_research.md A7 model, audit, SDK gate, and decision
 docs/mathematical_reference/    C0/C1/C3 notation, IEEEtran source, and build
@@ -116,7 +118,13 @@ The current implementation baseline is summarized in
 - the latest grouped fresh-class repository validation passes all 719 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
-  are explicitly adopted as an automated gate; and
+  are explicitly adopted as an automated gate;
+- the MATLAB multi-image/dense/SDK workstream is complete through A7, B8, S7,
+  P1, and C3, and the portable native D0 foundation is complete on macOS;
+- the active top-priority corrective queue is
+  `docs/real_data_validation_followup_workpack.md`, which is awaiting the
+  current operator-test findings and already records the explicit-plane camera
+  orientation regression and bounded network-solve work; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -843,8 +851,12 @@ Core controls:
   to one estimated IFOV per key press; kappa defaults to 0.1 degrees.
 - Save and Load write/read a human-readable JSON viewer state containing camera,
   layer, alpha, blend, projection offset, OPK, tip, tilt, and twist settings.
-- Twist spans `+/-85` degrees. Real-data default camera orientation makes an
-  explicitly supplied oblique plane appear naturally upright. For exactly two
+- Twist spans `+/-85` degrees. The intended real-data default is for an
+  explicitly supplied oblique plane to appear naturally upright. A current
+  regression can choose the opposite display-up sign for some caller-supplied
+  planes; a disposable-copy sign reversal corrected several user datasets, and
+  the convention-level fix is tracked in
+  `docs/real_data_validation_followup_workpack.md`. For exactly two
   visible anaglyph layers, the current-view sensor baseline assigns the left
   eye to red and updates that assignment after twist. The presentation submenu
   provides brighter display-only stereo separation and screen-depth controls;
@@ -862,9 +874,14 @@ Core controls:
   the explicit Match, Filter, Solve, Preview, Apply, Revert, and Clear stages.
   Match stops after deterministic feature matching and reports raw observations;
   Filter is a distinct action that applies geometric, optional coplanarity, and
-  ROI filtering. Solve reuses the stored filtered matches and reports residual/OPK
-  summaries in the status text, including warnings when corrections hit OPK
-  bounds. Fewer than three observations in any enabled pair is a hard failure;
+  ROI filtering. Solve reuses the stored filtered matches. Large all-visible
+  networks can currently spend substantial time in
+  default leave-one-pair-out sensitivity solves after the primary optimization;
+  bounded diagnostic policy, cached observation evidence, and progress/cancel
+  reporting are tracked in `docs/real_data_validation_followup_workpack.md`.
+  Completed solves report residual/OPK summaries in the status text, including
+  warnings when corrections hit OPK bounds. Fewer than three observations in
+  any enabled pair is a hard failure;
   three through nine is a visible low-confidence warning but remains
   previewable; ten is preferred. Bound hits and insufficient forward-ray 3D
   residual improvement are hard failures with Preview/Apply/Revert disabled.

@@ -539,8 +539,10 @@ buildtool test
 
 The current suite exercises pure geometry, scene construction, sparse geometry,
 mesh building, readback, layer workflows, state serialization, and app
-interactions. The current fresh-class baseline is 416/416 passing tests with no
-failures or incomplete tests.
+interactions. The viewer plan first reached 416/416 at its historical completion
+checkpoint. The current grouped fresh-class repository baseline is 719/719 with
+no failures or incomplete tests; see `docs/project_status.md` and
+`docs/test_suite_grouping.md` for the maintained total and group counts.
 
 ## Backend Processor Work Plan
 
@@ -1164,7 +1166,7 @@ Feedback checkpoint:
 - Decide which operator controls are genuinely useful after the automatic path
   has been exercised on real data.
 
-## Active Roadmap For Discussion
+## Current Roadmap And Follow-Up
 
 The backend and auto-alignment feature trees, Viewer Orientation and Anaglyph
 Presentation Pack, and Alignment Workbench Usability and Offset-Semantics Pack
@@ -1172,12 +1174,14 @@ are implemented. The Cross-System Acceleration Pass is also complete. The
 Multi-Image Foundation MI-0 through MI-3 are complete, including stable view
 metadata, the runtime pair controller, active/Solo pair Workbench controls, and
 role/order-independent stereo-eye assignment with hysteresis and manual reset.
-The remaining queue is:
-
-1. The approved dense-surface synthetic expansion milestones in
-   `docs/dense_surface_synthetic_expansion_plan.md`. Required fixture decisions
-   are captured privately; implementation begins with configuration validation
-   and geometry feasibility.
+The dense-surface synthetic expansion, MATLAB multi-image/SDK/dense work through
+A7/B8/S7, mathematical reference C0-C3, precision P0/P1, and native D0
+foundation are also complete. The active top-priority corrective queue is
+`docs/real_data_validation_followup_workpack.md`; it awaits the current operator
+findings and already records the explicit-plane initial-camera orientation
+regression and bounded five-image network-solve work. Independent native D2 is
+the next roadmap stage after that corrective queue. Target-Windows viewer/GPU
+work remains hardware-gated.
 
 The items below remain broader design topics to prioritize with user guidance.
 
@@ -1207,6 +1211,12 @@ than an approved pack queue. See
 `docs/alignment_workflow_hardening_plan.md`,
 `docs/alignment_reliability_validation_report.md`, and
 `docs/dense_surface_feature_pack.md`.
+
+Current real-data testing has additionally exposed an implicit-camera up-vector
+sign regression for some explicit oblique planes and unbounded cost/progress in
+large all-visible global solves. These are corrective implementation items in
+`docs/real_data_validation_followup_workpack.md`, not a reopening of the
+completed reliability tree.
 
 ### Preview/Exact Comparison Mode
 

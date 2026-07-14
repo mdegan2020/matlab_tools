@@ -5,6 +5,21 @@ multi-image planar-projection scenes. Alignment analysis may use bounded
 single-band working images, but final viewer state and backend rendering always
 retain full source imagery and the ordinary source-ray inverse warp.
 
+## Current corrective advisories
+
+- Some caller-supplied explicit oblique planes can launch with the implicit
+  presentation camera vertically inverted. This is a camera-up sign regression,
+  not evidence that the plane, source rays, or imagery should be modified. A
+  convention-level fix is queued in
+  `docs/real_data_validation_followup_workpack.md`; a caller-supplied camera pose
+  remains the non-mutating workaround when available.
+- A visible-layer, all-plausible network can run one primary optimization plus
+  one leave-one-pair-out child solve per retained pair, with limited progress
+  feedback. Until the queued bounded-diagnostic fix is complete, prefer a
+  smaller explainable pair budget for interactive review and reserve exhaustive
+  sensitivity evidence for an unattended run. Cancellation must be treated as
+  leaving the prior scene/correction state authoritative.
+
 ## Recommended workflow
 
 1. Load the scene, set a useful projection plane, and make the layers to align

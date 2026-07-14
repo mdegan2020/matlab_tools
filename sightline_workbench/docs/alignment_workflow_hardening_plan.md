@@ -9,6 +9,12 @@ alignment acceptance fixture. Later air-gapped real-data observations may
 adjust individual metrics, but a repository-accessible real-data corpus is not
 expected.
 
+July 13 real-data follow-up exposed an explicit-plane initial-camera
+orientation regression and unbounded cost/progress for a large five-image
+network solve. Corrective implementation is tracked separately in
+`docs/real_data_validation_followup_workpack.md`; the completed reliability
+packs remain the historical design and regression baseline.
+
 At plan inception, the auto-alignment pipeline was fast enough to run on large
 real imagery after the matched-ray solver optimization, but the default
 workflow could still produce implausible OPK corrections when bad feature
@@ -1354,8 +1360,9 @@ may route them into backend output.
   result. All 15 named matrix regressions pass, the alignment-focused suite
   passes 141 tests, and Pack 8 final validation passes all 383 tests after
   `close all force; clear all; clear classes; rehash; results = runTests;`.
-  Dense Surface Pack 1 subsequently raised the current full repository baseline
-  to 386/386 passing tests without changing alignment semantics.
+  Dense Surface Pack 1 subsequently raised the full repository baseline to
+  386/386 at that historical checkpoint without changing alignment semantics.
+  The maintained repository total is recorded in `docs/project_status.md`.
 
 ## Completed Implementation Order
 

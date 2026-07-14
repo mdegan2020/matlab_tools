@@ -23,6 +23,10 @@ As of July 13, 2026:
   become backend radiometric inputs.
 - The latest grouped fresh-class repository suite passes 719/719 tests with zero
   failures and zero incomplete tests.
+- `docs/real_data_validation_followup_workpack.md` is the active top-priority
+  corrective queue. It reserves its first pack for the user's July 13 real-data
+  test findings and already records the explicit-plane initial-camera
+  orientation regression and unbounded five-image network-solve cost.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
   existing viewer launch signature and legacy `LayerId` contracts.
@@ -100,10 +104,14 @@ visibility, differential surface reuse, bounded runtime caches/pools, targeted
 geometry invalidation, coalesced alpha rendering, lazy UI/pyramid storage,
 scalar single-band textures, and the decision to keep raster preview optional.
 The completed orientation/anaglyph pack extends twist to `+/-85` degrees,
-orients explicit oblique real-data planes naturally upright, assigns the
-left-eye layer to red from the current-view sensor baseline, brightens the
-preview, and provides runtime-only separation/depth controls without rebuilding
-projection geometry or changing serialized/backend state.
+assigns the left-eye layer to red from the current-view sensor baseline,
+brightens the preview, and provides runtime-only separation/depth controls
+without rebuilding projection geometry or changing serialized/backend state.
+A later real-data regression report shows that the implicit initial camera for
+some caller-supplied oblique planes uses the opposite display-up sign. Negating
+the localized `desiredUp` value corrected several disposable-copy trials, but
+the repository fix remains open pending a convention-level regression test;
+see `docs/real_data_validation_followup_workpack.md`.
 
 The completed Alignment Workbench usability pack groups controls into Setup,
 Filter/Solve Settings, Staged Workflow/Review, Pair Schedule, Match Ledger, and
@@ -190,8 +198,13 @@ contract while the legacy runner retains automatic safe apply compatibility.
 
 The completed read-only MATLAB SDK entry-point inventory, proposed reuse points,
 and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The
-approved consolidated implementation queue is now
-`docs/multi_image_surface_reconstruction_workplan.md`. MI-0 through MI-3, A2
+consolidated product roadmap remains
+`docs/multi_image_surface_reconstruction_workplan.md`; its completed and gated
+items are preserved there. The active corrective queue is now
+`docs/real_data_validation_followup_workpack.md`, ahead of independent D2 work.
+Its RD-0 slot awaits the user's July 13 test findings; RD-1 records the
+explicit-plane camera-up regression and RD-2 records bounded network-solve
+performance/progress work. MI-0 through MI-3, A2
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
 A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
@@ -496,7 +509,9 @@ hardware-gated:
 - degraded or interrupted GNSS, precision/differential GNSS, explicit
   gimbal/boresight/mounting errors, and independent repeat-pass error draws;
 - piecewise-linear and true curved target-orbit collection trajectories;
-- per-column or smoothly posted time-varying OPK correction;
+- production application of per-column or smoothly posted time-varying OPK
+  correction after the completed A7 research passes physical observability and
+  stability gates;
 - a production preview/exact/difference/flicker comparison view;
 - sensor-specific geometry ingestion beyond
   `ProjectionSourceGeometry.fromGrid`;
@@ -510,7 +525,7 @@ hardware-gated:
   `PlanarProjection.intersectPlane` and
   `PlanarProjection.triangulateRays` APIs; and
 - custom GPU kernels, only if profiling shows a bottleneck not addressed by
-  CPU tiling, thread execution, and MATLAB-managed GPU operations; and
+  CPU tiling, thread execution, and MATLAB-managed GPU operations;
 - later C++ stages beyond the completed portable D0 foundation and eventual
   NITF output; current prototyping may keep all inputs/outputs in memory and
   perform one final TIFF/PNG write.
@@ -520,12 +535,14 @@ hardware-gated:
 - `docs/software_requirements_specification.md` — project-wide normative
   product, interface, scientific-integrity, quality, and verification
   requirements. It does not replace the ordered workplan or this status index.
-- `docs/multi_image_surface_reconstruction_workplan.md` — active ordered
+- `docs/multi_image_surface_reconstruction_workplan.md` — consolidated
   multi-image viewer/alignment, MATLAB SDK, dense reconstruction, uncertainty,
-  DEM registration, precision, mathematical-specification, CUDA, and C++ plan.
+  DEM registration, precision, mathematical-specification, CUDA, and C++
+  roadmap; most MATLAB trees and D0 are complete.
+- `docs/real_data_validation_followup_workpack.md` — active top-priority
+  corrective queue and intake point for the current real-data findings.
 - `docs/matlab_sdk_audit.md` — completed inventory of current public/headless
   entry points, reuse candidates, and compatibility risks feeding the SDK plan.
-
 - `docs/viewer_development_plan.md` — architecture, historical viewer/backend
   milestones, and broader roadmap topics.
 - `docs/alignment_workflow_hardening_plan.md` — completed alignment design and
@@ -544,3 +561,7 @@ hardware-gated:
 - `docs/dense_surface_synthetic_acceptance_thresholds.md` — proposed primary
   fixture gates derived from the first repeatable evidence package.
 - `docs/alignment_operator_guide.md` — current staged operator workflow.
+- `docs/architecture_concept_recommendations.md` — non-authoritative future
+  architecture concept record; promotion requires an SRS/workplan gate.
+- `docs/cpp_backend_d0.md` — completed portable native-foundation boundary,
+  dependency evidence, and explicitly unclaimed target-host validation.
