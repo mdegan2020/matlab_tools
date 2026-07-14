@@ -1,9 +1,8 @@
 # Real-Data Validation Follow-Up Workpack
 
-Status: active July 14, 2026. RD-2, RD-3, RD-1, RD-4, RD-5, and RD-6 are
-complete in the recorded execution order. RD-7 is the approved next corrective
-release gate and takes priority over independent D2 native CPU work;
-hardware-gated GPU work remains external.
+Status: complete July 14, 2026. RD-2, RD-3, RD-1, RD-4, RD-5, RD-6, and RD-7
+are complete in the recorded execution order. Independent D2 native CPU work
+may resume; hardware-gated GPU work remains external.
 
 ## Purpose
 
@@ -762,9 +761,9 @@ reports zero issues for every changed MATLAB source, test, and manifest file.
 
 ### RD-7 — Real-Data Regression, Alignment Measurement, And Multi-View Surface Corrections
 
-Status: implementation in progress July 14, 2026. RD-7A, RD-7B, RD-7C, and
-RD-7G are implemented and validated as the first coherent slice; RD-7D through
-RD-7F remain before the integrated release claim.
+Status: complete July 14, 2026. RD-7A/B/C/G were delivered as the first
+coherent slice; RD-7D/E/F complete the integrated measurement/performance
+release gate.
 
 RD-7 incorporates the complete operator report beginning with the July 14
 five-view presentation/alignment regression report and all subsequent design
@@ -988,6 +987,18 @@ multi-ray result.
 
 #### RD-7D — Analysis-safe source pyramid and bounded working-image rendering
 
+Implementation status: complete July 14, 2026. The alignment-only
+`ProjectionAnalysisSourceCache` selects the power-of-two source level
+immediately finer than the measured source-to-working footprint, reads only
+the configured native band, reduces invalid-aware radiometry by normalized
+antialiased convolution, and materializes large regions in bounded aligned
+chunks. Its identity covers geometry/source revision, path or memory
+generation, size/class, band, validity and radiometric policy, level, region,
+and reduction version. Pair outputs retain the original continuous source
+maps and report plan/read/reduction/inverse-map/resample/validity/cache work.
+Repeated pair sides reuse immutable entries; display textures and camera LOD
+are absent from the path.
+
 1. Factor the raw antialiased source-level generator out of the display-only
    contract into an immutable source-radiometric pyramid/cache service. Display
    may convert those values into presentation textures; alignment consumes the
@@ -1033,6 +1044,17 @@ and that output work is bounded by selected LOD/region rather than repeated
 full-source materialization.
 
 #### RD-7E — Coarse discovery, full-source refinement, and diverse evidence
+
+Implementation status: complete July 14, 2026. Fast and Quality start at 256
+and 512 detector candidates per pair side. Overlap-aware aspect quotas spread
+strong candidates before descriptors. After cheap filtering, bounded native
+patch ZNCC refinement returns continuous source coordinates, explicit weak/
+ambiguous/border/geometry states, subpixel curvature uncertainty, and
+reprojected plane coordinates; physical filters are recomputed from those
+values. Final selection balances both source frames, margins/interior, stable
+record identity, and an information-normal proxy, caps ordinary evidence at
+64 records per pair, preserves component edges, and marks unused full-ledger
+records `spatialRedundancy`.
 
 1. Declare 512/768 feature matching a coarse correspondence-discovery stage,
    not the final measurement supplied to the precision OPK solve.
@@ -1094,6 +1116,17 @@ smaller solve subset reproduces the full eligible solution within a declared
 uncertainty-based tolerance while materially reducing work.
 
 #### RD-7F — End-to-end alignment performance and work accounting
+
+Implementation status: complete July 14, 2026. The non-private five-view
+structural fixture now begins with 2,000 eligible pair observations and proves
+that only 640 reach the ten-pair optimizer while all 2,000 remain auditable.
+The selected compiled-evidence/semi-analytic path preserves reference-path
+correction, residual, robust-weight, gauge, and covariance parity. Runtime
+diagnostics count pair/pair-side renders, source reads/pixels/bytes, pyramid
+and cache work, detected/described/matched/filtered/refined/selected/track-
+unique observations, ray sampling, residual/Jacobian evaluations, iterations,
+and bounded sensitivity children. Progress and cancellation cover source
+refinement as well as optimization; correctness has no wall-clock threshold.
 
 1. Add an instrumented non-private five-view workflow that covers working-image
    planning/rendering, feature preparation/detection/description, matching,
@@ -1222,6 +1255,13 @@ Apply, second-generation Apply, and exact Revert lineage.
   test group in a separate fresh-class MATLAB MCP call. Complete all six groups
   before the final RD-7 completion claim, then update operator/reference docs,
   commit, push, and confirm a clean worktree.
+
+Final integrated validation evidence: MATLAB Code Analyzer reports zero issues
+in all 18 changed MATLAB source/test files. Fresh-class groups pass
+`coreGeometryState` 147/147, `alignment` 188/188, `backendSurface` 248/248,
+`viewerAlignmentUi` 77/77, `viewerPresentationWorkflows` 73/73, and
+`viewerPerformancePrecision` 34/34, totaling 767/767 with zero failures or
+incomplete tests.
 
 ## Likely Code And Test Touchpoints
 

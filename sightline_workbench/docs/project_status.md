@@ -21,7 +21,7 @@ As of July 14, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 765/765 tests with
+- The latest grouped fresh-class repository suite passes 767/767 tests with
   zero failures and zero incomplete tests.
 - `docs/real_data_validation_followup_workpack.md` is the active top-priority
   corrective queue. RD-2, RD-3, RD-1, and RD-4 are complete: the default network
@@ -38,9 +38,9 @@ As of July 14, 2026:
   plane-normal height, physical-eye marks, bounded controls, and explicit
   invalid states. RD-7A/B/C/G now correct presentation visibility/order,
   Alignment Workbench persistence/status, multi-image Surface Workbench launch,
-  and reviewable correction actionability. RD-7D/E/F analysis pyramids,
-  full-source refinement/evidence selection, and end-to-end work accounting
-  remain before independent D2 native CPU work resumes.
+  reviewable correction actionability, analysis-safe source levels,
+  full-source refinement/diverse evidence selection, and end-to-end work
+  accounting. RD-7 is complete; independent D2 native CPU work may resume.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
   existing viewer launch signature and legacy `LayerId` contracts.
@@ -113,7 +113,7 @@ As of July 14, 2026:
 | Real-data follow-up RD-7A presentation correctness | Complete |
 | Real-data follow-up RD-7B persistent Alignment Workbench | Complete |
 | Real-data follow-up RD-7C multi-image Surface Workbench launch | Complete |
-| Real-data follow-up RD-7D through RD-7F measurement/performance path | In progress |
+| Real-data follow-up RD-7D through RD-7F measurement/performance path | Complete |
 | Real-data follow-up RD-7G correction actionability | Complete |
 
 The alignment system now includes stable match provenance, current-geometry

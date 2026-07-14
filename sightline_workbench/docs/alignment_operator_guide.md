@@ -63,6 +63,12 @@ plane geometry, OPK, saved scene data, and backend products remain unchanged.
    is wrong. Compare the geometric and optional coplanarity filter, inspect
    invalid endpoints, and use an ROI only when the scene contains a known
    irrelevant or corrupt region.
+   Working-image features are coarse discovery seeds: the solver preparation
+   stage refines eligible survivors in original native-band source patches,
+   recomputes physical filtering, and chooses a spatially diverse bounded
+   subset. The ledger retains unused accepted records with
+   `spatialRedundancy`; this is an audit reason, not a claim that the match is
+   false.
 5. Click **Solve**. Review the correction split, forward-ray RMS, bound status,
    observed rank, and weak modes. Fewer than three matches per enabled pair is
    a hard stop. Three through nine is a visible warning; ten or more is the
@@ -158,7 +164,11 @@ criterion.
 ## Large-image operation
 
 For 100–150 MP primarily single-channel imagery, the main viewport should use
-its display-only tiled pyramid while alignment uses bounded working images.
+its display-only tiled pyramid while alignment uses its separate immutable
+native-radiometric source-level cache. Analysis LOD follows the measured
+source-to-working sampling footprint, not viewport zoom; large reductions are
+materialized in bounded aligned regions with normalized validity, and the
+full-source coordinate map remains authoritative for refinement and rays.
 Keep the provisional 1024-pixel display tile side unless a representative
 Windows benchmark supports changing it. Neither display tiles nor alignment
 working images enter backend output. CPU execution remains required; GPU is

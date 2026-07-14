@@ -33,7 +33,13 @@ classdef ProjectionAlignmentMatchFilter
             filtered.Matches = ensuredMatches;
             matchRecordIndices = cell(1, numel(filtered.Matches));
             for k = 1:numel(filtered.Matches)
-                matchRecordIndices{k} = (1:filtered.Matches(k).Count).';
+                pairMatch = filtered.Matches(k);
+                if isfield(pairMatch, "MatchRecordIndices") && ...
+                        numel(pairMatch.MatchRecordIndices) == pairMatch.Count
+                    matchRecordIndices{k} = pairMatch.MatchRecordIndices(:);
+                else
+                    matchRecordIndices{k} = (1:pairMatch.Count).';
+                end
             end
             [filtered.Matches.MatchRecordIndices] = matchRecordIndices{:};
             pairDiagnostics = cell(1, numel(filtered.Matches));
@@ -105,8 +111,10 @@ classdef ProjectionAlignmentMatchFilter
                             pairMatch, pipeline, keepMask);
                         diagnostics.StageCounts.Radial = nnz(keepMask);
                 end
+                ledgerMask = ProjectionAlignmentMatchFilter.ledgerStageMask( ...
+                    pairMatch, keepMask);
                 pairMatch.MatchLedger = ProjectionAlignmentMatchLedger.applyStage( ...
-                    pairMatch.MatchLedger, stage, keepMask);
+                    pairMatch.MatchLedger, stage, ledgerMask);
             end
 
             pairMatch = ProjectionAlignmentMatchFilter.subsetPair(pairMatch, keepMask);
@@ -335,6 +343,16 @@ classdef ProjectionAlignmentMatchFilter
             pairMatch.Scores = pairMatch.Scores(keepMask, :);
             pairMatch.MatchRecordIndices = ...
                 pairMatch.MatchRecordIndices(keepMask, :);
+            optionalFields = ["RefinementStatus" "RefinementQuality" ...
+                "RefinementPeakMargin" "SourceUncertaintyPixels" ...
+                "RefinementAcceptedMask" "MovingSourceJacobians" ...
+                "ReferenceSourceJacobians"];
+            for field = optionalFields
+                if isfield(pairMatch, field) && ...
+                        size(pairMatch.(field), 1) == numel(keepMask)
+                    pairMatch.(field) = pairMatch.(field)(keepMask, :);
+                end
+            end
             pairMatch.Count = nnz(keepMask);
         end
 
@@ -346,6 +364,12 @@ classdef ProjectionAlignmentMatchFilter
                 pairMatch.MatchRecordIndices = ...
                     pairMatch.MatchRecordIndices(:);
             end
+        end
+
+        function mask = ledgerStageMask(pairMatch, currentMask)
+            mask = reshape([pairMatch.MatchLedger.Accepted], [], 1);
+            indices = pairMatch.MatchRecordIndices(:);
+            mask(indices) = logical(currentMask(:));
         end
 
         function mask = sampleMask(maskImage, locations)

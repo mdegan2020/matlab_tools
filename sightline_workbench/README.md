@@ -25,6 +25,7 @@ src/ProjectionSourceGeometry.m  Sparse source-geometry grid adapter
 src/ProjectionLayerManager.m    Multi-layer visibility and change-workflow helpers
 src/ProjectionMeshBuilder.m     Pure sampled projection mesh builder
 src/ProjectionPreviewPyramid.m  Display-only viewer preview pyramid/tile helper
+src/ProjectionAnalysisSourceCache.m Alignment-only antialiased source-level cache
 src/ProjectionPreviewTileGeometry.m Runtime-only cached tile footprint helper
 src/ProjectionReadbackRenderer.m Headless frame-camera readback prototype
 src/ProjectionViewerApp.m       Programmatic interactive preview app
@@ -116,7 +117,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 765 tests;
+- the latest grouped fresh-class repository validation passes all 767 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate;
@@ -131,8 +132,8 @@ The current implementation baseline is summarized in
   scene-bound dense-surface controls/evidence/recovery, and RD-6's world-space
   stereo cursor are complete; RD-7A/B/C/G presentation, persistent alignment
   session, multi-image Surface Workbench launch, and correction actionability
-  are complete, while RD-7D/E/F measurement and performance work remains
-  before independent D2 native CPU work; and
+  and RD-7D/E/F analysis-safe measurement and bounded performance work are
+  complete before independent D2 native CPU work; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -252,7 +253,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 765 passing tests with no failures or incomplete
+fresh-class baseline is 767 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -904,6 +905,17 @@ Core controls:
   SDK callers may request exhaustive evidence explicitly. Progress,
   cancellation, evaluation counts, timing, and partial/deferred/cancelled
   diagnostic states remain visible.
+  The 512/768 working grids are coarse discovery products. Alignment samples
+  an independently selected antialiased native-band source level, retains
+  continuous full-source row/column maps, refines surviving observations in
+  bounded original-source patches, and records uncertainty. Overlap-aware
+  spatial quotas precede descriptor extraction; a final diversity/information
+  stage supplies at most the configured bounded subset to optimization while
+  the complete ledger records `spatialRedundancy`, refined observations, and
+  alternate evidence. Runtime work accounting separates source reads, pixels,
+  bytes, pyramid/cache work, pair-side renders, feature/match/filter/refinement
+  counts, selected/track-unique evidence, ray/residual/Jacobian work,
+  iterations, and optional diagnostic children.
   Completed solves report residual/OPK summaries in the status text, including
   warnings when corrections hit OPK bounds. Fewer than three observations in
   any enabled pair is a hard failure;
@@ -1345,9 +1357,11 @@ bilinear sampling then reads every registered band from full `layer.Image`.
 `DisplayTexture`, preview pyramids, display tiles, and alignment working images
 are never backend inputs. The former
 `"sparseIntensityScatteredInterpolant"` mode remains available only as an
-explicit backend compatibility reference. Alignment working images use their
-separately selected full-source inverse-warp mode, remain bounded
-alignment-only products, and never enter backend rendering. Run
+explicit backend compatibility reference. Alignment working images use an
+alignment-only native-radiometric source cache with power-of-two antialiasing,
+normalized validity reduction, regional materialization, independent
+source-footprint LOD choice, and authoritative continuous source maps. They
+remain bounded analysis products and never enter backend rendering. Run
 `backend_inverse_warp_evaluation` to
 quantify the backend modes on a deterministic fixture.
 

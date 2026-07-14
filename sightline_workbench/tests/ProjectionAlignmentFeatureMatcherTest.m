@@ -58,6 +58,12 @@ classdef ProjectionAlignmentFeatureMatcherTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(pairMatch.ReferencePlaneCoordinates), "all"));
             testCase.verifyTrue(all(isfinite(pairMatch.MovingSourceRows)));
             testCase.verifyTrue(all(isfinite(pairMatch.ReferenceSourceColumns)));
+            testCase.verifySize(pairMatch.MovingSourceJacobians, ...
+                [pairMatch.Count 4]);
+            testCase.verifySize(pairMatch.ReferenceSourceJacobians, ...
+                [pairMatch.Count 4]);
+            testCase.verifyTrue(all(isfinite( ...
+                pairMatch.MovingSourceJacobians), "all"));
             testCase.verifyNumElements(pairMatch.MatchLedger, pairMatch.Count);
             testCase.verifyNumElements(result.MatchLedger, pairMatch.Count);
         end

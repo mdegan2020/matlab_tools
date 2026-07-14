@@ -290,8 +290,10 @@ classdef ProjectionAlignmentWorkingImageComparison
             end
             summary.Attempted = true;
             try
-                result = ProjectionAlignmentOpkSolver.solve( ...
+                preparation = ProjectionAlignmentSolverPreparation.prepare( ...
                     scene, filtered, alignmentOptions);
+                result = ProjectionAlignmentOpkSolver.solve( ...
+                    scene, preparation.MatchResult, alignmentOptions);
                 summary.Status = result.Status;
                 summary.RmsBefore = result.Diagnostics.RmsBefore;
                 summary.RmsAfter = result.Diagnostics.RmsAfter;

@@ -33,10 +33,22 @@ classdef ProjectionAlignmentRunner
             filteringSeconds = toc(filteringTimer);
 
             solveTimer = tic;
-            result = ProjectionAlignmentOpkSolver.solve( ...
-                scene, filteredMatches, options);
+            solverMatches = filteredMatches;
+            if numel(request.LayerIndices) > 2
+                result = ProjectionAlignmentNetworkSolver.solve( ...
+                    scene, filteredMatches, options);
+            else
+                preparation = ProjectionAlignmentSolverPreparation.prepare( ...
+                    scene, filteredMatches, options);
+                solverMatches = preparation.MatchResult;
+                result = ProjectionAlignmentOpkSolver.solve( ...
+                    scene, solverMatches, options);
+                result = ...
+                    ProjectionAlignmentSolverPreparation.attachDiagnostics( ...
+                    result, preparation, filteredMatches);
+            end
             result = ProjectionAlignmentSafeSolvePolicy.apply( ...
-                result, filteredMatches, options);
+                result, solverMatches, options);
             solveSeconds = toc(solveTimer);
 
             applyTimer = tic;
@@ -87,6 +99,33 @@ classdef ProjectionAlignmentRunner
             result.Diagnostics.Filtering = filteredMatches.Diagnostics;
             result.Diagnostics.ProposedSolution = true;
             result.Diagnostics.Applied = logical(isApplied);
+            work = result.Diagnostics.WorkAccounting;
+            source = workingImages.AnalysisSourceDiagnostics;
+            work.PairRenderCount = numel(workingImages.PairWorkingImages);
+            work.PairSideRenderCount = sum(arrayfun( ...
+                @(pair) numel(pair.LayerImages), ...
+                workingImages.PairWorkingImages));
+            work.SourceReadCount = source.SourceReadCount;
+            work.SourcePixelsRead = source.SourcePixelsRead;
+            work.SourceBytesRead = source.SourceBytesRead;
+            work.SourcePyramidBuildCount = source.PyramidBuildCount;
+            work.SourceCacheHits = source.CacheHits;
+            work.SourceCacheMisses = source.CacheMisses;
+            work.RawFeatureCount = sum( ...
+                matchResult.Diagnostics.DetectedFeatureCounts);
+            work.DescriptorFeatureCount = sum( ...
+                matchResult.Diagnostics.FeatureCounts);
+            work.RawMatchCount = sum([matchResult.Matches.Count]);
+            work.FilteredMatchCount = sum([filteredMatches.Matches.Count]);
+            work.GeometricallyAcceptedMatchCount = work.FilteredMatchCount;
+            if isfield(result.Diagnostics, "Network")
+                work.TrackUniqueObservationCount = ...
+                    result.Diagnostics.Network.Evidence.SelectedRecordCount;
+            else
+                work.TrackUniqueObservationCount = ...
+                    work.SelectedObservationCount;
+            end
+            result.Diagnostics.WorkAccounting = work;
             result = ProjectionAlignmentResult.validate(result);
         end
 
@@ -111,6 +150,8 @@ classdef ProjectionAlignmentRunner
             diagnostics.OutputSize = workingImages.OutputSize;
             diagnostics.Schedule = workingImages.Schedule;
             diagnostics.PairOverlapCounts = [workingImages.PairOverlapMasks.Count];
+            diagnostics.AnalysisSource = ...
+                workingImages.AnalysisSourceDiagnostics;
         end
 
         function validateScene(scene)

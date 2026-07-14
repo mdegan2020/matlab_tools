@@ -2813,14 +2813,23 @@ classdef ProjectionViewerApp < handle
                     ProgressFcn=@(update) ...
                     app.updateAlignmentSolveProgress(update), ...
                     ProgressIntervalSeconds=0.15);
+                runtimeControl.ProgressMonitor = ...
+                    ProjectionAlignmentSolveMonitor(runtimeControl);
                 app.setAlignmentActiveStatus("primaryOptimization", ...
                     "Running primary OPK optimization...");
+                policyMatches = solveMatches;
                 if schedule.Strategy == "qualityGraph"
                     result = ProjectionAlignmentNetworkSolver.solve( ...
                         app.Scene, solveMatches, options, runtimeControl);
                 else
-                    result = ProjectionAlignmentOpkSolver.solve( ...
+                    preparation = ProjectionAlignmentSolverPreparation.prepare( ...
                         app.Scene, solveMatches, options, runtimeControl);
+                    policyMatches = preparation.MatchResult;
+                    result = ProjectionAlignmentOpkSolver.solve( ...
+                        app.Scene, policyMatches, options, runtimeControl);
+                    result = ...
+                        ProjectionAlignmentSolverPreparation.attachDiagnostics( ...
+                        result, preparation, solveMatches);
                 end
                 networkSummary = struct();
                 if isfield(result.Diagnostics, "Network")
@@ -2840,7 +2849,7 @@ classdef ProjectionViewerApp < handle
                 app.setAlignmentActiveStatus("solveDiagnostics", ...
                     "Evaluating solve diagnostics and correction actionability...");
                 result = ProjectionAlignmentSafeSolvePolicy.apply( ...
-                    result, solveMatches, options);
+                    result, policyMatches, options);
                 app.AlignmentSession.storeSolve(result);
                 app.updateAlignmentMatchTable(app.AlignmentFilteredMatchResult, ...
                     result);
@@ -3171,10 +3180,10 @@ classdef ProjectionViewerApp < handle
             preset = app.alignmentPreset();
             switch preset
                 case "quality"
-                    detectorMaxFeatures = 2000;
+                    detectorMaxFeatures = 512;
                     matcherMaxRatio = 0.8;
                 otherwise
-                    detectorMaxFeatures = 1000;
+                    detectorMaxFeatures = 256;
                     matcherMaxRatio = 0.9;
             end
             options = ProjectionAlignmentOptions.validate(struct( ...
