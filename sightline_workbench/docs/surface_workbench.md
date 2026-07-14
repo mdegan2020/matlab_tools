@@ -1,15 +1,19 @@
 # Surface Workbench And 3-D Viewer
 
 B6 provides a separate floating Surface Workbench for inspecting B5 multi-ray
-and S6 fusion products. It does not add controls to the main projection viewer,
-and it does not make graphics state part of any scientific value.
+and S6 fusion products. RD-5 connects that existing product viewer to the
+active scene without making graphics state part of any scientific value. The
+Alignment Workbench now distinguishes the one-click **Selected-pair SGM**
+action from **Surface Workbench...**, which opens or focuses one scene-bound
+Workbench and preselects the active physical pair.
 
-Current boundary: B6 is a programmatic, post-computation inspector. The main
-viewer does not currently launch it, and its processing selectors do not run
-the dense/multi-ray/fusion pipeline. A caller must first construct a completed
-`ProjectionSurfaceProductCatalog` and pass it to the app. Viewer launch wiring,
-scene-bound requests, and an explicit Run/Cancel processing lifecycle are open
-RD-5 corrective work in `real_data_validation_followup_workpack.md`.
+`ProjectionSurfaceWorkbenchRunner` is the graphics-independent execution
+boundary. It consumes fresh pair working images and full-source coordinate/ray
+links prepared by the viewer, uses the public dense-matcher and surface-fusion
+registries, and returns a complete catalog plus portable run evidence. The
+Workbench has an explicit Run/Cancel lifecycle; its processing controls are no
+longer inert selectors. The original programmatic catalog-only constructor
+remains supported for inspection workflows and intentionally disables Run.
 
 ## Product boundary
 
@@ -69,7 +73,10 @@ intact.
 
 ## Floating applications
 
-Construct the catalog, then launch the independent workbench:
+The usual operator path is **Alignment Workbench > Surface Workbench...** after
+accepted alignment evidence has been previewed, applied, or manually adjusted.
+The viewer builds one request per accepted physical pair and binds a runner.
+Programmatic catalog inspection remains available:
 
 ```matlab
 catalog = ProjectionSurfaceProductCatalog.create( ...
@@ -77,14 +84,36 @@ catalog = ProjectionSurfaceProductCatalog.create( ...
 surfaceApp = ProjectionSurfaceWorkbenchApp(catalog);
 ```
 
-The Workbench includes image-network and pass selection, pair/dense/search
-settings, processing/uncertainty/fusion/DEM/output controls, a product table,
-diagnostics, relative cost and memory estimates, progress, cooperative cancel,
-and a lazy **Open 3-D viewer** action. `setProgress`, `requestCancel`, and
-`isCancellationRequested` are runtime hooks suitable for the S6 callback
-contract; they are absent from `modelState`. These controls select and inspect
-catalog/model state; there is currently no GUI Run action or automatic scene
-pipeline orchestration.
+The Workbench includes image-network and pass selection; selected, planned,
+all-plausible, and explicit pair schedules; SGM, classical template, and
+registered custom matchers; geometry-search, consistency, occlusion, CPU/GPU,
+observation-cap, pairwise/multi-ray/fusion, uncertainty, DEM, and output
+controls; a product table; diagnostics; bounded relative cost/memory estimates;
+and a lazy **Open 3-D viewer** action.
+
+Before Run, preflight states the exact views and stable pair IDs, matcher and
+options, rectification state, search bounds, consistency/occlusion policy,
+requested execution path and CPU fallback, processing/fusion stage, bounded
+input size, and observation cap. Run cooperatively accepts cancellation between
+stages and through matcher callbacks. Outcomes distinguish `succeeded`,
+`partial`, `empty`, `cancelled`, `unsupported`, and `failed`; they retain exact
+pair/method/options/fallback provenance and counts for matcher states,
+correspondences, association, reconstructed points, conditioning, fusion, and
+uncertainty availability.
+
+**Open evidence** shows the retained moving/reference analysis images,
+validity/overlap masks, disparity diagnostic, matcher score/confidence,
+ray-separation distribution, and reconstructed-height distribution. MAT export
+retains the complete portable run and intermediate evidence. Compact JSON
+retains metadata, counts, states, policies, and provenance while intentionally
+omitting image-sized evidence arrays. Run state, progress, cancellation,
+figures, callbacks, and evidence windows remain runtime-only.
+
+The initial catalog is a deliberately permissive sparse-bootstrap preview so a
+weak scene can still open for diagnosis. It is not evidence that a dense run
+passed: every actual Run uses the selected matcher and configured association,
+conditioning, reconstruction, and fusion gates. No smoothing, hole filling, or
+forced DEM intersection is used to manufacture a surface.
 
 `ProjectionSurface3DViewer` renders point-cloud, voxel, triangle-mesh, and grid
 representations. It can compare any two available products and color by source
@@ -110,6 +139,18 @@ mesh/grid behavior, statistics/costs, and portable state. It belongs to
 selection/progress/cancel state, point/voxel/mesh/grid rendering, comparison,
 source-link selection, bounded glyphs, full-result preservation, and owned
 window lifecycle. It belongs to `viewerPresentationWorkflows`.
+
+`ProjectionSurfaceWorkbenchRunnerTest` covers exact preflight/fallback,
+scene-bound Run/Cancel, SGM/template/custom matcher identity, retained evidence,
+explicit failure states, catalog replacement/export, explicit scheduling, and
+a deterministic five-image/all-ten-pair multi-ray/fusion run. Existing dense
+truth and fusion audits remain the numerical truth owners. The runner test
+belongs to `backendSurface`.
+
+Representative private imagery remains the external operator-acceptance gate
+for calling the output practically useful; the repository claims structural,
+provenance, lifecycle, and synthetic-truth coverage, not universal real-image
+quality.
 
 Run the six authoritative fresh-class groups in separate MATLAB MCP calls as
 documented in `test_suite_grouping.md`; never use the aggregate suite in one

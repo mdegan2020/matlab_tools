@@ -3,12 +3,18 @@ classdef ProjectionSurfaceWorkbenchApp < handle
 
     properties (Access = private)
         Model ProjectionSurfaceWorkbenchModel
+        Runner
         UIFigure matlab.ui.Figure
         GridLayout matlab.ui.container.GridLayout
         NetworkTable matlab.ui.control.Table
         PairScheduleDropDown matlab.ui.control.DropDown
         DenseMethodDropDown matlab.ui.control.DropDown
         GeometrySearchDropDown matlab.ui.control.DropDown
+        ExecutionPathDropDown matlab.ui.control.DropDown
+        ConsistencyDropDown matlab.ui.control.DropDown
+        OcclusionDropDown matlab.ui.control.DropDown
+        MaximumObservationsField matlab.ui.control.NumericEditField
+        FusionAlgorithmDropDown matlab.ui.control.DropDown
         StageDropDown matlab.ui.control.DropDown
         UncertaintyField matlab.ui.control.NumericEditField
         FusionDropDown matlab.ui.control.DropDown
@@ -20,21 +26,38 @@ classdef ProjectionSurfaceWorkbenchApp < handle
         StatisticsArea matlab.ui.control.TextArea
         ProgressGauge
         ProgressLabel matlab.ui.control.Label
+        RunButton matlab.ui.control.Button
         CancelButton matlab.ui.control.Button
+        EvidenceButton matlab.ui.control.Button
+        ExportButton matlab.ui.control.Button
         LaunchViewerButton matlab.ui.control.Button
         Viewer ProjectionSurface3DViewer
+        EvidenceFigure
         CancelRequested logical = false
+        IsRunning logical = false
         ProgressFraction double = 0
         ProgressStage string = "idle"
         ProgressMessage string = "Ready"
+        LastPreflight struct = struct()
+        LastRun struct = struct()
     end
 
     methods
-        function app = ProjectionSurfaceWorkbenchApp(catalog, configuration)
+        function app = ProjectionSurfaceWorkbenchApp( ...
+                catalog, configuration, runner)
             %ProjectionSurfaceWorkbenchApp Create a separate floating workbench.
             if nargin < 2
                 configuration = struct();
             end
+            if nargin < 3
+                runner = [];
+            end
+            if ~(isempty(runner) || ...
+                    isa(runner, "ProjectionSurfaceWorkbenchRunner"))
+                error("ProjectionSurfaceWorkbenchApp:invalidRunner", ...
+                    "Runner must be empty or scene-bound surface runner.");
+            end
+            app.Runner = runner;
             app.Model = ProjectionSurfaceWorkbenchModel(catalog, configuration);
             app.createComponents();
             app.syncControls();
@@ -47,6 +70,9 @@ classdef ProjectionSurfaceWorkbenchApp < handle
         function delete(app)
             if ~isempty(app.Viewer) && isvalid(app.Viewer)
                 delete(app.Viewer);
+            end
+            if ~isempty(app.EvidenceFigure) && isvalid(app.EvidenceFigure)
+                delete(app.EvidenceFigure);
             end
             if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
                 app.UIFigure.CloseRequestFcn = [];
@@ -111,6 +137,7 @@ classdef ProjectionSurfaceWorkbenchApp < handle
             app.ProgressLabel.Text = sprintf("%s — %s (%.0f%%)", ...
                 app.ProgressStage, app.ProgressMessage, ...
                 100 * app.ProgressFraction);
+            drawnow limitrate
         end
 
         function requestCancel(app)
@@ -125,12 +152,102 @@ classdef ProjectionSurfaceWorkbenchApp < handle
         function resetCancellation(app)
             %resetCancellation Prepare the runtime UI for a new operation.
             app.CancelRequested = false;
-            app.CancelButton.Enable = "on";
+            app.CancelButton.Enable = app.onOff(app.IsRunning);
         end
 
         function tf = isCancellationRequested(app)
             %isCancellationRequested Runtime callback target for algorithms.
             tf = app.CancelRequested;
+        end
+
+        function report = preflight(app)
+            %preflight Return the exact scene-bound execution proposal.
+            if isempty(app.Runner)
+                error("ProjectionSurfaceWorkbenchApp:noRunner", ...
+                    "This catalog is not bound to executable scene inputs.");
+            end
+            report = app.Runner.preflight(app.Model.state());
+            app.LastPreflight = report;
+            app.refreshDiagnostics();
+        end
+
+        function outcome = runProcessing(app)
+            %runProcessing Execute the configured scene-bound processing run.
+            if isempty(app.Runner)
+                error("ProjectionSurfaceWorkbenchApp:noRunner", ...
+                    "This catalog is not bound to executable scene inputs.");
+            end
+            if app.IsRunning
+                error("ProjectionSurfaceWorkbenchApp:alreadyRunning", ...
+                    "A surface processing run is already active.");
+            end
+            app.IsRunning = true;
+            app.CancelRequested = false;
+            app.closeEvidence();
+            app.RunButton.Enable = "off";
+            app.CancelButton.Enable = "on";
+            cleanup = onCleanup(@() app.finishRun());
+            try
+                app.LastPreflight = app.Runner.preflight(app.Model.state());
+                runtime = struct( ...
+                    ProgressFcn=@(event) app.progressEvent(event), ...
+                    CancellationFcn=@() app.isCancellationRequested());
+                outcome = app.Runner.run(app.Model.state(), runtime);
+                app.LastRun = outcome;
+                if ismember(outcome.Status, ["succeeded" "partial"])
+                    app.closeViewer();
+                    app.Model.replaceCatalog(outcome.Catalog);
+                    app.refreshProductControls();
+                end
+                app.setProgress(app.completedFraction(outcome.Status), ...
+                    outcome.Status, outcome.Message);
+            catch exception
+                outcome = struct(Status="failed", ...
+                    Message=string(exception.message), ...
+                    Identifier=string(exception.identifier), ...
+                    GraphicsStateIncluded=false);
+                app.LastRun = outcome;
+                app.setProgress(0, "failed", exception.message);
+            end
+            clear cleanup
+            app.refreshDiagnostics();
+        end
+
+        function outcome = lastRunResult(app)
+            %lastRunResult Return retained diagnostics and portable evidence.
+            outcome = app.LastRun;
+        end
+
+        function exportRun(app, path)
+            %exportRun Save retained portable run evidence without graphics.
+            if isempty(fieldnames(app.LastRun))
+                error("ProjectionSurfaceWorkbenchApp:noRun", ...
+                    "Run processing before exporting diagnostics.");
+            end
+            path = string(path);
+            if ~isscalar(path) || strlength(path) == 0
+                error("ProjectionSurfaceWorkbenchApp:invalidExportPath", ...
+                    "Export path must be a nonempty string scalar.");
+            end
+            [~, ~, extension] = fileparts(path);
+            extension = lower(string(extension));
+            if extension == ".mat"
+                surfaceWorkbenchRun = app.LastRun;
+                save(path, "surfaceWorkbenchRun", "-mat");
+            elseif extension == ".json"
+                metadata = app.compactRunMetadata();
+                fileId = fopen(path, "w");
+                if fileId < 0
+                    error("ProjectionSurfaceWorkbenchApp:exportFailed", ...
+                        "Unable to open the JSON export path.");
+                end
+                cleanup = onCleanup(@() fclose(fileId));
+                fprintf(fileId, "%s", jsonencode(metadata, PrettyPrint=true));
+                clear cleanup
+            else
+                error("ProjectionSurfaceWorkbenchApp:invalidExportPath", ...
+                    "Run export requires a .mat or .json extension.");
+            end
         end
 
         function diagnostics = diagnostics(app)
@@ -147,6 +264,8 @@ classdef ProjectionSurfaceWorkbenchApp < handle
                 Progress=struct(Fraction=app.ProgressFraction, ...
                 Stage=app.ProgressStage, Message=app.ProgressMessage), ...
                 CancellationRequested=app.CancelRequested, ...
+                IsRunning=app.IsRunning, RunnerBound=~isempty(app.Runner), ...
+                Preflight=app.LastPreflight, LastRun=app.runSummary(), ...
                 ViewerOpen=viewerOpen, GraphicsStateSerialized=false);
         end
 
@@ -156,6 +275,7 @@ classdef ProjectionSurfaceWorkbenchApp < handle
                 NetworkTableTag=string(app.NetworkTable.Tag), ...
                 ProductTableTag=string(app.ProductTable.Tag), ...
                 LaunchViewerTag=string(app.LaunchViewerButton.Tag), ...
+                RunTag=string(app.RunButton.Tag), ...
                 CancelTag=string(app.CancelButton.Tag), ...
                 GridRows=numel(app.GridLayout.RowHeight), ...
                 GridColumns=numel(app.GridLayout.ColumnWidth));
@@ -190,8 +310,9 @@ classdef ProjectionSurfaceWorkbenchApp < handle
                 Tag="ProjectionSurfaceWorkbenchStatisticsArea");
             app.StatisticsArea.Layout.Column = 2;
 
-            footer = uigridlayout(app.GridLayout, [1 6], ...
-                ColumnWidth={"fit", "1x", 180, "fit", "fit", "fit"}, ...
+            footer = uigridlayout(app.GridLayout, [1 9], ...
+                ColumnWidth={"fit", "1x", 180, "fit", "fit", "fit", ...
+                "fit", "fit", "fit"}, ...
                 Padding=[0 0 0 0]);
             footer.Layout.Row = 3;
             footer.Layout.Column = [1 3];
@@ -201,18 +322,34 @@ classdef ProjectionSurfaceWorkbenchApp < handle
             app.ProgressGauge = uigauge(footer, "linear", Limits=[0 1], ...
                 Value=0, Tag="ProjectionSurfaceWorkbenchProgressGauge");
             app.ProgressGauge.Layout.Column = 3;
+            app.RunButton = uibutton(footer, Text="Run", ...
+                Enable=app.onOff(~isempty(app.Runner)), ...
+                Tag="ProjectionSurfaceWorkbenchRunButton", ...
+                ButtonPushedFcn=@(~, ~) app.runProcessing());
+            app.RunButton.Layout.Column = 4;
             app.CancelButton = uibutton(footer, Text="Cancel", ...
+                Enable="off", ...
                 Tag="ProjectionSurfaceWorkbenchCancelButton", ...
                 ButtonPushedFcn=@(~, ~) app.requestCancel());
-            app.CancelButton.Layout.Column = 4;
+            app.CancelButton.Layout.Column = 5;
+            app.EvidenceButton = uibutton(footer, Text="Open evidence", ...
+                Enable="off", ...
+                Tag="ProjectionSurfaceWorkbenchEvidenceButton", ...
+                ButtonPushedFcn=@(~, ~) app.openEvidence());
+            app.EvidenceButton.Layout.Column = 6;
+            app.ExportButton = uibutton(footer, Text="Export run...", ...
+                Enable="off", ...
+                Tag="ProjectionSurfaceWorkbenchExportButton", ...
+                ButtonPushedFcn=@(~, ~) app.exportRunInteractive());
+            app.ExportButton.Layout.Column = 7;
             refresh = uibutton(footer, Text="Refresh diagnostics", ...
                 Tag="ProjectionSurfaceWorkbenchRefreshButton", ...
                 ButtonPushedFcn=@(~, ~) app.refreshDiagnostics());
-            refresh.Layout.Column = 5;
+            refresh.Layout.Column = 8;
             app.LaunchViewerButton = uibutton(footer, Text="Open 3-D viewer", ...
                 Tag="ProjectionSurfaceWorkbenchOpenViewerButton", ...
                 ButtonPushedFcn=@(~, ~) app.openViewer());
-            app.LaunchViewerButton.Layout.Column = 6;
+            app.LaunchViewerButton.Layout.Column = 9;
         end
 
         function createInputPanel(app)
@@ -220,8 +357,9 @@ classdef ProjectionSurfaceWorkbenchApp < handle
                 Tag="ProjectionSurfaceWorkbenchInputPanel");
             panel.Layout.Row = 1;
             panel.Layout.Column = 1;
-            grid = uigridlayout(panel, [5 2], ...
-                RowHeight={"1x", "fit", "fit", "fit", "fit"}, ...
+            grid = uigridlayout(panel, [9 2], ...
+                RowHeight={"1x", "fit", "fit", "fit", "fit", "fit", ...
+                "fit", "fit", "fit"}, ...
                 ColumnWidth={125, "1x"}, Padding=[6 6 6 6]);
             app.NetworkTable = uitable(grid, ...
                 ColumnEditable=[true false false], ...
@@ -230,20 +368,45 @@ classdef ProjectionSurfaceWorkbenchApp < handle
                 CellEditCallback=@(~, ~) app.networkChanged());
             app.NetworkTable.Layout.Row = 1;
             app.NetworkTable.Layout.Column = [1 2];
-            app.PairScheduleDropDown = app.labeledDropDown(grid, 2, ...
-                "Pair schedule", ["fast" "balanced" "quality" ...
-                "allPlausible" "operator"], ...
+            app.PairScheduleDropDown = app.labeledDataDropDown(grid, 2, ...
+                "Pair schedule", ["Selected pair" "Planned subset" ...
+                "All quality pairs" "All plausible pairs" "Explicit pairs"], ...
+                ["fast" "balanced" "quality" "allPlausible" "operator"], ...
                 "ProjectionSurfaceWorkbenchPairScheduleDropDown");
-            app.DenseMethodDropDown = app.labeledDropDown(grid, 3, ...
-                "Dense method", ["currentSgm" "classicalTemplate" "external"], ...
+            app.DenseMethodDropDown = app.labeledDataDropDown(grid, 3, ...
+                "Dense method", ["SGM" "Template matcher" "Custom matcher"], ...
+                ["currentSgm" "classicalTemplate" "external"], ...
                 "ProjectionSurfaceWorkbenchDenseMethodDropDown");
             app.GeometrySearchDropDown = app.labeledDropDown(grid, 4, ...
                 "Geometry search", ["sparseSeeded" "widePrior" ...
                 "localStrip" "terrainGrid"], ...
                 "ProjectionSurfaceWorkbenchGeometrySearchDropDown");
-            info = uilabel(grid, Text="Stable view/pass selections; pair schedule remains independent of sparse alignment.", ...
+            app.ExecutionPathDropDown = app.labeledDataDropDown(grid, 5, ...
+                "Execution", ["CPU" "GPU if available" "GPU required"], ...
+                ["cpu" "gpuIfAvailable" "gpuRequired"], ...
+                "ProjectionSurfaceWorkbenchExecutionDropDown");
+            app.ConsistencyDropDown = app.labeledDropDown(grid, 6, ...
+                "Consistency", ["strict" "balanced" "permissive"], ...
+                "ProjectionSurfaceWorkbenchConsistencyDropDown");
+            app.OcclusionDropDown = app.labeledDataDropDown(grid, 7, ...
+                "Occlusion", ["Reject" "Retain diagnostic" ...
+                "Matcher default"], ...
+                ["reject" "retainDiagnostic" "matcherDefault"], ...
+                "ProjectionSurfaceWorkbenchOcclusionDropDown");
+            maximumLabel = uilabel(grid, Text="Observation cap");
+            maximumLabel.Layout.Row = 8;
+            maximumLabel.Layout.Column = 1;
+            app.MaximumObservationsField = uieditfield(grid, "numeric", ...
+                Value=5000, Limits=[1 Inf], RoundFractionalValues="on", ...
+                Tag="ProjectionSurfaceWorkbenchMaximumObservationsField", ...
+                ValueChangedFcn=@(~, ~) app.controlsChanged());
+            app.MaximumObservationsField.Layout.Row = 8;
+            app.MaximumObservationsField.Layout.Column = 2;
+            info = uilabel(grid, Text=[ ...
+                "Select stable views, passes, and physical pairs; preflight " ...
+                "reports exact bounded work before Run."], ...
                 WordWrap="on");
-            info.Layout.Row = 5;
+            info.Layout.Row = 9;
             info.Layout.Column = [1 2];
         end
 
@@ -252,8 +415,8 @@ classdef ProjectionSurfaceWorkbenchApp < handle
                 Tag="ProjectionSurfaceWorkbenchProcessingPanel");
             panel.Layout.Row = 1;
             panel.Layout.Column = 2;
-            grid = uigridlayout(panel, [6 2], ...
-                RowHeight=repmat({"fit"}, 1, 6), ...
+            grid = uigridlayout(panel, [7 2], ...
+                RowHeight=repmat({"fit"}, 1, 7), ...
                 ColumnWidth={150, "1x"}, Padding=[6 6 6 6]);
             app.StageDropDown = app.labeledDropDown(grid, 1, ...
                 "Processing stage", ["rawPairwise" "robustMultiView" ...
@@ -269,17 +432,21 @@ classdef ProjectionSurfaceWorkbenchApp < handle
                 ValueChangedFcn=@(~, ~) app.controlsChanged());
             app.UncertaintyField.Layout.Row = 2;
             app.UncertaintyField.Layout.Column = 2;
+            app.FusionAlgorithmDropDown = app.labeledDataDropDown(grid, 3, ...
+                "Fusion algorithm", ["Robust multi-ray" "Example centroid"], ...
+                ["robustMultiRay" "exampleCentroid"], ...
+                "ProjectionSurfaceWorkbenchFusionAlgorithmDropDown");
             fusion = app.fusionProducts();
-            app.FusionDropDown = app.labeledDataDropDown(grid, 3, ...
+            app.FusionDropDown = app.labeledDataDropDown(grid, 4, ...
                 "Fusion product", string({fusion.Label}), ...
                 string({fusion.ProductId}), ...
                 "ProjectionSurfaceWorkbenchFusionDropDown");
-            app.DemDropDown = app.labeledDropDown(grid, 4, ...
+            app.DemDropDown = app.labeledDropDown(grid, 5, ...
                 "DEM registration", ["none" "preview" "registered" "difference"], ...
                 "ProjectionSurfaceWorkbenchDemDropDown");
-            app.OutputDropDown = app.productDropDown(grid, 5, ...
+            app.OutputDropDown = app.productDropDown(grid, 6, ...
                 "Output product", "ProjectionSurfaceWorkbenchOutputDropDown");
-            app.ComparisonDropDown = app.comparisonDropDown(grid, 6, ...
+            app.ComparisonDropDown = app.comparisonDropDown(grid, 7, ...
                 "Compare with", "ProjectionSurfaceWorkbenchComparisonDropDown");
         end
 
@@ -355,6 +522,11 @@ classdef ProjectionSurfaceWorkbenchApp < handle
             app.PairScheduleDropDown.Value = state.PairSchedule;
             app.DenseMethodDropDown.Value = state.DenseMethod;
             app.GeometrySearchDropDown.Value = state.GeometrySearch;
+            app.ExecutionPathDropDown.Value = state.ExecutionPath;
+            app.ConsistencyDropDown.Value = state.ConsistencyPolicy;
+            app.OcclusionDropDown.Value = state.OcclusionPolicy;
+            app.MaximumObservationsField.Value = state.MaximumObservations;
+            app.FusionAlgorithmDropDown.Value = state.FusionAlgorithm;
             app.StageDropDown.Value = state.ProcessingStage;
             app.UncertaintyField.Value = state.MaximumUncertaintyMeters;
             app.FusionDropDown.Value = state.FusionProductId;
@@ -371,7 +543,7 @@ classdef ProjectionSurfaceWorkbenchApp < handle
             stats = app.Model.statistics(state.OutputProductId);
             network = app.Model.networkStatistics();
             estimate = app.Model.processingEstimate();
-            app.StatisticsArea.Value = [ ...
+            lines = [ ...
                 sprintf("Output: %s", stats.ProductId); ...
                 sprintf("Stage: %s", stats.Stage); ...
                 sprintf("Full / filtered / display: %d / %d / %d", ...
@@ -390,12 +562,54 @@ classdef ProjectionSurfaceWorkbenchApp < handle
                 estimate.ScheduledPairCount, estimate.RelativeWorkUnits); ...
                 sprintf("Estimated selected memory: %.3f MiB", ...
                 stats.EstimatedMemoryBytes / 1024 ^ 2)];
+            if ~isempty(app.Runner)
+                try
+                    report = app.Runner.preflight(state);
+                    app.LastPreflight = report;
+                    pairList = strjoin(report.SelectedPairIds, ", ");
+                    lines = [lines; ...
+                        sprintf("Preflight: %s", app.supportLabel(report)); ...
+                        sprintf("Pairs: %s", pairList); ...
+                        sprintf("Matcher / execution: %s / %s", ...
+                        report.MatcherAlgorithmId, report.ExecutionPath); ...
+                        sprintf("Search / rectification: %s / %s", ...
+                        report.GeometrySearch, report.RectificationState); ...
+                        sprintf("Overlap / cap: %d px / %d observations", ...
+                        report.ResourceEstimate.OverlapPixelCount, ...
+                        report.ResourceEstimate.MaximumObservations)];
+                    if strlength(report.FallbackReason) > 0
+                        lines(end + 1) = "Fallback: " + report.FallbackReason;
+                    end
+                catch exception
+                    lines(end + 1) = "Preflight unavailable: " + ...
+                        string(exception.message);
+                end
+            end
+            if ~isempty(fieldnames(app.LastRun))
+                summary = app.runSummary();
+                lines = [lines; ...
+                    sprintf("Last run: %s — %s", ...
+                    summary.Status, summary.Message); ...
+                    sprintf("Candidates / accepted / pairs: %d / %d / %d", ...
+                    summary.CandidateCount, summary.AcceptedCount, ...
+                    summary.PairCount)];
+            end
+            app.StatisticsArea.Value = lines;
+            hasEvidence = app.hasEvidence();
+            app.EvidenceButton.Enable = app.onOff(hasEvidence);
+            app.ExportButton.Enable = app.onOff( ...
+                ~isempty(fieldnames(app.LastRun)));
         end
 
         function controlsChanged(app)
             changes = struct(PairSchedule=string(app.PairScheduleDropDown.Value), ...
                 DenseMethod=string(app.DenseMethodDropDown.Value), ...
                 GeometrySearch=string(app.GeometrySearchDropDown.Value), ...
+                ExecutionPath=string(app.ExecutionPathDropDown.Value), ...
+                ConsistencyPolicy=string(app.ConsistencyDropDown.Value), ...
+                OcclusionPolicy=string(app.OcclusionDropDown.Value), ...
+                MaximumObservations=app.MaximumObservationsField.Value, ...
+                FusionAlgorithm=string(app.FusionAlgorithmDropDown.Value), ...
                 ProcessingStage=string(app.StageDropDown.Value), ...
                 MaximumUncertaintyMeters=app.UncertaintyField.Value, ...
                 FusionProductId=string(app.FusionDropDown.Value), ...
@@ -417,10 +631,12 @@ classdef ProjectionSurfaceWorkbenchApp < handle
             data = app.NetworkTable.Data;
             selectedViews = string(data.StableId(data.Include & data.Kind == "view"));
             selectedPasses = string(data.StableId(data.Include & data.Kind == "pass"));
+            selectedPairs = string(data.StableId(data.Include & data.Kind == "pair"));
             try
                 app.Model.configure(struct( ...
                     SelectedViewIds=reshape(selectedViews, 1, []), ...
-                    SelectedPassIds=reshape(selectedPasses, 1, [])));
+                    SelectedPassIds=reshape(selectedPasses, 1, []), ...
+                    SelectedPairIds=reshape(selectedPairs, 1, [])));
                 app.ProgressLabel.Text = "Network selection updated";
             catch exception
                 app.ProgressLabel.Text = "Network selection rejected: " + ...
@@ -440,12 +656,16 @@ classdef ProjectionSurfaceWorkbenchApp < handle
         function tableValue = networkTable(app, state)
             viewIds = app.Model.catalogValue().ViewIds;
             passIds = app.Model.catalogValue().PassIds;
+            pairIds = app.Model.catalogValue().PairIds;
             tableValue = table( ...
                 [ismember(viewIds, state.SelectedViewIds).'; ...
-                ismember(passIds, state.SelectedPassIds).'], ...
+                ismember(passIds, state.SelectedPassIds).'; ...
+                ismember(pairIds, state.SelectedPairIds).'], ...
                 [repmat("view", numel(viewIds), 1); ...
-                repmat("pass", numel(passIds), 1)], ...
-                [reshape(viewIds, [], 1); reshape(passIds, [], 1)], ...
+                repmat("pass", numel(passIds), 1); ...
+                repmat("pair", numel(pairIds), 1)], ...
+                [reshape(viewIds, [], 1); reshape(passIds, [], 1); ...
+                reshape(pairIds, [], 1)], ...
                 VariableNames=["Include" "Kind" "StableId"]);
         end
 
@@ -459,6 +679,270 @@ classdef ProjectionSurfaceWorkbenchApp < handle
             selected = ismember(string({products.Stage}), ...
                 ["robustMultiView" "fusionDerived" "voxelEvidence"]);
             products = products(selected);
+        end
+
+        function progressEvent(app, event)
+            app.setProgress(event.Fraction, event.Stage, event.Message);
+        end
+
+        function finishRun(app)
+            app.IsRunning = false;
+            app.CancelRequested = false;
+            if ~isempty(app.RunButton) && isvalid(app.RunButton)
+                app.RunButton.Enable = app.onOff(~isempty(app.Runner));
+            end
+            if ~isempty(app.CancelButton) && isvalid(app.CancelButton)
+                app.CancelButton.Enable = "off";
+            end
+        end
+
+        function fraction = completedFraction(app, status)
+            if ismember(string(status), ["succeeded" "partial"])
+                fraction = 1;
+            else
+                fraction = app.ProgressFraction;
+            end
+        end
+
+        function closeViewer(app)
+            if ~isempty(app.Viewer) && isvalid(app.Viewer)
+                delete(app.Viewer);
+            end
+            app.Viewer = ProjectionSurface3DViewer.empty();
+        end
+
+        function refreshProductControls(app)
+            products = app.availableProducts();
+            app.setDropDownItems(app.OutputDropDown, ...
+                string({products.Label}), string({products.ProductId}));
+            app.setDropDownItems(app.ComparisonDropDown, ...
+                ["None" string({products.Label})], ...
+                ["" string({products.ProductId})]);
+            fusion = app.fusionProducts();
+            app.setDropDownItems(app.FusionDropDown, ...
+                string({fusion.Label}), string({fusion.ProductId}));
+            app.syncControls();
+        end
+
+        function setDropDownItems(~, control, items, itemsData)
+            set(control, "Items", cellstr(items), ...
+                "ItemsData", cellstr(itemsData));
+        end
+
+        function summary = runSummary(app)
+            summary = struct(Status="notRun", Message="", ...
+                CandidateCount=0, AcceptedCount=0, PairCount=0, ...
+                FailedPairCount=0);
+            if isempty(fieldnames(app.LastRun))
+                return
+            end
+            if isfield(app.LastRun, "Status")
+                summary.Status = string(app.LastRun.Status);
+            end
+            if isfield(app.LastRun, "Message")
+                summary.Message = string(app.LastRun.Message);
+            end
+            if isfield(app.LastRun, "Diagnostics") && ...
+                    isstruct(app.LastRun.Diagnostics) && ...
+                    ~isempty(fieldnames(app.LastRun.Diagnostics))
+                diagnostics = app.LastRun.Diagnostics;
+                summary.CandidateCount = diagnostics.CandidateCount;
+                summary.AcceptedCount = ...
+                    diagnostics.AcceptedCorrespondenceCount;
+                summary.PairCount = diagnostics.PairCount;
+                summary.FailedPairCount = diagnostics.FailedPairCount;
+            end
+        end
+
+        function tf = hasEvidence(app)
+            tf = false;
+            if ~isfield(app.LastRun, "PairRuns")
+                return
+            end
+            runs = app.LastRun.PairRuns;
+            for index = 1:numel(runs)
+                if isstruct(runs(index).Evidence) && ...
+                        ~isempty(fieldnames(runs(index).Evidence))
+                    tf = true;
+                    return
+                end
+            end
+        end
+
+        function figureHandle = openEvidence(app)
+            if ~app.hasEvidence()
+                error("ProjectionSurfaceWorkbenchApp:noEvidence", ...
+                    "The last run retained no pair diagnostic evidence.");
+            end
+            if ~isempty(app.EvidenceFigure) && isvalid(app.EvidenceFigure)
+                figure(app.EvidenceFigure);
+                figureHandle = app.EvidenceFigure;
+                return
+            end
+            runs = app.LastRun.PairRuns;
+            selected = find(arrayfun(@(run) ...
+                ~isempty(fieldnames(run.Evidence)), runs), 1, "first");
+            evidence = runs(selected).Evidence;
+            app.EvidenceFigure = uifigure(Name="Surface Pair Evidence", ...
+                Position=[180 120 1180 720], ...
+                Tag="ProjectionSurfaceWorkbenchEvidenceFigure", ...
+                CloseRequestFcn=@(~, ~) app.closeEvidence());
+            grid = uigridlayout(app.EvidenceFigure, [3 3], ...
+                RowHeight={"1x", "1x", "1x"}, ...
+                ColumnWidth={"1x", "1x", "1x"});
+            values = {evidence.MovingAnalysisImage, ...
+                evidence.ReferenceAnalysisImage, evidence.OverlapMask, ...
+                evidence.MovingValidityMask, evidence.ReferenceValidityMask, ...
+                app.diagnosticSurface(evidence)};
+            labels = ["Moving analysis" "Reference analysis" ...
+                "Overlap mask" "Moving valid" "Reference valid" ...
+                "Matcher diagnostic"];
+            for index = 1:numel(values)
+                axisHandle = uiaxes(grid, ...
+                    Tag="ProjectionSurfaceWorkbenchEvidenceAxes" + index);
+                imagesc(axisHandle, values{index});
+                axisHandle.YDir = "reverse";
+                axisHandle.DataAspectRatio = [1 1 1];
+                title(axisHandle, labels(index));
+                colorbar(axisHandle);
+            end
+            qualityAxis = uiaxes(grid, ...
+                Tag="ProjectionSurfaceWorkbenchQualityAxes");
+            score = double(evidence.Score(:));
+            confidence = double(evidence.Confidence(:));
+            finite = isfinite(score) & isfinite(confidence);
+            plot(qualityAxis, score(finite), confidence(finite), ".");
+            xlabel(qualityAxis, "Score");
+            ylabel(qualityAxis, "Confidence");
+            title(qualityAxis, "Score / confidence");
+            rayAxis = uiaxes(grid, ...
+                Tag="ProjectionSurfaceWorkbenchRayResidualAxes");
+            raySeparation = app.raySeparations();
+            histogram(rayAxis, raySeparation(isfinite(raySeparation)));
+            xlabel(rayAxis, "Ray separation (m)");
+            title(rayAxis, "Ray geometry residuals");
+            heightAxis = uiaxes(grid, ...
+                Tag="ProjectionSurfaceWorkbenchHeightAxes");
+            heights = app.reconstructedHeights();
+            histogram(heightAxis, heights(isfinite(heights)));
+            xlabel(heightAxis, "World Z (m)");
+            title(heightAxis, "Reconstructed height distribution");
+            figureHandle = app.EvidenceFigure;
+        end
+
+        function values = raySeparations(app)
+            values = zeros(1, 0);
+            if ~isfield(app.LastRun, "Association") || ...
+                    ~isstruct(app.LastRun.Association) || ...
+                    ~isfield(app.LastRun.Association, "RawPairwiseRecords")
+                return
+            end
+            records = app.LastRun.Association.RawPairwiseRecords;
+            if ~isempty(records) && ...
+                    isfield(records, "PairRaySeparationMeters")
+                values = double([records.PairRaySeparationMeters]);
+            end
+        end
+
+        function values = reconstructedHeights(app)
+            values = zeros(1, 0);
+            if ~isfield(app.LastRun, "PointSet") || ...
+                    ~isstruct(app.LastRun.PointSet) || ...
+                    ~isfield(app.LastRun.PointSet, "Points")
+                return
+            end
+            points = app.LastRun.PointSet.Points;
+            if isempty(points)
+                return
+            end
+            points = points([points.Valid]);
+            if ~isempty(points)
+                coordinates = horzcat(points.PointWorld);
+                values = coordinates(3, :);
+            end
+        end
+
+        function value = diagnosticSurface(~, evidence)
+            diagnostics = evidence.MatcherDiagnostics;
+            candidates = ["DisparityMap" "Disparity" "ConfidenceMap" ...
+                "CostMap" "ValidMask" "RectifiedOverlapMask"];
+            for name = candidates
+                if isstruct(diagnostics) && isfield(diagnostics, name) && ...
+                        isnumeric(diagnostics.(name)) && ...
+                        ~isempty(diagnostics.(name))
+                    value = diagnostics.(name);
+                    return
+                end
+            end
+            value = double(evidence.OverlapMask);
+        end
+
+        function closeEvidence(app)
+            if ~isempty(app.EvidenceFigure) && isvalid(app.EvidenceFigure)
+                app.EvidenceFigure.CloseRequestFcn = [];
+                delete(app.EvidenceFigure);
+            end
+            app.EvidenceFigure = [];
+        end
+
+        function exportRunInteractive(app)
+            [file, folder] = uiputfile({"*.mat"; "*.json"}, ...
+                "Export surface workbench run", ...
+                "surface-workbench-run.mat");
+            if isequal(file, 0)
+                return
+            end
+            app.exportRun(fullfile(folder, file));
+        end
+
+        function metadata = compactRunMetadata(app)
+            run = app.LastRun;
+            metadata = struct(Format="ProjectionSurfaceWorkbenchRunMetadata", ...
+                Version=1, Status=string(run.Status), ...
+                Message=string(run.Message), GraphicsStateIncluded=false);
+            for field = ["Preflight" "Diagnostics" "Provenance"]
+                if isfield(run, field)
+                    metadata.(field) = run.(field);
+                else
+                    metadata.(field) = struct();
+                end
+            end
+            if isfield(run, "PairRuns")
+                pairRuns = run.PairRuns;
+                if ~isempty(pairRuns) && isfield(pairRuns, "Evidence")
+                    pairRuns = rmfield(pairRuns, "Evidence");
+                end
+                metadata.PairRuns = pairRuns;
+            else
+                metadata.PairRuns = struct([]);
+            end
+            if isfield(run, "Catalog") && isstruct(run.Catalog) && ...
+                    isfield(run.Catalog, "GenerationId")
+                metadata.Catalog = struct( ...
+                    GenerationId=run.Catalog.GenerationId, ...
+                    ViewIds=run.Catalog.ViewIds, ...
+                    PassIds=run.Catalog.PassIds, ...
+                    PairIds=run.Catalog.PairIds, ...
+                    ProductSummaries=app.Model.productSummaries());
+            else
+                metadata.Catalog = struct();
+            end
+        end
+
+        function label = supportLabel(~, report)
+            if report.Supported
+                label = "supported";
+            else
+                label = "unsupported — " + report.Reason;
+            end
+        end
+
+        function value = onOff(~, condition)
+            if condition
+                value = "on";
+            else
+                value = "off";
+            end
         end
     end
 end

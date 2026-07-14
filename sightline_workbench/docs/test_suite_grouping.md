@@ -10,12 +10,12 @@ to exactly one group.
 | --- | --- | ---: |
 | `coreGeometryState` | Geometry, identities, state, metadata, caches, native golden-fixture parity, and non-UI controllers | 143 |
 | `alignment` | Sparse matching/filtering, track and graph logic, global network solving, synthetic acceptance, correction SDK, A7 research, and atomic DEM position apply | 185 |
-| `backendSurface` | Backend jobs/rendering, dense matchers/search/audit, pair covariance, procedural anaglyph parity, robust multi-ray, surface-fusion SDK/audit, DEM registration SDK/audit, Surface Workbench model, dense surface, synthetic truth, inverse warp, and raster paths | 237 |
+| `backendSurface` | Backend jobs/rendering, dense matchers/search/audit, pair covariance, procedural anaglyph parity, robust multi-ray, surface-fusion SDK/audit, DEM registration SDK/audit, Surface Workbench model/runner, dense surface, synthetic truth, inverse warp, and raster paths | 246 |
 | `viewerAlignmentUi` | Viewer alignment, active-pair, DEM-correction invalidation, and general app interaction | 75 |
 | `viewerPresentationWorkflows` | Viewer motion, framing, harness, stereo, and Surface Workbench/3-D/DEM-preview workflows | 69 |
 | `viewerPerformancePrecision` | Viewer performance evidence and long-range precision | 34 |
 
-The validated July 14, 2026 baseline is 743/743 with zero failures and zero
+The validated July 14, 2026 baseline is 752/752 with zero failures and zero
 incomplete tests.
 
 The viewer suite is intentionally subdivided. A combined viewer/UI/

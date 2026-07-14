@@ -4,10 +4,11 @@ Status: Pack 1 is complete. The representative synthetic image/geometry
 expansion, first truth-aware evidence run, and separate numerical-threshold
 proposal are complete. The ordered, privacy-preserving milestones are defined in
 `docs/dense_surface_synthetic_expansion_plan.md`. Other follow-up candidates
-below were historical at Pack 1 completion. The July 13, 2026 operator finding
-that selected-pair SGM was unusable, the missing GUI multi-view execution path,
-and the approved diagnostic/quality recovery are now ordered RD-5 work in
-`docs/real_data_validation_followup_workpack.md`.
+below were historical at Pack 1 completion. RD-5 now addresses the July 13,
+2026 operator finding with an explicit selected-pair label, scene-bound
+multi-pair Run/Cancel path, retained diagnostics/provenance, and synthetic
+five-view structural coverage. Representative-imagery usefulness review remains
+external; see `docs/real_data_validation_followup_workpack.md`.
 
 ## Purpose
 
@@ -15,7 +16,7 @@ Dense Surface Pack 1 adds a deliberately small first-pass dense stereo product
 after two images have been aligned. It is an analysis and visualization tool,
 not a new backend product contract. The operator selects the moving and
 reference layers in the Alignment Workbench, completes the staged alignment
-through Preview or Apply, and presses `Dense surface`.
+through Preview or Apply, and presses `Selected-pair SGM`.
 
 The pack opens two runtime windows:
 
@@ -125,11 +126,11 @@ This is a starting point, not calibrated general stereo rectification.
   left/right consistency, connected-component filtering, or surface smoothing.
 - Results are not geospatial files, DEMs, point clouds, or persisted products.
   Export and serialization need a separately reviewed contract.
-- RD-5 shall compare SGM with alternative dense matchers, expose retained
-  rectification/quality evidence and adjustable options, and connect the
-  scene-bound GUI to pairwise and multi-view execution. The approved synthetic
-  expansion supplies the primary truth-aware acceptance fixture; later
-  air-gapped real-data metrics may refine individual criteria.
+- RD-5 adds separately identifiable SGM, classical-template, and registered SDK
+  matchers; retained rectification/quality evidence and adjustable policies;
+  and scene-bound pairwise, multi-ray, and fusion execution. The approved
+  synthetic expansion remains the primary truth-aware acceptance fixture;
+  later air-gapped real-data metrics may refine individual criteria.
 - The approved representative synthetic expansion adds a physically motivated
   multi-view collection, occluding terrain, navigation-error variants, and
   known truth. Actual fixture parameters remain in an ignored local JSON file

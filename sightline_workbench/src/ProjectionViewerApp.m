@@ -175,6 +175,7 @@ classdef ProjectionViewerApp < handle
         AlignmentDeleteMatchButton matlab.ui.control.Button
         AlignmentUndoCurationButton matlab.ui.control.Button
         AlignmentDenseSurfaceButton matlab.ui.control.Button
+        AlignmentSurfaceWorkbenchButton matlab.ui.control.Button
         AlignmentStatusLabel matlab.ui.control.Label
         AlignmentPairTable matlab.ui.control.Table
         AlignmentMatchTable matlab.ui.control.Table
@@ -220,6 +221,7 @@ classdef ProjectionViewerApp < handle
         DenseSurfaceHandles struct = struct()
         DenseSurfaceDiagnostics struct = struct()
         DenseSurfaceRunning logical = false
+        SurfaceWorkbench
         IsClosing logical = false
         CorrectionStore
         AlignmentAppliedGenerationId string = ""
@@ -351,6 +353,7 @@ classdef ProjectionViewerApp < handle
             app.clearAlignmentOverlays();
             app.clearAlignmentRoi(false);
             app.closeDenseSurfaceWindows();
+            app.closeSurfaceWorkbench();
             app.closeAlignmentWorkbench();
             app.closeHelpDialog();
             if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
@@ -607,6 +610,49 @@ classdef ProjectionViewerApp < handle
                     all([diagnostics.Layers.HasSampleRayFcn]);
                 diagnostics.Warning = string(ME.message);
             end
+        end
+
+        function workbench = openSurfaceWorkbench(app)
+            %openSurfaceWorkbench Launch or focus scene-bound dense processing.
+            if ~app.hasSurfaceWorkbenchInput()
+                app.setAlignmentStatus([ ...
+                    "Preview or apply alignment with accepted pair evidence " ...
+                    "before opening Surface Workbench."]);
+                workbench = [];
+                return
+            end
+            if ~isempty(app.SurfaceWorkbench) && ...
+                    isvalid(app.SurfaceWorkbench) && ...
+                    isvalid(app.SurfaceWorkbench.figureHandle())
+                figure(app.SurfaceWorkbench.figureHandle());
+                workbench = app.SurfaceWorkbench;
+                return
+            end
+            app.setAlignmentStatus( ...
+                "Preparing scene-bound Surface Workbench inputs...");
+            drawnow limitrate
+            try
+                context = app.surfaceWorkbenchContext();
+                runner = ProjectionSurfaceWorkbenchRunner(context);
+                catalog = runner.initialCatalog();
+                configuration = runner.initialConfiguration(catalog);
+                app.SurfaceWorkbench = ProjectionSurfaceWorkbenchApp( ...
+                    catalog, configuration, runner);
+                workbench = app.SurfaceWorkbench;
+                app.setAlignmentStatus(sprintf( ...
+                    "Surface Workbench ready: %d pair(s), active %s.", ...
+                    numel(context.PairEntries), context.ActivePairId));
+            catch exception
+                app.SurfaceWorkbench = [];
+                workbench = [];
+                app.setAlignmentStatus( ...
+                    "Surface Workbench unavailable: " + exception.message);
+            end
+        end
+
+        function workbench = surfaceWorkbenchHandle(app)
+            %surfaceWorkbenchHandle Return the separate Workbench, if open.
+            workbench = app.SurfaceWorkbench;
         end
 
         function diagnostics = performanceDiagnostics(app)
@@ -947,6 +993,7 @@ classdef ProjectionViewerApp < handle
             end
             app.AlignmentSession.clearComputation();
             app.closeDenseSurfaceWindows();
+            app.closeSurfaceWorkbench();
             app.DenseSurfaceDiagnostics = struct(Status="invalidated", ...
                 Reason="demPositionCorrection", ...
                 RecomputeRequired=true, ...
@@ -1316,13 +1363,23 @@ classdef ProjectionViewerApp < handle
             app.AlignmentUndoCurationButton.Layout.Column = 13;
 
             app.AlignmentDenseSurfaceButton = uibutton(app.AlignmentGrid, ...
-                Text="Dense surface", Enable="off", ...
-                Tooltip="Run CPU semi-global matching on the current aligned pair", ...
+                Text="Selected-pair SGM", Enable="off", ...
+                Tooltip=["One-click CPU SGM and immediate display for the " ...
+                "currently selected aligned pair"], ...
                 Tag="ProjectionViewerAlignmentDenseSurfaceButton", ...
                 ButtonPushedFcn=@(~, ~) ...
                 app.extractDenseSurfaceFromAlignment());
             app.AlignmentDenseSurfaceButton.Layout.Row = 4;
             app.AlignmentDenseSurfaceButton.Layout.Column = [14 15];
+
+            app.AlignmentSurfaceWorkbenchButton = uibutton( ...
+                app.AlignmentGrid, Text="Surface Workbench...", Enable="off", ...
+                Tooltip=["Open planned multi-pair matching, multi-ray " ...
+                "reconstruction, fusion, diagnostics, and export"], ...
+                Tag="ProjectionViewerAlignmentSurfaceWorkbenchButton", ...
+                ButtonPushedFcn=@(~, ~) app.openSurfaceWorkbench());
+            app.AlignmentSurfaceWorkbenchButton.Layout.Row = 3;
+            app.AlignmentSurfaceWorkbenchButton.Layout.Column = [14 16];
 
             app.AlignmentStatusLabel = uilabel(app.AlignmentGrid, ...
                 Text="Alignment not run", ...
@@ -1596,10 +1653,10 @@ classdef ProjectionViewerApp < handle
                 Tag="ProjectionViewerAlignmentWorkflowPanel");
             workflowPanel.Layout.Row = 4;
             workflowPanel.Layout.Column = [1 2];
-            workflowGrid = uigridlayout(workflowPanel, [2 9]);
+            workflowGrid = uigridlayout(workflowPanel, [2 10]);
             workflowGrid.RowHeight = {"fit", "fit"};
-            workflowGrid.ColumnWidth = {85, 85, 85, 85, 85, 85, 85, ...
-                115, "1x"};
+            workflowGrid.ColumnWidth = {80, 80, 80, 80, 80, 80, 80, ...
+                135, 150, "1x"};
             workflowGrid.Padding = [8 6 8 8];
             workflowGrid.RowSpacing = 6;
             workflowGrid.ColumnSpacing = 8;
@@ -1607,7 +1664,8 @@ classdef ProjectionViewerApp < handle
                 app.AlignmentFilterButton app.AlignmentSolveButton ...
                 app.AlignmentPreviewButton app.AlignmentApplyButton ...
                 app.AlignmentRevertButton app.AlignmentCancelButton ...
-                app.AlignmentDenseSurfaceButton];
+                app.AlignmentDenseSurfaceButton ...
+                app.AlignmentSurfaceWorkbenchButton];
             for column = 1:numel(stageControls)
                 stageControls(column).Parent = workflowGrid;
                 stageControls(column).Layout.Row = 1;
@@ -1616,7 +1674,7 @@ classdef ProjectionViewerApp < handle
             stageHint = uilabel(workflowGrid, ...
                 Text="Run stages left to right; inspect before Solve");
             stageHint.Layout.Row = 1;
-            stageHint.Layout.Column = 9;
+            stageHint.Layout.Column = 10;
             app.AlignmentAcceptedOverlayCheckBox.Text = "Accepted lines";
             app.AlignmentRejectedOverlayCheckBox.Text = "Rejected lines";
             app.AlignmentWorstOverlayCheckBox.Text = "Worst 10%";
@@ -2545,10 +2603,14 @@ classdef ProjectionViewerApp < handle
         end
 
         function tf = hasDenseSurfaceInput(app)
-            tf = false;
             capabilities = ProjectionDenseSurfaceExtractor.capabilities();
-            if ~capabilities.HasDisparitySgm || ...
-                    isempty(app.AlignmentMatchTable) || ...
+            tf = capabilities.HasDisparitySgm && ...
+                app.hasSurfaceWorkbenchInput();
+        end
+
+        function tf = hasSurfaceWorkbenchInput(app)
+            tf = false;
+            if isempty(app.AlignmentMatchTable) || ...
                     ~isvalid(app.AlignmentMatchTable) || ...
                     ~app.hasFilteredAlignmentMatches()
                 return
@@ -2578,10 +2640,15 @@ classdef ProjectionViewerApp < handle
             capabilities = ProjectionDenseSurfaceExtractor.capabilities();
             hasAlignedScene = any(state.Stage == ["previewed", "applied"]) || ...
                 state.ManualAdjustmentUndoCount > 0;
-            enabled = ~app.DenseSurfaceRunning && ...
-                capabilities.HasDisparitySgm && hasAlignedScene && ...
-                app.hasDenseSurfaceInput();
-            app.AlignmentDenseSurfaceButton.Enable = app.onOff(enabled);
+            workbenchEnabled = ~app.DenseSurfaceRunning && hasAlignedScene && ...
+                app.hasSurfaceWorkbenchInput();
+            directEnabled = workbenchEnabled && capabilities.HasDisparitySgm;
+            app.AlignmentDenseSurfaceButton.Enable = app.onOff(directEnabled);
+            if ~isempty(app.AlignmentSurfaceWorkbenchButton) && ...
+                    isvalid(app.AlignmentSurfaceWorkbenchButton)
+                app.AlignmentSurfaceWorkbenchButton.Enable = ...
+                    app.onOff(workbenchEnabled);
+            end
         end
 
         function finishDenseSurfaceRun(app)
@@ -2604,6 +2671,58 @@ classdef ProjectionViewerApp < handle
                     end
                 end
             end
+        end
+
+        function context = surfaceWorkbenchContext(app)
+            matches = app.alignmentAcceptedSolveMatches();
+            entries = repmat(struct(PairId="", ViewIds=strings(1, 2), ...
+                PassIds=strings(1, 2), LayerIndices=zeros(1, 2), ...
+                Request=struct()), 1, 0);
+            options = app.currentAlignmentOptions();
+            options.Scheduling.Strategy = "twoImage";
+            for index = 1:numel(matches.Matches)
+                pairMatch = matches.Matches(index);
+                if pairMatch.Count < 1
+                    continue
+                end
+                pair = ProjectionAlignmentLayerResolver.pairIndices( ...
+                    app.Scene, pairMatch);
+                options.Scheduling.ReferenceLayerIndex = pair(2);
+                alignmentRequest = ProjectionAlignmentRequest.validate(struct( ...
+                    Scene=app.Scene, LayerIndices=pair, ...
+                    ReferenceLayerIndex=pair(2), AnalysisBands=[1 1], ...
+                    Options=options));
+                workingImages = app.renderAlignmentWorkingImages( ...
+                    alignmentRequest, app.alignmentRenderOptions());
+                pairWorking = workingImages.PairWorkingImages(1);
+                request = ProjectionDenseSgmMatcher.requestFromLegacy( ...
+                    app.Scene, pairWorking, pairMatch, struct());
+                if any(string({entries.PairId}) == request.PairId)
+                    continue
+                end
+                entries(end + 1) = struct(PairId=request.PairId, ...
+                    ViewIds=request.ViewIds, ...
+                    PassIds=string({app.Scene.layers(pair).PassId}), ...
+                    LayerIndices=pair, Request=request); %#ok<AGROW>
+            end
+            if isempty(entries)
+                error("ProjectionViewerApp:noSurfaceWorkbenchPairs", ...
+                    "No accepted physical pair evidence remains after curation.");
+            end
+            [~, activePair] = app.currentDenseSurfacePairMatch();
+            activeViews = string({app.Scene.layers(activePair).ViewId});
+            activeIdentity = ProjectionViewMetadata.pairIdentity( ...
+                activeViews(1), activeViews(2));
+            context = struct(PairEntries=entries, ...
+                ActivePairId=activeIdentity.PairId, ...
+                CorrectionGenerationId=app.correctionGenerationId());
+        end
+
+        function closeSurfaceWorkbench(app)
+            if ~isempty(app.SurfaceWorkbench) && isvalid(app.SurfaceWorkbench)
+                delete(app.SurfaceWorkbench);
+            end
+            app.SurfaceWorkbench = [];
         end
 
         function layerIndices = changedProjectionLayerIndices(app, ...
@@ -2785,6 +2904,7 @@ classdef ProjectionViewerApp < handle
                 return
             end
             app.AlignmentSession.invalidateMatch();
+            app.closeSurfaceWorkbench();
             app.setAlignmentFilterEnabled(false);
             app.setAlignmentSolveEnabled(false);
             app.setAlignmentActionEnabled(false);
@@ -3832,6 +3952,7 @@ classdef ProjectionViewerApp < handle
             app.DenseSurfaceDiagnostics = struct();
             app.DenseSurfaceRunning = false;
             app.closeDenseSurfaceWindows();
+            app.closeSurfaceWorkbench();
             app.updateAlignmentMatchTable([], []);
             app.clearSelectedAlignmentMatchOverlay();
             app.refreshAlignmentSessionIndicators();

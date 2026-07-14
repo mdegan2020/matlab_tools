@@ -85,6 +85,9 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentUndoCurationButton");
             denseSurfaceButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentDenseSurfaceButton");
+            surfaceWorkbenchButton = ...
+                ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentSurfaceWorkbenchButton");
             matchButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentMatchButton");
             filterButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -156,6 +159,11 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(deleteMatchButton.Enable), "on");
             testCase.verifyEqual(string(undoCurationButton.Enable), "on");
             testCase.verifyEqual(string(denseSurfaceButton.Enable), "off");
+            testCase.verifyEqual(string(denseSurfaceButton.Text), ...
+                "Selected-pair SGM");
+            testCase.verifyEqual(string(surfaceWorkbenchButton.Text), ...
+                "Surface Workbench...");
+            testCase.verifyEqual(string(surfaceWorkbenchButton.Enable), "off");
             testCase.verifyEqual(string(matchButton.Enable), "on");
             testCase.verifyEqual(string(filterButton.Enable), "off");
             testCase.verifyEqual(string(solveButton.Enable), "off");
@@ -496,6 +504,9 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentRevertButton");
             denseSurfaceButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentDenseSurfaceButton");
+            surfaceWorkbenchButton = ...
+                ProjectionViewerAlignmentWorkflowTest.findTagged( ...
+                fig, "ProjectionViewerAlignmentSurfaceWorkbenchButton");
             clearOverlaysButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentClearOverlaysButton");
             clearOverlaysMenuItem = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
@@ -519,6 +530,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(applyButton.Enable), "off");
             testCase.verifyEqual(string(revertButton.Enable), "off");
             testCase.verifyEqual(string(denseSurfaceButton.Enable), "off");
+            testCase.verifyEqual(string(surfaceWorkbenchButton.Enable), "off");
             testCase.verifyTrue(contains(string(statusLabel.Text), ...
                 "Ready to solve"));
             testCase.verifyTrue(diagnosticsAfterMatch.Stage.HasRequest);
@@ -612,6 +624,22 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual( ...
                 previewPerformance.Counters.SampleFcnCalls, 0);
             testCase.verifyEqual(string(denseSurfaceButton.Enable), "on");
+            testCase.verifyEqual(string(surfaceWorkbenchButton.Enable), "on");
+
+            surfaceWorkbenchButton.ButtonPushedFcn( ...
+                surfaceWorkbenchButton, struct());
+            drawnow
+            workbench = app.surfaceWorkbenchHandle();
+            testCase.assertNotEmpty(workbench, string(statusLabel.Text));
+            workbenchState = workbench.modelState();
+            workbenchDiagnostics = workbench.diagnostics();
+            focusedWorkbench = app.openSurfaceWorkbench();
+            testCase.verifySameHandle(focusedWorkbench, workbench);
+            testCase.verifyTrue(workbenchDiagnostics.RunnerBound);
+            testCase.verifyNumElements(workbenchState.SelectedPairIds, 1);
+            testCase.verifyEqual(workbenchState.PairSchedule, "fast");
+            testCase.verifyNumElements( ...
+                workbenchDiagnostics.Preflight.SelectedPairIds, 1);
 
             clearOverlaysButton.ButtonPushedFcn(clearOverlaysButton, struct());
             drawnow

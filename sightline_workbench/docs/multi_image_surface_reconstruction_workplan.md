@@ -1439,7 +1439,10 @@ These trees are coordinated but should remain separately reviewable.
    product catalog and headless selection model drive a separate responsive
    Workbench and runtime-only point/voxel/mesh/grid viewer with comparison,
    full-source links, selected uncertainty glyphs, diagnostics, cost/memory
-   estimates, and non-destructive decimation.
+   estimates, and non-destructive decimation. RD-5 adds direct active-scene
+   launch plus explicit preflight/Run/Cancel orchestration over registered
+   pair matchers, B5 multi-ray reconstruction, S6 fusion, retained evidence,
+   and MAT/compact-JSON export.
 8. **B7 — DEM registration — complete.** Strict WGS84/DTED2 ingestion,
    HAE/MSL-EGM96 normalization, shared DEM uncertainty, robust global ENU
    point-to-normal translation, mask/ambiguity evidence, complete preview, and
@@ -1776,7 +1779,10 @@ same requirements by subsystem.
 47. Surface fusion is a fully documented derivable MATLAB SDK class with common
     validation, provenance, cancellation, capability, examples, and conformance.
 48. The separate Surface Workbench inspects raw/fused/uncertain/voxel/DEM
-    products, links points to sources, and uses runtime decimation/glyph bounds.
+    products, links points to sources, and uses runtime decimation/glyph bounds;
+    when scene-bound it explicitly runs exact selected/planned/all/explicit
+    pair schedules through registered matching, multi-ray, and fusion stages
+    with retained evidence and no forced DEM/smoothing substitute.
 49. Dense ROIs live in world/plane space, map to full sources, support bounded
     previews/chunk overlap, deterministic boundaries, and explicit uncovered area.
 50. Return surface results in memory; MAT plus compact JSON is sufficient.

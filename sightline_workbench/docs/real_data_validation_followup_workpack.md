@@ -1,7 +1,7 @@
 # Real-Data Validation Follow-Up Workpack
 
-Status: active implementation. RD-2, RD-3, RD-1, and RD-4 are complete; RD-5 is next
-in the recorded execution order. This workpack remains the highest-priority
+Status: active implementation. RD-2, RD-3, RD-1, RD-4, and RD-5 are complete;
+RD-6 is next in the recorded execution order. This workpack remains the highest-priority
 implementation queue and temporarily precedes independent D2 native CPU work
 and all hardware-gated GPU work.
 
@@ -56,8 +56,8 @@ completed feature trees except where a regression is demonstrated.
 
 ### RD-0 — July 13 Operator Findings And Execution Order
 
-Status: intake and presentation decisions complete; RD-2, RD-3, RD-1, and
-RD-4 complete.
+Status: intake and presentation decisions complete; RD-2, RD-3, RD-1, RD-4,
+and RD-5 complete.
 
 The implementation order is deliberately independent of the historical pack
 numbers retained below:
@@ -539,21 +539,20 @@ script.
 
 ### RD-5 — Dense-Surface Controls, Evidence, And Quality Recovery
 
-Status: confirmed unusable real-data result and deficient operator feedback;
-implementation not started.
+Status: implementation complete July 14, 2026; representative-imagery
+usefulness review remains external.
 
-The Alignment Workbench `Dense surface` button currently invokes the selected-
-pair `ProjectionDenseSurfaceExtractor` SGM path and then shows its result. It
-does not silently merge all five images. The repository also contains the
-newer Surface Workbench, matcher SDK, template matcher, pair/search planning,
-multi-ray reconstruction, fusion, uncertainty, and 3-D viewing components.
-However, the Surface Workbench is currently a programmatically constructed
-inspector for an already-computed `ProjectionSurfaceProductCatalog`; the viewer
-has no launch control for it and the workbench has no Run action that builds
-the selected products from the active scene. Its apparent processing controls
-currently configure model selection, estimates, and display only. The operator
-did not miss a hidden multi-view execution control. This pack shall connect and
-diagnose those existing capabilities rather than create a second competing
+Before RD-5, the Alignment Workbench `Dense surface` button invoked only the
+selected-pair `ProjectionDenseSurfaceExtractor` SGM path and then showed its
+result; it did not silently merge all five images. The repository already
+contained the Surface Workbench, matcher SDK, template matcher, pair/search
+planning, multi-ray reconstruction, fusion, uncertainty, and 3-D viewing
+components. The Workbench was then only a programmatically constructed
+inspector for an already-computed `ProjectionSurfaceProductCatalog`: the viewer
+had no launch control, no Run action built selected products from the active
+scene, and processing controls affected model selection, estimates, and
+display only. The operator had not missed a hidden multi-view control. RD-5
+connects and diagnoses those existing capabilities without creating a second
 surface architecture.
 
 #### RD-5A — Make the current operation explicit and inspectable
@@ -625,6 +624,51 @@ evidence.
   cases are explicit and recoverable.
 - User review of representative imagery remains the acceptance gate for calling
   the result practically useful.
+
+#### RD-5 implementation evidence
+
+The Alignment Workbench action is now explicitly **Selected-pair SGM**, and a
+separate **Surface Workbench...** action opens or focuses one scene-bound
+Workbench with the active stable pair selected. The new
+`ProjectionSurfaceWorkbenchRunner` binds the existing matcher, association,
+multi-ray, fusion, uncertainty, catalog, and viewer components. The Workbench
+now owns an explicit Run/Cancel lifecycle; catalog-only construction remains
+available and disables Run rather than implying live processing.
+
+Preflight records the exact views and pair IDs, schedule, matcher/options,
+rectification/search state, consistency and occlusion policy, CPU/GPU request
+and fallback, observation cap, requested reconstruction/fusion stage, and
+bounded resource estimate. Completed runs preserve per-pair matcher states,
+accepted correspondence counts, association/reconstruction/fusion counts,
+conditioning and uncertainty state, execution fallback, and complete
+pair/method/options provenance. Empty, weak/partial, ill-conditioned,
+cancelled, unsupported GPU/custom-matcher, and CPU-fallback outcomes remain
+explicit.
+
+The evidence window displays retained pair inputs, validity/overlap masks,
+disparity diagnostics, matcher score/confidence, ray-separation, and height
+distributions. MAT export retains complete intermediate evidence; compact JSON
+retains metadata, counts, states, policies, and provenance without image-sized
+arrays. The initial sparse-bootstrap catalog is intentionally permissive only
+so weak scenes remain diagnosable; actual Run uses the selected scientific
+gates. The path performs no display smoothing, hole filling, or forced DEM
+intersection.
+
+Non-private acceptance combines the existing dense truth/uncertainty/fusion
+audits with a deterministic five-image runner fixture. The fixture schedules
+and names all ten physical pairs, reconstructs stable observations with five
+independent views, and records the exact fusion inputs/output. Separate tests
+identify SGM, classical template matching, and a registered SDK matcher and
+cover explicit schedules, cancellation, fallback, unsupported execution,
+ill-conditioning, UI catalog replacement, retained evidence, and export.
+
+Fresh-class acceptance passes `coreGeometryState` 143/143, `alignment`
+185/185, `backendSurface` 246/246, `viewerAlignmentUi` 75/75,
+`viewerPresentationWorkflows` 69/69, and `viewerPerformancePrecision` 34/34,
+totaling 752/752 with zero failures or incomplete tests. MATLAB Code Analyzer
+reports zero issues for every changed MATLAB source, test, and manifest file.
+Representative private imagery remains the deliberate external gate for
+practical-usefulness claims.
 
 ### RD-6 — World-Space Stereo Cursor
 

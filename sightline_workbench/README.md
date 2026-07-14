@@ -115,7 +115,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 743 tests;
+- the latest grouped fresh-class repository validation passes all 752 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate;
@@ -126,8 +126,9 @@ The current implementation baseline is summarized in
   July 13 operator findings as ordered network-solve, viewer correctness,
   orientation, Layer Manager, dense-surface, and stereo-cursor packs; RD-2's
   bounded network solve, RD-3's LOD/lifecycle correction, RD-1's explicit-plane
-  orientation correction, and RD-4's Layer Manager/viewer shell are complete;
-  RD-5 dense-surface evidence and quality recovery is next; and
+  orientation correction, RD-4's Layer Manager/viewer shell, and RD-5's
+  scene-bound dense-surface controls/evidence/recovery are complete; RD-6
+  world-space stereo cursor is next; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -247,7 +248,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 743 passing tests with no failures or incomplete
+fresh-class baseline is 752 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -322,13 +323,15 @@ the authoritative robust points. They remain diagnostic only. See
 `docs/surface_fusion_sdk.md`.
 
 B6 adds a strict graphics-independent surface-product catalog and selection
-model plus a separate floating Surface Workbench. Its lazy runtime-only 3-D
-viewer renders and compares point, voxel, mesh, and grid products; colors by
-scientific/provenance fields; links selected points to full-source
-observations; bounds uncertainty glyphs and display decimation; and retains the
-complete authoritative product. It is currently launched programmatically with
-an already-computed catalog; viewer launch and GUI pipeline execution are open
-RD-5 corrective work. See `docs/surface_workbench.md`.
+model plus a separate floating Surface Workbench. RD-5 connects it directly to
+accepted active-scene pair evidence with explicit Run/Cancel processing over
+the existing matcher, multi-ray, fusion, uncertainty, and catalog SDKs. The
+viewer distinguishes one-click **Selected-pair SGM** from the planned
+**Surface Workbench...** path; preflight and retained evidence state exact
+pairs, methods, search/execution/fallback policy, counts, rejection states, and
+provenance. The lazy runtime-only 3-D viewer and MAT/compact-JSON export retain
+the complete scientific product without serializing graphics. See
+`docs/surface_workbench.md`.
 
 S7/B7 adds strict WGS84/DTED2 DEM ingestion with explicit HAE or MSL/EGM96
 datum handling, accuracy precedence, shared-dataset uncertainty, and reversible

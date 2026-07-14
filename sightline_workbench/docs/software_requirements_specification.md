@@ -882,7 +882,7 @@ repository implementation.
 | FR-PAIR, FR-ALIGN | alignment_workflow_hardening_plan.md |
 | FR-PVIEW, FR-MOTION, FR-NET, FR-TVC | multi_image_surface_reconstruction_workplan.md, Tree A; real_data_validation_followup_workpack.md |
 | FR-BE, IF-BE | viewer_development_plan.md; performance_optimization_workplan.md |
-| FR-DENSE, FR-SURF, FR-SWB | dense_surface_feature_pack.md; multi_image_surface_reconstruction_workplan.md, Tree B |
+| FR-DENSE, FR-SURF, FR-SWB | dense_surface_feature_pack.md; surface_workbench.md; multi_image_surface_reconstruction_workplan.md, Tree B; real_data_validation_followup_workpack.md, RD-5 |
 | FR-UNC, FR-DEM | multi_image_surface_reconstruction_workplan.md, sections 11-13 and Tree B |
 | FR-SDK-COR, FR-SDK-DM, FR-SDK-EXT | matlab_sdk_audit.md; multi_image_surface_reconstruction_workplan.md, Tree S |
 | FR-SYN | dense_surface_synthetic_expansion_plan.md |

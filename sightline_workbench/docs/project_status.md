@@ -21,7 +21,7 @@ As of July 14, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 743/743 tests with
+- The latest grouped fresh-class repository suite passes 752/752 tests with
   zero failures and zero incomplete tests.
 - `docs/real_data_validation_followup_workpack.md` is the active top-priority
   corrective queue. RD-2, RD-3, RD-1, and RD-4 are complete: the default network
@@ -31,7 +31,10 @@ As of July 14, 2026:
   real-data cameras use the side-invariant explicit-plane presentation
   convention, and the default-open Layer Manager now owns selection,
   visibility, runtime View All/Single/Pair presentation, playback, and pair
-  camera tracking. RD-5 dense-surface evidence and quality recovery is next.
+  camera tracking. RD-5 now supplies an explicit selected-pair action plus a
+  scene-bound Surface Workbench Run/Cancel, retained evidence, exact pair/method
+  provenance, multi-ray/fusion orchestration, and MAT/JSON export. RD-6
+  world-space stereo cursor is next.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
   existing viewer launch signature and legacy `LayerId` contracts.
@@ -99,6 +102,7 @@ As of July 14, 2026:
 | Real-data follow-up RD-3 LOD/lifecycle correctness | Complete |
 | Real-data follow-up RD-1 explicit-plane camera orientation | Complete; representative real-data confirmation pending |
 | Real-data follow-up RD-4 Layer Manager/viewer shell | Complete |
+| Real-data follow-up RD-5 dense-surface controls/evidence/recovery | Complete; representative-imagery usefulness review pending |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -144,6 +148,19 @@ red/cyan assignment after pair turnover. View All draws a clipped yellow
 selected-footprint outline above the image stack without radiometric rerender.
 The main viewer retains only a compact Tip/Tilt/Twist/Alpha strip and a disabled
 bottom-right OPK overlay so ordinary viewport input passes through.
+
+RD-5 relabels the immediate path as **Selected-pair SGM** and adds a distinct
+one-instance **Surface Workbench...** action. The scene-bound runner uses the
+existing dense-matcher SDK, stable observation association, multi-ray
+reconstruction, fusion SDK, uncertainty, catalog, and 3-D viewer. Its explicit
+Run/Cancel lifecycle preflights exact stable pairs, matcher/search policies,
+rectification, execution/fallback, bounds, and requested products; completed
+runs retain pair images/masks, disparity/score/confidence, ray and height
+diagnostics, exact counts/states, and generation provenance. MAT export retains
+the complete evidence and compact JSON omits only image-sized arrays. The
+deterministic five-image fixture names and processes all ten pairs before
+multi-ray/fusion. No smoothing, hole filling, or forced DEM is used, and
+representative private imagery remains an external usefulness gate.
 
 The completed Alignment Workbench usability pack groups controls into Setup,
 Filter/Solve Settings, Staged Workflow/Review, Pair Schedule, Match Ledger, and
@@ -238,7 +255,7 @@ items are preserved there. The active corrective queue is now
 Its July 13 operator findings are incorporated in the order RD-2 network-solve,
 RD-3 LOD/lifecycle correctness, RD-1 camera-up orientation, RD-4 Layer
 Manager/viewer shell, RD-5 dense-surface recovery, and RD-6 stereo cursor.
-RD-2, RD-3, RD-1, and RD-4 are complete; RD-5 is the next active pack. MI-0 through MI-3, A2
+RD-2, RD-3, RD-1, RD-4, and RD-5 are complete; RD-6 is the next active pack. MI-0 through MI-3, A2
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
 A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are
