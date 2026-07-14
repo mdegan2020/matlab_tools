@@ -21,15 +21,17 @@ As of July 14, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 735/735 tests with zero
-  failures and zero incomplete tests.
+- The latest grouped fresh-class repository suite passes 743/743 tests with
+  zero failures and zero incomplete tests.
 - `docs/real_data_validation_followup_workpack.md` is the active top-priority
-  corrective queue. RD-2, RD-3, and RD-1 are complete: the default network
+  corrective queue. RD-2, RD-3, RD-1, and RD-4 are complete: the default network
   path is bounded and observable, active tiled presentations reconcile against the
   current camera before display, playback lookahead rejects stale requests,
   the main viewer owns one idempotent child/timer shutdown path, and implicit
   real-data cameras use the side-invariant explicit-plane presentation
-  convention. RD-4 Layer Manager/viewer-shell work is next.
+  convention, and the default-open Layer Manager now owns selection,
+  visibility, runtime View All/Single/Pair presentation, playback, and pair
+  camera tracking. RD-5 dense-surface evidence and quality recovery is next.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
   existing viewer launch signature and legacy `LayerId` contracts.
@@ -96,6 +98,7 @@ As of July 14, 2026:
 | Real-data follow-up RD-2 bounded network solve | Complete |
 | Real-data follow-up RD-3 LOD/lifecycle correctness | Complete |
 | Real-data follow-up RD-1 explicit-plane camera orientation | Complete; representative real-data confirmation pending |
+| Real-data follow-up RD-4 Layer Manager/viewer shell | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -131,6 +134,17 @@ anaglyph outputs remain unchanged. Representative private real-data
 confirmation is still required before removing the operator advisory; see
 `docs/real_data_validation_followup_workpack.md`.
 
+RD-4 removes the redundant hidden alignment launcher, makes
+`Alignment Workbench...` a direct one-instance context command, and opens the
+nonmodal Layer Manager with every viewer. The manager owns stable-ID layer
+selection/order, stored individual and bulk visibility, sequence filtering,
+playback, and runtime-only View All, Single View, and overlapping Pair View
+masks. Pair View owns absolute no-drift camera tracking and re-runs physical-eye
+red/cyan assignment after pair turnover. View All draws a clipped yellow
+selected-footprint outline above the image stack without radiometric rerender.
+The main viewer retains only a compact Tip/Tilt/Twist/Alpha strip and a disabled
+bottom-right OPK overlay so ordinary viewport input passes through.
+
 The completed Alignment Workbench usability pack groups controls into Setup,
 Filter/Solve Settings, Staged Workflow/Review, Pair Schedule, Match Ledger, and
 full-width Diagnostics regions. It preserves the staged state machine and
@@ -150,12 +164,13 @@ camera horizontal, keeps red on the physical left, retains prior identity near
 head-on degeneracy, and stores pair-specific manual overrides only in a
 graphics-free runtime controller.
 
-Multi-image A2 adds one-shot Pair viewpoint and Restore viewpoint commands plus
-runtime-only Follow active pair. The camera uses representative origins over
+Multi-image A2 adds one-shot Pair viewpoint and Restore viewpoint commands. The
+camera uses representative origins over
 shared overlap when continuous source mapping is available, otherwise the MI-3
 center-column `ReferenceOrigin`; it aims from their midpoint to the common
 footprint centroid, uses plane-derived up, and fits the overlap with padding.
-Manual pan, zoom, or twist suspends follow for the current pair. The feature
+RD-4 moves persistent tracking ownership to Pair View in the Layer Manager and
+applies that absolute geometry after accepted pair transitions. The feature
 changes only camera presentation and reports unavailable overlap/geometry
 without mutating scene or scientific state.
 
@@ -223,7 +238,7 @@ items are preserved there. The active corrective queue is now
 Its July 13 operator findings are incorporated in the order RD-2 network-solve,
 RD-3 LOD/lifecycle correctness, RD-1 camera-up orientation, RD-4 Layer
 Manager/viewer shell, RD-5 dense-surface recovery, and RD-6 stereo cursor.
-RD-2, RD-3, and RD-1 are complete; RD-4 is the next active pack. MI-0 through MI-3, A2
+RD-2, RD-3, RD-1, and RD-4 are complete; RD-5 is the next active pack. MI-0 through MI-3, A2
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
 A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are

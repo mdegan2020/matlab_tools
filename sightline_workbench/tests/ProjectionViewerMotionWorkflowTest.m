@@ -18,15 +18,15 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
     end
 
     methods (Test)
-        function testContextLaunchIsLazyAndDefaultsToAllViews(testCase)
+        function testLayerManagerOpensByDefaultInViewAll(testCase)
             scene = ProjectionViewerMotionWorkflowTest.makeScene();
             scene.layers(2).Visible = false;
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
             viewer = ProjectionViewerMotionWorkflowTest.viewer();
 
-            testCase.verifyEmpty(findall(groot, "Tag", ...
-                "ProjectionViewerMotionFigure"));
+            testCase.verifyNumElements(findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerFigure"), 1);
             testCase.verifyEmpty(findall(viewer, "Tag", ...
                 "ProjectionViewerMotionLeftEdgeButton"));
 
@@ -36,12 +36,14 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
                 window, "ProjectionViewerMotionTable").Data;
 
             testCase.verifyTrue(all(data.Include));
+            testCase.verifyEqual(data.Visible, [true; false; true]);
             testCase.verifyEqual(height(data), numel(scene.layers));
             testCase.verifyEqual(string(data.ViewId), ...
                 reshape(ProjectionViewMetadata.ids(scene), [], 1));
             testCase.verifyEmpty(findall(viewer, "Tag", ...
                 "ProjectionViewerMotionLeftEdgeButton"));
             testCase.verifyFalse(app.motionDiagnostics().Active);
+            testCase.verifyEqual(app.motionDiagnostics().Mode, "viewAll");
         end
 
         function testPassAndPerViewFiltersRequireTwoFrames(testCase)
@@ -55,26 +57,31 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             window = ProjectionViewerMotionWorkflowTest.motionWindow();
             pass = ProjectionViewerMotionWorkflowTest.tagged( ...
                 window, "ProjectionViewerMotionPassDropDown");
-            start = ProjectionViewerMotionWorkflowTest.tagged( ...
-                window, "ProjectionViewerMotionStartExitButton");
+            mode = ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerLayerManagerModeDropDown");
             status = ProjectionViewerMotionWorkflowTest.tagged( ...
                 window, "ProjectionViewerMotionStatusLabel");
 
             pass.Value = "pass-b";
             pass.ValueChangedFcn(pass, struct());
-            testCase.verifyEqual(string(start.Enable), "off");
+            mode.Value = "pair";
+            mode.ValueChangedFcn(mode, struct());
+            testCase.verifyFalse(app.motionDiagnostics().Active);
             testCase.verifySubstring(string(status.Text), "at least two");
 
             pass.Value = "pass-a";
             pass.ValueChangedFcn(pass, struct());
-            testCase.verifyEqual(string(start.Enable), "on");
+            mode.Value = "pair";
+            mode.ValueChangedFcn(mode, struct());
+            testCase.verifyTrue(app.motionDiagnostics().Active);
             tableControl = ProjectionViewerMotionWorkflowTest.tagged( ...
                 window, "ProjectionViewerMotionTable");
             data = tableControl.Data;
             data.Include(2) = false;
             tableControl.Data = data;
             tableControl.CellEditCallback(tableControl, struct());
-            testCase.verifyEqual(string(start.Enable), "off");
+            testCase.verifyFalse(app.motionDiagnostics().Active);
+            testCase.verifySubstring(string(status.Text), "at least two");
         end
 
         function testSteppingUsesOneFrameAndExitRestoresExactState(testCase)
@@ -88,13 +95,16 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             testCase.addTeardown(@() delete(app));
             viewer = ProjectionViewerMotionWorkflowTest.viewer();
             axes = findall(viewer, "Type", "axes");
+            layer = ProjectionViewerMotionWorkflowTest.layerDropDown([]);
+            layer.Value = 1;
+            layer.ValueChangedFcn(layer, struct(Value=1));
             before = app.exportState();
             ProjectionViewerMotionWorkflowTest.openAndStartMotion(testCase);
             first = app.motionDiagnostics();
 
             testCase.verifyTrue(first.Active);
             testCase.verifyEqual(nnz(first.EffectiveVisibility), 1);
-            testCase.verifyEqual(first.KeyboardMode, "motion");
+            testCase.verifyEqual(first.KeyboardMode, "single");
             testCase.verifyEqual(app.exportState().Camera, before.Camera);
             scientificBefore = app.exportState().Layers;
             viewer.CurrentObject = axes;
@@ -373,8 +383,8 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             testCase.verifyNotEqual( ...
                 staleAgain.Viewer.CurrentLevelIndices(2), ...
                 staleAgain.Viewer.CurrentLevelIndices(1));
-            visibleCheckBox = findall(viewer, ...
-                "-isa", "matlab.ui.control.CheckBox");
+            visibleCheckBox = findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerVisibleCheckBox");
             visibleCheckBox.Value = true;
             visibleCheckBox.ValueChangedFcn( ...
                 visibleCheckBox, struct(Value=true));
@@ -385,6 +395,208 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
                 visible.Viewer.VisibleTileSurfaceCount, 0);
             testCase.verifyEqual( ...
                 visible.Counters.BlankPreviewTransitions, 0);
+        end
+
+        function testPresentationMasksPreserveStoredVisibility(testCase)
+            scene = ProjectionViewerMotionWorkflowTest.makeScene();
+            [scene.layers.Visible] = deal(false);
+            scene.layers(2).Visible = true;
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            window = ProjectionViewerMotionWorkflowTest.motionWindow();
+            layer = ProjectionViewerMotionWorkflowTest.layerDropDown([]);
+            layer.Value = 1;
+            layer.ValueChangedFcn(layer, struct(Value=1));
+
+            testCase.verifyEqual( ...
+                app.motionDiagnostics().EffectiveVisibility, ...
+                [false true false]);
+            ProjectionViewerMotionWorkflowTest.setMode(window, "single");
+            testCase.verifyEqual( ...
+                app.motionDiagnostics().EffectiveVisibility, ...
+                [true false false]);
+            testCase.verifyEqual( ...
+                [app.exportState().Layers.Visible], [false true false]);
+
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            testCase.verifyEqual( ...
+                app.motionDiagnostics().EffectiveVisibility, ...
+                [true true false]);
+            tableControl = ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerMotionTable");
+            data = tableControl.Data;
+            data.Visible = [false; false; true];
+            tableControl.Data = data;
+            tableControl.CellEditCallback(tableControl, struct());
+            testCase.verifyEqual( ...
+                [app.exportState().Layers.Visible], [false false true]);
+            testCase.verifyEqual(nnz( ...
+                app.motionDiagnostics().EffectiveVisibility), 2);
+
+            ProjectionViewerMotionWorkflowTest.setMode(window, "viewAll");
+            testCase.verifyEqual( ...
+                app.motionDiagnostics().EffectiveVisibility, ...
+                [false false true]);
+            testCase.press(ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerLayerManagerAllVisibleButton"));
+            testCase.verifyTrue(all([app.exportState().Layers.Visible]));
+            testCase.press(ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerLayerManagerNoneVisibleButton"));
+            testCase.verifyFalse(any([app.exportState().Layers.Visible]));
+        end
+
+        function testPairTurnoverIsOverlappingAndExactlyReversible(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerMotionWorkflowTest.makeFourFrameScene());
+            testCase.addTeardown(@() delete(app));
+            window = ProjectionViewerMotionWorkflowTest.motionWindow();
+            layer = ProjectionViewerMotionWorkflowTest.layerDropDown([]);
+            layer.Value = 1;
+            layer.ValueChangedFcn(layer, struct(Value=1));
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            first = app.motionDiagnostics();
+            firstIds = string({first.Sequence.Frames(1:2).ViewId});
+
+            testCase.press(ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerMotionNextButton"));
+            second = app.motionDiagnostics();
+            secondIds = string({second.Sequence.Frames(2:3).ViewId});
+            testCase.verifyEqual(second.Position, 2);
+            testCase.verifyEqual(firstIds(2), secondIds(1));
+            testCase.verifyEqual(nnz(second.EffectiveVisibility), 2);
+
+            testCase.press(ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerMotionPreviousButton"));
+            reversed = app.motionDiagnostics();
+            testCase.verifyEqual(reversed.Position, first.Position);
+            testCase.verifyEqual(reversed.EffectiveVisibility, ...
+                first.EffectiveVisibility);
+            pair = app.alignmentDiagnostics().ActivePair;
+            testCase.verifyEqual( ...
+                [string(pair.ReferenceViewId) string(pair.MovingViewId)], ...
+                firstIds);
+        end
+
+        function testPairTrackCameraReturnsWithoutDrift(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerMotionWorkflowTest.makeFourFrameScene());
+            testCase.addTeardown(@() delete(app));
+            window = ProjectionViewerMotionWorkflowTest.motionWindow();
+            layer = ProjectionViewerMotionWorkflowTest.layerDropDown([]);
+            layer.Value = 1;
+            layer.ValueChangedFcn(layer, struct(Value=1));
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            track = ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerLayerManagerTrackCameraCheckBox");
+            track.Value = true;
+            track.ValueChangedFcn(track, struct());
+            firstCamera = app.exportState().Camera;
+
+            next = ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerMotionNextButton");
+            previous = ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerMotionPreviousButton");
+            testCase.press(next);
+            secondCamera = app.exportState().Camera;
+            testCase.press(previous);
+            returnedCamera = app.exportState().Camera;
+
+            testCase.verifyTrue(app.motionDiagnostics().TrackCamera);
+            testCase.verifyNotEqual(secondCamera.Position, ...
+                firstCamera.Position);
+            testCase.verifyEqual(returnedCamera, firstCamera, AbsTol=1e-10);
+        end
+
+        function testLayerReorderKeepsActivePairViewIdsStable(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerMotionWorkflowTest.makeFourFrameScene());
+            testCase.addTeardown(@() delete(app));
+            window = ProjectionViewerMotionWorkflowTest.motionWindow();
+            layer = ProjectionViewerMotionWorkflowTest.layerDropDown([]);
+            layer.Value = 1;
+            layer.ValueChangedFcn(layer, struct(Value=1));
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            before = app.motionDiagnostics();
+            beforeIds = string({before.Sequence.Frames(1:2).ViewId});
+
+            testCase.press(ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerMoveLayerUpButton"));
+            after = app.motionDiagnostics();
+            currentOrderIds = strings(1, 4);
+            for frame = after.Sequence.Frames
+                currentOrderIds(frame.LayerIndex) = string(frame.ViewId);
+            end
+            visibleIds = currentOrderIds(after.EffectiveVisibility);
+
+            testCase.verifyEqual(string({after.Sequence.Frames(1:2).ViewId}), ...
+                beforeIds);
+            testCase.verifyEqual(sort(visibleIds), sort(beforeIds));
+            testCase.verifyEqual(numel(unique( ...
+                string(after.Sequence.ViewIds))), 4);
+        end
+
+        function testSelectedFootprintOutlineIsTopmostWithoutRerender(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerMotionWorkflowTest.makeScene());
+            testCase.addTeardown(@() delete(app));
+            viewer = ProjectionViewerMotionWorkflowTest.viewer();
+            axesHandle = findall(viewer, "Type", "axes");
+            outline = findall(axesHandle, "Tag", ...
+                "ProjectionViewerSelectedFootprintOutline");
+
+            testCase.verifyNumElements(outline, 1);
+            testCase.verifyEqual(outline.Color, [1 1 0]);
+            testCase.verifyEqual(string(outline.Clipping), "on");
+            testCase.verifyEqual(string(outline.Visible), "on");
+            surfaces = findall(axesHandle, "Type", "surface");
+            children = axesHandle.Children;
+            outlinePosition = find(children == outline, 1);
+            for surface = reshape(surfaces, 1, [])
+                testCase.verifyLessThan(outlinePosition, ...
+                    find(children == surface, 1));
+            end
+
+            app.resetPerformanceDiagnostics();
+            layer = ProjectionViewerMotionWorkflowTest.layerDropDown([]);
+            layer.Value = 1;
+            layer.ValueChangedFcn(layer, struct(Value=1));
+            performance = app.performanceDiagnostics();
+            testCase.verifyEqual(performance.Counters.MeshBuilds, 0);
+            testCase.verifyEqual(performance.Counters.SurfaceCreations, 0);
+            testCase.verifyEqual( ...
+                performance.Counters.LayerGeometryRefreshes, 0);
+            testCase.verifyEqual(string(outline.Visible), "on");
+            testCase.verifyFalse(isfield(app.exportState(), ...
+                "SelectedFootprintOutline"));
+        end
+
+        function testSingleViewSupportsOneEligibleLayer(testCase)
+            scene = ProjectionViewerMotionWorkflowTest.makeScene();
+            scene.layers = scene.layers(1);
+            scene.layers(1).Visible = false;
+            scene = ProjectionViewMetadata.ensureScene(scene);
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            window = ProjectionViewerMotionWorkflowTest.motionWindow();
+
+            ProjectionViewerMotionWorkflowTest.setMode(window, "single");
+            testCase.verifyTrue(app.motionDiagnostics().Active);
+            testCase.verifyEqual( ...
+                app.motionDiagnostics().EffectiveVisibility, true);
+            testCase.verifyFalse(app.exportState().Layers.Visible);
+
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            testCase.verifyTrue(app.motionDiagnostics().Active);
+            testCase.verifyEqual(app.motionDiagnostics().Mode, "single");
+            testCase.verifySubstring(string( ...
+                ProjectionViewerMotionWorkflowTest.tagged(window, ...
+                "ProjectionViewerMotionStatusLabel").Text), ...
+                "at least two");
+
+            ProjectionViewerMotionWorkflowTest.setMode(window, "viewAll");
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            testCase.verifyFalse(app.motionDiagnostics().Active);
+            testCase.verifyEqual(app.motionDiagnostics().Mode, "viewAll");
         end
 
         function testDeleteAfterExternalViewerCloseIsWarningFree(testCase)
@@ -426,19 +638,50 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             scene = ProjectionViewMetadata.ensureScene(scene);
         end
 
+        function scene = makeFourFrameScene()
+            images = {uint8(ones(12, 13, 3)), ...
+                uint8(2 * ones(12, 13, 3)), ...
+                uint8(3 * ones(12, 13, 3)), ...
+                uint8(4 * ones(12, 13, 3))};
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                images, "pair-" + string(1:4) + ".tif", ...
+                struct(RowStride=3, ColumnStride=3));
+            lateral = [-0.3 -0.1 0.1 0.3];
+            for index = 1:4
+                scene.layers(index).ViewId = "pair-view-" + string(index);
+                scene.layers(index).PassId = "pair-pass";
+                scene.layers(index).AcquisitionStartTime = index;
+                scene.layers(index).SourceGeometry.ReferenceOrigin = ...
+                    [0; lateral(index); 0];
+            end
+            scene = ProjectionViewMetadata.ensureScene(scene);
+        end
+
+        function setMode(window, mode)
+            control = ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerLayerManagerModeDropDown");
+            control.Value = mode;
+            control.ValueChangedFcn(control, struct());
+            drawnow
+        end
+
         function openMotionWindow()
             menu = findall(groot, "Tag", ...
-                "ProjectionViewerMotionImageryMenuItem");
+                "ProjectionViewerLayerManagerMenuItem");
             menu(1).MenuSelectedFcn(menu(1), struct());
             drawnow
         end
 
-        function openAndStartMotion(testCase)
+        function openAndStartMotion(~)
             ProjectionViewerMotionWorkflowTest.openMotionWindow();
-            start = ProjectionViewerMotionWorkflowTest.tagged( ...
+            layer = ProjectionViewerMotionWorkflowTest.layerDropDown([]);
+            layer.Value = 1;
+            layer.ValueChangedFcn(layer, struct(Value=1));
+            mode = ProjectionViewerMotionWorkflowTest.tagged( ...
                 ProjectionViewerMotionWorkflowTest.motionWindow(), ...
-                "ProjectionViewerMotionStartExitButton");
-            testCase.press(start);
+                "ProjectionViewerLayerManagerModeDropDown");
+            mode.Value = "single";
+            mode.ValueChangedFcn(mode, struct());
             drawnow
         end
 
@@ -450,7 +693,7 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
 
         function figureHandle = motionWindow()
             figures = findall(groot, "Tag", ...
-                "ProjectionViewerMotionFigure");
+                "ProjectionViewerLayerManagerFigure");
             figureHandle = figures(1);
         end
 
@@ -459,16 +702,9 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             component = components(1);
         end
 
-        function dropdown = layerDropDown(viewer)
-            dropdowns = findall(viewer, ...
-                "-isa", "matlab.ui.control.DropDown");
-            isLayer = false(size(dropdowns));
-            for index = 1:numel(dropdowns)
-                isLayer(index) = isnumeric(dropdowns(index).ItemsData) && ...
-                    isequal(dropdowns(index).ItemsData, ...
-                    1:numel(dropdowns(index).Items));
-            end
-            dropdown = dropdowns(isLayer);
+        function dropdown = layerDropDown(~)
+            dropdown = findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerLayerDropDown");
         end
 
         function event = keyEvent(key)
@@ -479,7 +715,7 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             delete(findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench"));
             delete(findall(groot, "Tag", ...
-                "ProjectionViewerMotionFigure"));
+                "ProjectionViewerLayerManagerFigure"));
         end
     end
 end

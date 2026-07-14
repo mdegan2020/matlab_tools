@@ -33,6 +33,7 @@ classdef ProjectionViewerApp < handle
         PendingAlphaMask logical
         AlphaPreviewTimer
         IsPreviewCameraReady logical = false
+        PendingInitialViewportFrame logical = false
         ProjectionTipDegrees double = 0
         ProjectionTiltDegrees double = 0
         ViewTwistDegrees double = 0
@@ -46,6 +47,7 @@ classdef ProjectionViewerApp < handle
         NeedsDragFinalize logical = false
         PreviewTimer
         CameraSettleTimer
+        InitialViewportFrameListener
         CameraScheduleGeneration uint64 = uint64(0)
         IsCameraReconciliationPending logical = false
         PerformanceMonitor
@@ -92,7 +94,6 @@ classdef ProjectionViewerApp < handle
         Axes matlab.ui.control.UIAxes
         Surface
         ControlGrid matlab.ui.container.GridLayout
-        LayerHeaderGrid matlab.ui.container.GridLayout
         ImageContextMenu
         SaveMenuItem
         LoadMenuItem
@@ -129,13 +130,9 @@ classdef ProjectionViewerApp < handle
         IsCrosshairEnabled logical = false
         IsCrosshairVisible logical = false
         IsPointerMotionBusy logical = false
-        AlignmentLauncherGrid matlab.ui.container.GridLayout
         AlignmentGrid matlab.ui.container.GridLayout
-        AlignmentOpenWorkbenchButton matlab.ui.control.Button
-        AlignmentLauncherStatusLabel matlab.ui.control.Label
         AlignmentWorkbenchFigure matlab.ui.Figure
         AlignmentWorkbenchGrid matlab.ui.container.GridLayout
-        AlignmentStageLabel matlab.ui.control.Label
         AlignmentDiagnosticsTextArea matlab.ui.control.TextArea
         AlignmentReferenceDropDown matlab.ui.control.DropDown
         AlignmentMovingDropDown matlab.ui.control.DropDown
@@ -147,7 +144,6 @@ classdef ProjectionViewerApp < handle
         AlignmentSoloPairCheckBox matlab.ui.control.StateButton
         AlignmentPairViewButton matlab.ui.control.Button
         AlignmentRestoreViewButton matlab.ui.control.Button
-        AlignmentFollowPairCheckBox matlab.ui.control.StateButton
         AlignmentSwapEyesButton matlab.ui.control.Button
         AlignmentResetEyesButton matlab.ui.control.Button
         AlignmentStereoEyeStatusLabel matlab.ui.control.Label
@@ -189,6 +185,10 @@ classdef ProjectionViewerApp < handle
         PairViewpointRuntime struct = struct()
         MotionRuntime struct = struct()
         MotionFigure matlab.ui.Figure
+        LayerManagerModeDropDown matlab.ui.control.DropDown
+        LayerManagerTrackCameraCheckBox matlab.ui.control.CheckBox
+        LayerManagerAllVisibleButton matlab.ui.control.Button
+        LayerManagerNoneVisibleButton matlab.ui.control.Button
         MotionTable matlab.ui.control.Table
         MotionPassDropDown matlab.ui.control.DropDown
         MotionLoopCheckBox matlab.ui.control.CheckBox
@@ -206,6 +206,7 @@ classdef ProjectionViewerApp < handle
         MotionIdentityLabel matlab.ui.control.Label
         MotionIdentityTimer
         MotionPlaybackTimer
+        SelectedFootprintOutline = gobjects(0)
         MotionEdgeWidthPixels double = 64
         MotionIdentitySeconds double = 2
         AlignmentOverlayLines = gobjects(0)
@@ -306,17 +307,21 @@ classdef ProjectionViewerApp < handle
             end
             app.CorrectionStore = ProjectionCorrectionStore( ...
                 app.Scene, correctionOptions);
+            hasSavedCamera = ~isempty(viewerState) && ...
+                isfield(viewerState, "Camera");
+            app.PendingInitialViewportFrame = ~hasSavedCamera;
             app.createComponents();
             app.createSurface();
             app.configureFrameCamera();
-            if ~isempty(viewerState) && isfield(viewerState, "Camera")
+            if hasSavedCamera
                 app.applyCameraState(viewerState.Camera);
             else
                 app.frameCurrentProjectionView(app.InitialViewportFillFraction);
             end
             app.updateAllSurfaceBlendAppearance();
-            app.refreshTiledProjectionSurfaces();
             app.updateControlsFromSelectedLayer();
+            app.openMotionImagery();
+            app.refreshTiledProjectionSurfaces();
 
             if nargout == 0
                 clear app
@@ -339,6 +344,7 @@ classdef ProjectionViewerApp < handle
             end
             app.closeMotionImagery();
             app.exitAlignmentSoloPair();
+            app.deleteInitialViewportFrameListener();
             app.deleteCameraSettleTimer();
             app.clearPreviewTileRuntimeCache();
             app.clearPreviewSampledGeometryCache();
@@ -625,6 +631,7 @@ classdef ProjectionViewerApp < handle
             diagnostics = struct(Active=runtime.Active, ...
                 WindowOpen=~isempty(app.MotionFigure) && ...
                 isvalid(app.MotionFigure), Position=runtime.Position, ...
+                Mode=runtime.Mode, TrackCamera=runtime.TrackCamera, ...
                 Loop=runtime.Loop, HoverEdges=runtime.HoverEdges, ...
                 IdentityPinned=runtime.IdentityPinned, ...
                 Playing=runtime.Playing, RateFps=runtime.RateFps, ...
@@ -964,6 +971,8 @@ classdef ProjectionViewerApp < handle
         function createComponents(app)
             app.UIFigure = uifigure(Name="Sightline Workbench", ...
                 Position=[100 100 1100 760], ...
+                AutoResizeChildren="off", ...
+                SizeChangedFcn=@(~, ~) app.positionViewerOverlays(), ...
                 CloseRequestFcn=@(~, ~) delete(app), ...
                 WindowScrollWheelFcn=@(~, event) app.scrollWheel(event), ...
                 WindowKeyPressFcn=@(~, event) app.keyPressed(event), ...
@@ -981,6 +990,11 @@ classdef ProjectionViewerApp < handle
             app.Axes = uiaxes(app.GridLayout);
             app.Axes.Layout.Row = 1;
             app.Axes.Layout.Column = 1;
+            if app.PendingInitialViewportFrame
+                app.InitialViewportFrameListener = addlistener( ...
+                    app.Axes, "InnerPosition", "PostSet", ...
+                    @(~, ~) app.viewerAxesInnerPositionChanged());
+            end
             app.Axes.Toolbar.Visible = "off";
             app.Axes.Interactions = [];
             colormap(app.Axes, gray(256));
@@ -988,62 +1002,20 @@ classdef ProjectionViewerApp < handle
             app.createImageContextMenu();
             app.createCrosshairOverlay();
 
-            app.ControlGrid = uigridlayout(app.GridLayout, [2 6]);
+            app.ControlGrid = uigridlayout(app.GridLayout, [2 4]);
             app.ControlGrid.Layout.Row = 3;
             app.ControlGrid.Layout.Column = 1;
             app.ControlGrid.RowHeight = {"fit", "fit"};
-            app.ControlGrid.ColumnWidth = {420, "1x", "1x", "1x", "1x", ...
-                "fit"};
+            app.ControlGrid.ColumnWidth = {"1x", "1x", "1x", "1x"};
             app.ControlGrid.Padding = [0 0 0 0];
             app.ControlGrid.ColumnSpacing = 12;
 
-            app.LayerHeaderGrid = uigridlayout(app.ControlGrid, [1 6]);
-            app.LayerHeaderGrid.Layout.Row = 1;
-            app.LayerHeaderGrid.Layout.Column = 1;
-            app.LayerHeaderGrid.RowHeight = {"fit"};
-            app.LayerHeaderGrid.ColumnWidth = {"fit", "fit", "fit", "1x", ...
-                "fit", "fit"};
-            app.LayerHeaderGrid.Padding = [0 0 0 0];
-            app.LayerHeaderGrid.ColumnSpacing = 4;
-
-            layerLabel = uilabel(app.LayerHeaderGrid, Text="Layer");
-            layerLabel.Layout.Row = 1;
-            layerLabel.Layout.Column = 1;
-            app.MoveLayerUpButton = uibutton(app.LayerHeaderGrid, ...
-                Text="+", Tag="ProjectionViewerMoveLayerUpButton", ...
-                Tooltip="Move selected layer up", ...
-                ButtonPushedFcn=@(~, ~) app.moveSelectedLayerUp());
-            app.MoveLayerUpButton.Layout.Row = 1;
-            app.MoveLayerUpButton.Layout.Column = 2;
-            app.MoveLayerDownButton = uibutton(app.LayerHeaderGrid, ...
-                Text="-", Tag="ProjectionViewerMoveLayerDownButton", ...
-                Tooltip="Move selected layer down", ...
-                ButtonPushedFcn=@(~, ~) app.moveSelectedLayerDown());
-            app.MoveLayerDownButton.Layout.Row = 1;
-            app.MoveLayerDownButton.Layout.Column = 3;
-            visibleLabel = uilabel(app.LayerHeaderGrid, Text="Visible", ...
-                HorizontalAlignment="right");
-            visibleLabel.Layout.Row = 1;
-            visibleLabel.Layout.Column = 5;
-            app.VisibleCheckBox = uicheckbox(app.LayerHeaderGrid, Text="", ...
-                Value=true, ValueChangedFcn=@(~, event) app.visibleChanged(event));
-            app.VisibleCheckBox.Layout.Row = 1;
-            app.VisibleCheckBox.Layout.Column = 6;
-
-            app.LayerDropDown = uidropdown(app.ControlGrid, ...
-                Items=cellstr(app.layerDisplayNames()), ...
-                ItemsData=1:numel(app.Scene.layers), ...
-                Value=app.SelectedLayerIndex, ...
-                ValueChangedFcn=@(~, event) app.layerSelectionChanged(event));
-            app.LayerDropDown.Layout.Row = 2;
-            app.LayerDropDown.Layout.Column = 1;
-
             app.TipLabel = uilabel(app.ControlGrid, Text="Tip 0.0 deg");
             app.TipLabel.Layout.Row = 1;
-            app.TipLabel.Layout.Column = 2;
+            app.TipLabel.Layout.Column = 1;
             app.TipSlider = uislider(app.ControlGrid, Limits=[-85 85], Value=0);
             app.TipSlider.Layout.Row = 2;
-            app.TipSlider.Layout.Column = 2;
+            app.TipSlider.Layout.Column = 1;
             app.TipSlider.MajorTicks = [-85 -45 0 45 85];
             app.TipSlider.ValueChangingFcn = @(source, event) ...
                 app.sliderChanging(source, event, "tip");
@@ -1051,10 +1023,10 @@ classdef ProjectionViewerApp < handle
 
             app.TiltLabel = uilabel(app.ControlGrid, Text="Tilt 0.0 deg");
             app.TiltLabel.Layout.Row = 1;
-            app.TiltLabel.Layout.Column = 3;
+            app.TiltLabel.Layout.Column = 2;
             app.TiltSlider = uislider(app.ControlGrid, Limits=[-85 85], Value=0);
             app.TiltSlider.Layout.Row = 2;
-            app.TiltSlider.Layout.Column = 3;
+            app.TiltSlider.Layout.Column = 2;
             app.TiltSlider.MajorTicks = [-85 -45 0 45 85];
             app.TiltSlider.ValueChangingFcn = @(source, event) ...
                 app.sliderChanging(source, event, "tilt");
@@ -1062,10 +1034,10 @@ classdef ProjectionViewerApp < handle
 
             app.TwistLabel = uilabel(app.ControlGrid, Text="Twist 0.0 deg");
             app.TwistLabel.Layout.Row = 1;
-            app.TwistLabel.Layout.Column = 4;
+            app.TwistLabel.Layout.Column = 3;
             app.TwistSlider = uislider(app.ControlGrid, Limits=[-85 85], Value=0);
             app.TwistSlider.Layout.Row = 2;
-            app.TwistSlider.Layout.Column = 4;
+            app.TwistSlider.Layout.Column = 3;
             app.TwistSlider.MajorTicks = [-85 -45 0 45 85];
             app.TwistSlider.ValueChangingFcn = @(source, event) ...
                 app.twistChanging(source, event);
@@ -1073,56 +1045,22 @@ classdef ProjectionViewerApp < handle
 
             app.AlphaLabel = uilabel(app.ControlGrid, Text="Alpha 1.00");
             app.AlphaLabel.Layout.Row = 1;
-            app.AlphaLabel.Layout.Column = 5;
+            app.AlphaLabel.Layout.Column = 4;
             app.AlphaSlider = uislider(app.ControlGrid, Limits=[0 1], Value=1);
             app.AlphaSlider.Layout.Row = 2;
-            app.AlphaSlider.Layout.Column = 5;
+            app.AlphaSlider.Layout.Column = 4;
             app.AlphaSlider.MajorTicks = 0:0.25:1;
             app.AlphaSlider.ValueChangingFcn = @(source, event) ...
                 app.alphaChanging(source, event);
             app.AlphaSlider.ValueChangedFcn = @(~, ~) app.updateAlphaFromSlider();
 
-            app.ViewVectorLabel = uilabel(app.ControlGrid, ...
-                Text=sprintf("Omega 0.0000 deg\nPhi 0.0000 deg\nKappa 0.000 deg"));
-            app.ViewVectorLabel.Layout.Row = [1 2];
-            app.ViewVectorLabel.Layout.Column = 6;
+            app.ViewVectorLabel = uilabel(app.UIFigure, ...
+                Text=sprintf("Omega 0.0000 deg\nPhi 0.0000 deg\nKappa 0.000 deg"), ...
+                HorizontalAlignment="right", VerticalAlignment="bottom", ...
+                BackgroundColor=[0.05 0.05 0.05], FontColor=[1 1 0.2], ...
+                Enable="off", Tag="ProjectionViewerViewVectorOverlay");
+            app.positionViewerOverlays();
 
-        end
-
-        function createAlignmentLauncherControls(app)
-            app.AlignmentLauncherGrid = uigridlayout(app.GridLayout, [1 4]);
-            app.AlignmentLauncherGrid.Layout.Row = 2;
-            app.AlignmentLauncherGrid.Layout.Column = 1;
-            app.AlignmentLauncherGrid.Tag = "ProjectionViewerAlignmentGrid";
-            app.AlignmentLauncherGrid.RowHeight = {"fit"};
-            app.AlignmentLauncherGrid.ColumnWidth = {150, 130, "fit", "1x"};
-            app.AlignmentLauncherGrid.Padding = [0 0 0 0];
-            app.AlignmentLauncherGrid.ColumnSpacing = 8;
-
-            app.AlignmentOpenWorkbenchButton = uibutton( ...
-                app.AlignmentLauncherGrid, Text="Open Workbench", ...
-                Tag="ProjectionViewerAlignmentOpenWorkbenchButton", ...
-                ButtonPushedFcn=@(~, ~) app.openAlignmentWorkbench());
-            app.AlignmentOpenWorkbenchButton.Layout.Column = 1;
-            app.AlignmentStageLabel = uilabel(app.AlignmentLauncherGrid, ...
-                Text="Stage: setup", ...
-                Tag="ProjectionViewerAlignmentStageLabel");
-            app.AlignmentStageLabel.Layout.Column = 2;
-            clearButton = uibutton(app.AlignmentLauncherGrid, ...
-                Text="Clear overlays", ...
-                Tag="ProjectionViewerAlignmentLauncherClearOverlaysButton", ...
-                ButtonPushedFcn=@(~, ~) ...
-                app.clearAlignmentOverlaysFromControls());
-            clearButton.Layout.Column = 3;
-            app.AlignmentLauncherStatusLabel = uilabel( ...
-                app.AlignmentLauncherGrid, Text="Alignment not run", ...
-                Tag="ProjectionViewerAlignmentLauncherStatusLabel");
-            app.AlignmentLauncherStatusLabel.Layout.Column = 4;
-            app.AlignmentLauncherGrid.Visible = "off";
-            rowHeights = app.GridLayout.RowHeight;
-            rowHeights{2} = 0;
-            app.GridLayout.RowHeight = rowHeights;
-            app.refreshAlignmentSessionIndicators();
         end
 
         function openAlignmentWorkbench(app)
@@ -1513,27 +1451,20 @@ classdef ProjectionViewerApp < handle
                 ButtonPushedFcn=@(~, ~) app.restorePairViewpoint());
             app.AlignmentRestoreViewButton.Layout.Row = 2;
             app.AlignmentRestoreViewButton.Layout.Column = 9;
-            app.AlignmentFollowPairCheckBox = uibutton( ...
-                activePairGrid, "state", Text="Follow active pair", ...
-                Value=false, ...
-                Tag="ProjectionViewerAlignmentFollowPairCheckBox", ...
-                ValueChangedFcn=@(~, ~) app.followActivePairChanged());
-            app.AlignmentFollowPairCheckBox.Layout.Row = 2;
-            app.AlignmentFollowPairCheckBox.Layout.Column = 10;
             app.AlignmentSwapEyesButton = uibutton(activePairGrid, ...
                 Text="Swap eyes", ...
                 Tooltip="Manually swap left/right eyes for this pair", ...
                 Tag="ProjectionViewerAlignmentSwapEyesButton", ...
                 ButtonPushedFcn=@(~, ~) app.swapAlignmentStereoEyes());
             app.AlignmentSwapEyesButton.Layout.Row = 2;
-            app.AlignmentSwapEyesButton.Layout.Column = 11;
+            app.AlignmentSwapEyesButton.Layout.Column = 10;
             app.AlignmentResetEyesButton = uibutton(activePairGrid, ...
                 Text="Reset eyes", ...
                 Tooltip="Restore automatic geometric eye assignment", ...
                 Tag="ProjectionViewerAlignmentResetEyesButton", ...
                 ButtonPushedFcn=@(~, ~) app.resetAlignmentStereoEyes());
             app.AlignmentResetEyesButton.Layout.Row = 2;
-            app.AlignmentResetEyesButton.Layout.Column = 12;
+            app.AlignmentResetEyesButton.Layout.Column = 11;
             app.AlignmentPairStatusLabel = uilabel(activePairGrid, ...
                 Text="No active pair", ...
                 Tag="ProjectionViewerAlignmentPairStatusLabel");
@@ -1883,15 +1814,6 @@ classdef ProjectionViewerApp < handle
             app.refreshAlignmentStereoEyeStatus();
         end
 
-        function followActivePairChanged(app)
-            runtime = app.PairViewpointRuntime;
-            runtime.FollowEnabled = ...
-                logical(app.AlignmentFollowPairCheckBox.Value);
-            runtime.SuspendedPairId = "";
-            app.PairViewpointRuntime = runtime;
-            app.refreshAlignmentPairViewpointStatus();
-        end
-
         function followPairViewpointAfterNavigation(app)
             runtime = app.PairViewpointRuntime;
             pair = app.AlignmentPairController.currentPair();
@@ -2005,9 +1927,6 @@ classdef ProjectionViewerApp < handle
             end
             app.AlignmentPairViewButton.Enable = app.onOff(available);
             app.AlignmentPairViewButton.Tooltip = char(explanation);
-            app.AlignmentFollowPairCheckBox.Enable = app.onOff(available);
-            app.AlignmentFollowPairCheckBox.Tooltip = char(explanation);
-            app.AlignmentFollowPairCheckBox.Value = runtime.FollowEnabled;
             app.AlignmentRestoreViewButton.Enable = app.onOff( ...
                 ~isempty(fieldnames(runtime.RestoreCamera)));
             app.AlignmentRestoreViewButton.Tooltip = ...
@@ -2920,9 +2839,9 @@ classdef ProjectionViewerApp < handle
         function mask = effectiveLayerVisibilityMask(app)
             if app.MotionRuntime.Active
                 mask = false(1, numel(app.Scene.layers));
-                layerIndex = app.currentMotionLayerIndex();
-                if layerIndex > 0
-                    mask(layerIndex) = true;
+                layerIndices = app.currentPresentationLayerIndices();
+                if ~isempty(layerIndices)
+                    mask(layerIndices) = true;
                 end
                 return
             end
@@ -3841,46 +3760,6 @@ classdef ProjectionViewerApp < handle
             app.raiseCrosshairOverlay();
         end
 
-        function toggleAlignmentPanel(app)
-            app.setAlignmentPanelVisible(~app.isAlignmentPanelVisible());
-        end
-
-        function setAlignmentPanelVisible(app, isVisible)
-            if isVisible && (isempty(app.AlignmentLauncherGrid) || ...
-                    ~isvalid(app.AlignmentLauncherGrid))
-                creationTimer = tic;
-                app.createAlignmentLauncherControls();
-                app.PerformanceMonitor.increment("AlignmentUiCreations");
-                app.PerformanceMonitor.recordTiming( ...
-                    "AlignmentUiCreateSeconds", toc(creationTimer));
-            end
-            if isempty(app.AlignmentLauncherGrid) || ...
-                    ~isvalid(app.AlignmentLauncherGrid)
-                return
-            end
-
-            app.AlignmentLauncherGrid.Visible = app.onOff(isVisible);
-            rowHeights = app.GridLayout.RowHeight;
-            if isVisible
-                rowHeights{2} = "fit";
-            else
-                rowHeights{2} = 0;
-            end
-            app.GridLayout.RowHeight = rowHeights;
-
-            if ~isempty(app.AlignmentPanelMenuItem) && ...
-                    isvalid(app.AlignmentPanelMenuItem)
-                app.AlignmentPanelMenuItem.Checked = app.onOff(isVisible);
-            end
-            drawnow limitrate
-        end
-
-        function tf = isAlignmentPanelVisible(app)
-            tf = ~isempty(app.AlignmentLauncherGrid) && ...
-                isvalid(app.AlignmentLauncherGrid) && ...
-                string(app.AlignmentLauncherGrid.Visible) == "on";
-        end
-
         function setAlignmentRunning(app, isRunning)
             if isempty(app.AlignmentMatchButton) || ...
                     ~isvalid(app.AlignmentMatchButton)
@@ -3978,11 +3857,6 @@ classdef ProjectionViewerApp < handle
                 app.AlignmentStatusLabel.Text = char(statusText);
                 didUpdate = true;
             end
-            if ~isempty(app.AlignmentLauncherStatusLabel) && ...
-                    isvalid(app.AlignmentLauncherStatusLabel)
-                app.AlignmentLauncherStatusLabel.Text = char(statusText);
-                didUpdate = true;
-            end
             app.refreshAlignmentSessionIndicators();
             if didUpdate
                 drawnow limitrate
@@ -3992,10 +3866,6 @@ classdef ProjectionViewerApp < handle
         function refreshAlignmentSessionIndicators(app)
             state = app.AlignmentSession.diagnostics();
             app.refreshDenseSurfaceButton(state);
-            if ~isempty(app.AlignmentStageLabel) && ...
-                    isvalid(app.AlignmentStageLabel)
-                app.AlignmentStageLabel.Text = char("Stage: " + state.Stage);
-            end
             if isempty(app.AlignmentDiagnosticsTextArea) || ...
                     ~isvalid(app.AlignmentDiagnosticsTextArea)
                 return
@@ -4987,17 +4857,17 @@ classdef ProjectionViewerApp < handle
                 MenuSelectedFcn=@(~, ~) app.toggleCrosshair(), ...
                 Tag="ProjectionViewerCrosshairMenuItem");
             app.AlignmentPanelMenuItem = uimenu(app.ImageContextMenu, ...
-                Text="Alignment panel", Checked="off", ...
-                MenuSelectedFcn=@(~, ~) app.toggleAlignmentPanel(), ...
+                Text="Alignment Workbench...", ...
+                MenuSelectedFcn=@(~, ~) app.openAlignmentWorkbench(), ...
                 Tag="ProjectionViewerAlignmentPanelMenuItem");
             app.ClearAlignmentOverlaysMenuItem = uimenu(app.ImageContextMenu, ...
                 Text="Clear alignment overlays", ...
                 MenuSelectedFcn=@(~, ~) app.clearAlignmentOverlaysFromControls(), ...
                 Tag="ProjectionViewerClearAlignmentOverlaysMenuItem");
             app.MotionImageryMenuItem = uimenu(app.ImageContextMenu, ...
-                Text="Motion imagery...", Separator="on", ...
+                Text="Layer Manager...", Separator="on", ...
                 MenuSelectedFcn=@(~, ~) app.openMotionImagery(), ...
-                Tag="ProjectionViewerMotionImageryMenuItem");
+                Tag="ProjectionViewerLayerManagerMenuItem");
             app.BlendModeMenu = uimenu(app.ImageContextMenu, ...
                 Text="Blend mode", Separator="on", ...
                 Tag="ProjectionViewerBlendModeMenu");
@@ -5042,87 +4912,147 @@ classdef ProjectionViewerApp < handle
                 figure(app.MotionFigure);
                 return
             end
-            app.MotionFigure = uifigure(Name="Motion Imagery", ...
-                Position=[180 180 860 430], ...
+            app.MotionFigure = uifigure(Name="Layer Manager", ...
+                Position=[180 180 940 560], ...
                 CloseRequestFcn=@(~, ~) app.closeMotionImagery(), ...
-                Tag="ProjectionViewerMotionFigure");
-            grid = uigridlayout(app.MotionFigure, [5 6]);
-            grid.RowHeight = {"fit", "1x", "fit", "fit", "fit"};
-            grid.ColumnWidth = {"fit", "1x", "fit", "fit", "fit", "fit"};
+                Tag="ProjectionViewerLayerManagerFigure");
+            grid = uigridlayout(app.MotionFigure, [6 8]);
+            grid.RowHeight = {"fit", "fit", "1x", "fit", "fit", "fit"};
+            grid.ColumnWidth = {"fit", "1x", "fit", "fit", ...
+                "fit", "fit", "fit", "fit"};
             grid.Padding = [10 10 10 10];
 
-            uilabel(grid, Text="Pass");
+            uilabel(grid, Text="Layer");
+            app.LayerDropDown = uidropdown(grid, ...
+                Items=cellstr(app.layerDisplayNames()), ...
+                ItemsData=1:numel(app.Scene.layers), ...
+                Value=app.SelectedLayerIndex, ...
+                ValueChangedFcn=@(~, event) app.layerSelectionChanged(event), ...
+                Tag="ProjectionViewerLayerManagerLayerDropDown");
+            app.LayerDropDown.Layout.Column = [2 4];
+            app.MoveLayerUpButton = uibutton(grid, Text="Move up", ...
+                Tag="ProjectionViewerMoveLayerUpButton", ...
+                ButtonPushedFcn=@(~, ~) app.moveSelectedLayerUp());
+            app.MoveLayerUpButton.Layout.Column = 5;
+            app.MoveLayerDownButton = uibutton(grid, Text="Move down", ...
+                Tag="ProjectionViewerMoveLayerDownButton", ...
+                ButtonPushedFcn=@(~, ~) app.moveSelectedLayerDown());
+            app.MoveLayerDownButton.Layout.Column = 6;
+            app.VisibleCheckBox = uicheckbox(grid, Text="Visible", ...
+                Value=true, ValueChangedFcn=@(~, event) app.visibleChanged(event), ...
+                Tag="ProjectionViewerLayerManagerVisibleCheckBox");
+            app.VisibleCheckBox.Layout.Column = [7 8];
+
+            app.LayerManagerAllVisibleButton = uibutton(grid, ...
+                Text="All visible", ...
+                ButtonPushedFcn=@(~, ~) app.setAllLayersVisible(true), ...
+                Tag="ProjectionViewerLayerManagerAllVisibleButton");
+            app.LayerManagerAllVisibleButton.Layout.Row = 2;
+            app.LayerManagerAllVisibleButton.Layout.Column = 1;
+            app.LayerManagerNoneVisibleButton = uibutton(grid, ...
+                Text="None visible", ...
+                ButtonPushedFcn=@(~, ~) app.setAllLayersVisible(false), ...
+                Tag="ProjectionViewerLayerManagerNoneVisibleButton");
+            app.LayerManagerNoneVisibleButton.Layout.Row = 2;
+            app.LayerManagerNoneVisibleButton.Layout.Column = 2;
+            modeLabel = uilabel(grid, Text="Presentation", ...
+                HorizontalAlignment="right");
+            modeLabel.Layout.Row = 2;
+            modeLabel.Layout.Column = 3;
+            app.LayerManagerModeDropDown = uidropdown(grid, ...
+                Items=["View All", "Single View", "Pair View"], ...
+                ItemsData=["viewAll", "single", "pair"], ...
+                Value="viewAll", ...
+                ValueChangedFcn=@(~, ~) app.layerManagerModeChanged(), ...
+                Tag="ProjectionViewerLayerManagerModeDropDown");
+            app.LayerManagerModeDropDown.Layout.Row = 2;
+            app.LayerManagerModeDropDown.Layout.Column = [4 5];
+            app.LayerManagerTrackCameraCheckBox = uicheckbox(grid, ...
+                Text="Track camera", Value=false, Enable="off", ...
+                ValueChangedFcn=@(~, ~) app.layerManagerTrackCameraChanged(), ...
+                Tag="ProjectionViewerLayerManagerTrackCameraCheckBox");
+            app.LayerManagerTrackCameraCheckBox.Layout.Row = 2;
+            app.LayerManagerTrackCameraCheckBox.Layout.Column = [6 7];
+
+            passLabel = uilabel(grid, Text="Pass");
+            passLabel.Layout.Row = 4;
             passIds = unique(string({app.Scene.layers.PassId}), "stable");
             app.MotionPassDropDown = uidropdown(grid, ...
                 Items=cellstr(["All passes" passIds]), ...
                 ItemsData=cellstr(["__all__" passIds]), Value="__all__", ...
                 ValueChangedFcn=@(~, ~) app.motionConfigurationChanged(), ...
                 Tag="ProjectionViewerMotionPassDropDown");
+            app.MotionPassDropDown.Layout.Row = 4;
             app.MotionPassDropDown.Layout.Column = 2;
             app.MotionLoopCheckBox = uicheckbox(grid, Text="Loop", ...
                 Value=false, ValueChangedFcn=@(~, ~) app.motionControlChanged(), ...
                 Tag="ProjectionViewerMotionLoopCheckBox");
+            app.MotionLoopCheckBox.Layout.Row = 4;
             app.MotionLoopCheckBox.Layout.Column = 3;
             app.MotionHoverCheckBox = uicheckbox(grid, ...
                 Text="Hover edge controls", Value=true, ...
                 ValueChangedFcn=@(~, ~) app.motionControlChanged(), ...
                 Tag="ProjectionViewerMotionHoverCheckBox");
+            app.MotionHoverCheckBox.Layout.Row = 4;
             app.MotionHoverCheckBox.Layout.Column = [4 5];
             app.MotionPinCheckBox = uicheckbox(grid, Text="Pin identity", ...
                 Value=false, ValueChangedFcn=@(~, ~) app.motionControlChanged(), ...
                 Tag="ProjectionViewerMotionPinCheckBox");
+            app.MotionPinCheckBox.Layout.Row = 4;
             app.MotionPinCheckBox.Layout.Column = 6;
 
             app.MotionTable = uitable(grid, ...
                 Data=app.motionConfigurationTable(), ...
-                ColumnEditable=[true false false false false], ...
-                ColumnWidth={65 "auto" "auto" "auto" "auto"}, ...
-                CellEditCallback=@(~, ~) app.motionConfigurationChanged(), ...
+                ColumnEditable=[true true false false false false], ...
+                ColumnWidth={65 65 "auto" "auto" "auto" "auto"}, ...
+                CellEditCallback=@(~, ~) app.layerManagerTableEdited(), ...
                 Tag="ProjectionViewerMotionTable");
-            app.MotionTable.Layout.Row = 2;
-            app.MotionTable.Layout.Column = [1 6];
+            app.MotionTable.Layout.Row = 3;
+            app.MotionTable.Layout.Column = [1 8];
 
             app.MotionPreviousButton = uibutton(grid, Text="Previous", ...
                 ButtonPushedFcn=@(~, ~) app.stepMotion(-1), ...
                 Tag="ProjectionViewerMotionPreviousButton");
-            app.MotionPreviousButton.Layout.Row = 3;
+            app.MotionPreviousButton.Layout.Row = 5;
             app.MotionPreviousButton.Layout.Column = 1;
             app.MotionNextButton = uibutton(grid, Text="Next", ...
                 ButtonPushedFcn=@(~, ~) app.stepMotion(1), ...
                 Tag="ProjectionViewerMotionNextButton");
-            app.MotionNextButton.Layout.Row = 3;
+            app.MotionNextButton.Layout.Row = 5;
             app.MotionNextButton.Layout.Column = 2;
             rateLabel = uilabel(grid, Text="Rate (fps)", ...
                 HorizontalAlignment="right");
-            rateLabel.Layout.Row = 3;
-            rateLabel.Layout.Column = 3;
+            rateLabel.Layout.Row = 4;
+            rateLabel.Layout.Column = 7;
             app.MotionRateSpinner = uispinner(grid, Limits=[0.5 10], ...
                 Step=0.5, Value=ProjectionMotionPlayback.DefaultRateFps, ...
                 ValueChangedFcn=@(~, ~) app.motionControlChanged(), ...
                 Tag="ProjectionViewerMotionRateSpinner");
-            app.MotionRateSpinner.Layout.Row = 3;
-            app.MotionRateSpinner.Layout.Column = 4;
+            app.MotionRateSpinner.Layout.Row = 4;
+            app.MotionRateSpinner.Layout.Column = 8;
             app.MotionPlayPauseButton = uibutton(grid, Text="Play", ...
                 Enable="off", ...
                 ButtonPushedFcn=@(~, ~) app.toggleMotionPlayback(), ...
                 Tag="ProjectionViewerMotionPlayPauseButton");
-            app.MotionPlayPauseButton.Layout.Row = 3;
-            app.MotionPlayPauseButton.Layout.Column = 5;
-            app.MotionStartExitButton = uibutton(grid, Text="Start", ...
-                ButtonPushedFcn=@(~, ~) app.toggleMotionImagery(), ...
+            app.MotionPlayPauseButton.Layout.Row = 5;
+            app.MotionPlayPauseButton.Layout.Column = 3;
+            app.MotionStartExitButton = uibutton(grid, Text="View All", ...
+                ButtonPushedFcn=@(~, ~) app.setLayerPresentationMode("viewAll"), ...
                 Tag="ProjectionViewerMotionStartExitButton");
-            app.MotionStartExitButton.Layout.Row = 3;
-            app.MotionStartExitButton.Layout.Column = 6;
+            app.MotionStartExitButton.Layout.Row = 5;
+            app.MotionStartExitButton.Layout.Column = 4;
             app.MotionStatusLabel = uilabel(grid, Text="", ...
                 WordWrap="on", Tag="ProjectionViewerMotionStatusLabel");
-            app.MotionStatusLabel.Layout.Row = [4 5];
-            app.MotionStatusLabel.Layout.Column = [1 6];
+            app.MotionStatusLabel.Layout.Row = 6;
+            app.MotionStatusLabel.Layout.Column = [1 8];
             app.motionConfigurationChanged();
+            app.updateControlsFromSelectedLayer();
         end
 
         function data = motionConfigurationTable(app)
             count = numel(app.Scene.layers);
             include = true(count, 1);
+            visible = reshape(logical([app.Scene.layers.Visible]), [], 1);
             layer = strings(count, 1);
             viewId = strings(count, 1);
             passId = strings(count, 1);
@@ -5134,14 +5064,202 @@ classdef ProjectionViewerApp < handle
                 layer(index) = sprintf("%d: %s", index, item.Name);
                 viewId(index) = string(item.ViewId);
                 passId(index) = string(item.PassId);
-                if sequence.Available
+                if ~isempty(sequence.Frames)
                     time(index) = sequence.Frames(index).TimeText;
                 else
                     time(index) = "time unavailable";
                 end
             end
-            data = table(include, layer, viewId, passId, time, ...
-                VariableNames=["Include" "Layer" "ViewId" "Pass" "Time"]);
+            data = table(include, visible, layer, viewId, passId, time, ...
+                VariableNames=["Include" "Visible" "Layer" "ViewId" ...
+                "Pass" "Time"]);
+        end
+
+        function layerManagerTableEdited(app)
+            data = app.MotionTable.Data;
+            if istable(data) && ismember("Visible", ...
+                    string(data.Properties.VariableNames)) && ...
+                    height(data) == numel(app.Scene.layers)
+                oldOffsets = app.anaglyphPresentationOffsets();
+                for layerIndex = 1:numel(app.Scene.layers)
+                    app.Scene.layers(layerIndex).Visible = ...
+                        logical(data.Visible(layerIndex));
+                end
+                app.reconcileTiledPresentationLayers( ...
+                    find(app.effectiveLayerVisibilityMask()));
+                app.updateAllSurfaceBlendAppearance();
+                app.applyAnaglyphPresentationOffsetDelta(oldOffsets);
+                app.updateControlsFromSelectedLayer();
+            end
+            app.motionConfigurationChanged();
+        end
+
+        function setAllLayersVisible(app, isVisible)
+            oldOffsets = app.anaglyphPresentationOffsets();
+            isVisible = logical(isVisible);
+            for layerIndex = 1:numel(app.Scene.layers)
+                app.Scene.layers(layerIndex).Visible = isVisible;
+            end
+            app.reconcileTiledPresentationLayers( ...
+                find(app.effectiveLayerVisibilityMask()));
+            app.updateAllSurfaceBlendAppearance();
+            app.applyAnaglyphPresentationOffsetDelta(oldOffsets);
+            app.refreshLayerManagerTable();
+            app.updateControlsFromSelectedLayer();
+        end
+
+        function refreshLayerManagerTable(app)
+            if isempty(app.MotionTable) || ~isvalid(app.MotionTable)
+                return
+            end
+            previousInclude = ProjectionViewMetadata.ids(app.Scene);
+            if istable(app.MotionTable.Data) && ...
+                    ismember("Include", ...
+                    string(app.MotionTable.Data.Properties.VariableNames))
+                previousInclude = string( ...
+                    app.MotionTable.Data.ViewId( ...
+                    logical(app.MotionTable.Data.Include)));
+            end
+            data = app.motionConfigurationTable();
+            data.Include = ismember(string(data.ViewId), previousInclude);
+            app.MotionTable.Data = data;
+        end
+
+        function layerManagerModeChanged(app)
+            app.setLayerPresentationMode( ...
+                string(app.LayerManagerModeDropDown.Value));
+        end
+
+        function layerManagerTrackCameraChanged(app)
+            runtime = app.MotionRuntime;
+            runtime.TrackCamera = logical( ...
+                app.LayerManagerTrackCameraCheckBox.Value);
+            app.MotionRuntime = runtime;
+            if runtime.Active && runtime.Mode == "pair" && ...
+                    runtime.TrackCamera
+                app.applyActivePairViewpoint(false);
+            end
+            app.refreshMotionStatus();
+        end
+
+        function setLayerPresentationMode(app, mode)
+            mode = string(mode);
+            if ~isscalar(mode) || ...
+                    ~any(mode == ["viewAll", "single", "pair"])
+                error("ProjectionViewerApp:invalidPresentationMode", ...
+                    "Presentation mode must be View All, Single View, or Pair View.");
+            end
+            if mode == "viewAll"
+                app.exitMotionImagery();
+            else
+                app.enterLayerPresentationMode(mode);
+            end
+            if ~isempty(app.LayerManagerModeDropDown) && ...
+                    isvalid(app.LayerManagerModeDropDown)
+                app.LayerManagerModeDropDown.Value = char( ...
+                    app.MotionRuntime.Mode);
+            end
+        end
+
+        function enterLayerPresentationMode(app, mode)
+            sequence = app.configuredMotionSequence();
+            minimumFrames = 1 + double(mode == "pair");
+            if numel(sequence.Frames) < minimumFrames
+                runtime = app.MotionRuntime;
+                runtime.Warning = sprintf( ...
+                    "%s requires at least %s eligible layer%s.", ...
+                    app.presentationModeName(mode), ...
+                    app.frameCountWord(minimumFrames), ...
+                    app.pluralSuffix(minimumFrames));
+                app.MotionRuntime = runtime;
+                app.refreshMotionStatus();
+                return
+            end
+            wasActive = app.MotionRuntime.Active;
+            runtime = app.MotionRuntime;
+            if ~wasActive
+                runtime.Snapshot = struct( ...
+                    SelectedLayerIndex=app.SelectedLayerIndex, ...
+                    Camera=app.exportCameraState(), ...
+                    KeyboardMode=app.ViewportKeyboardMode, ...
+                    PairViewpointRuntime=app.PairViewpointRuntime, ...
+                    AnaglyphStereoExaggeration=app.AnaglyphStereoExaggeration, ...
+                    AnaglyphScreenDepthOffsetMeters= ...
+                    app.AnaglyphScreenDepthOffsetMeters);
+            else
+                app.pauseMotionPlayback("Presentation mode changed.");
+            end
+            runtime.Active = true;
+            runtime.Mode = mode;
+            runtime.Sequence = sequence;
+            runtime.Position = app.presentationPositionForSelectedLayer( ...
+                sequence, mode);
+            runtime.Loop = app.MotionLoopCheckBox.Value;
+            runtime.HoverEdges = app.MotionHoverCheckBox.Value;
+            runtime.IdentityPinned = app.MotionPinCheckBox.Value;
+            runtime.TrackCamera = mode == "pair" && ...
+                app.LayerManagerTrackCameraCheckBox.Value;
+            runtime.RateFps = ProjectionMotionPlayback.rate( ...
+                app.MotionRateSpinner.Value);
+            runtime.Warning = strjoin(sequence.Warnings, " ");
+            runtime.PauseReason = "";
+            runtime.SceneSignature = app.motionSceneSignature();
+            app.MotionRuntime = runtime;
+            app.ViewportKeyboardMode = mode;
+            app.UIFigure.CurrentObject = app.Axes;
+            app.MotionPlayPauseButton.Enable = app.onOff( ...
+                app.presentationPositionCount(runtime) > 1);
+            app.MotionPlayPauseButton.Text = "Play";
+            app.LayerManagerTrackCameraCheckBox.Enable = ...
+                app.onOff(mode == "pair");
+            app.createMotionPlaybackTimer();
+            if isempty(app.MotionLeftEdgeButton) || ...
+                    ~isvalid(app.MotionLeftEdgeButton)
+                app.createMotionViewportControls();
+            end
+            app.applyMotionFrame();
+            app.refreshPointerMotionCallback();
+        end
+
+        function position = presentationPositionForSelectedLayer( ...
+                app, sequence, mode)
+            viewId = string(app.Scene.layers(app.SelectedLayerIndex).ViewId);
+            position = find(string({sequence.Frames.ViewId}) == ...
+                viewId, 1, "first");
+            if isempty(position)
+                position = 1;
+            end
+            if mode == "pair"
+                position = min(position, max(1, numel(sequence.Frames) - 1));
+            end
+        end
+
+        function name = presentationModeName(~, mode)
+            if mode == "single"
+                name = "Single View";
+            elseif mode == "pair"
+                name = "Pair View";
+            else
+                name = "View All";
+            end
+        end
+
+        function suffix = pluralSuffix(~, count)
+            if count == 1
+                suffix = "";
+            else
+                suffix = "s";
+            end
+        end
+
+        function word = frameCountWord(~, count)
+            if count == 1
+                word = "one";
+            elseif count == 2
+                word = "two";
+            else
+                word = string(count);
+            end
         end
 
         function motionConfigurationChanged(app)
@@ -5150,13 +5268,40 @@ classdef ProjectionViewerApp < handle
                     ~isvalid(app.MotionStartExitButton)
                 return
             end
-            app.MotionStartExitButton.Enable = app.onOff( ...
-                sequence.Available || app.MotionRuntime.Active);
+            app.MotionStartExitButton.Enable = "on";
+            app.LayerManagerModeDropDown.Enable = "on";
+            if app.MotionRuntime.Active
+                mode = app.MotionRuntime.Mode;
+                minimumFrames = 1 + double(mode == "pair");
+                if numel(sequence.Frames) < minimumFrames
+                    app.exitMotionImagery();
+                    runtime = app.MotionRuntime;
+                    runtime.Warning = sprintf( ...
+                        "%s requires at least %s eligible layer%s.", ...
+                        app.presentationModeName(mode), ...
+                        app.frameCountWord(minimumFrames), ...
+                        app.pluralSuffix(minimumFrames));
+                    app.MotionRuntime = runtime;
+                    app.LayerManagerModeDropDown.Value = "viewAll";
+                    app.refreshMotionStatus();
+                    return
+                else
+                    runtime = app.MotionRuntime;
+                    runtime.Sequence = sequence;
+                    runtime.Position = app.presentationPositionAfterRebuild( ...
+                        sequence, runtime);
+                    runtime.SceneSignature = app.motionSceneSignature();
+                    runtime.Warning = strjoin(sequence.Warnings, " ");
+                    app.MotionRuntime = runtime;
+                    app.applyMotionFrame();
+                end
+            end
             app.MotionPlayPauseButton.Enable = app.onOff( ...
-                app.MotionRuntime.Active);
+                app.MotionRuntime.Active && ...
+                app.presentationPositionCount(app.MotionRuntime) > 1);
             if app.MotionRuntime.Active
                 app.MotionStatusLabel.Text = char(app.motionStatusText());
-            elseif sequence.Available
+            elseif ~isempty(sequence.Frames)
                 app.MotionStatusLabel.Text = char( ...
                     app.sequenceConfigurationStatus(sequence));
             else
@@ -5180,8 +5325,30 @@ classdef ProjectionViewerApp < handle
             sequence = ProjectionMotionSequence.build(app.Scene, options);
         end
 
-        function text = sequenceConfigurationStatus(~, sequence)
-            text = sprintf("%d frames. %s", numel(sequence.Frames), ...
+        function position = presentationPositionAfterRebuild( ...
+                app, sequence, runtime)
+            position = [];
+            if isstruct(runtime.Sequence) && ...
+                    isfield(runtime.Sequence, "Frames") && ...
+                    runtime.Position >= 1 && ...
+                    runtime.Position <= numel(runtime.Sequence.Frames)
+                anchorViewId = string( ...
+                    runtime.Sequence.Frames(runtime.Position).ViewId);
+                position = find(string({sequence.Frames.ViewId}) == ...
+                    anchorViewId, 1, "first");
+            end
+            if isempty(position)
+                position = app.presentationPositionForSelectedLayer( ...
+                    sequence, runtime.Mode);
+            elseif runtime.Mode == "pair"
+                position = min(position, numel(sequence.Frames) - 1);
+            end
+        end
+
+        function text = sequenceConfigurationStatus(app, sequence)
+            count = numel(sequence.Frames);
+            text = sprintf("%d frame%s. %s", count, ...
+                app.pluralSuffix(count), ...
                 sequence.OrderingExplanation);
         end
 
@@ -5189,56 +5356,18 @@ classdef ProjectionViewerApp < handle
             if app.MotionRuntime.Active
                 app.exitMotionImagery();
             else
-                app.enterMotionImagery();
+                app.enterLayerPresentationMode("single");
             end
         end
 
         function enterMotionImagery(app)
-            sequence = app.configuredMotionSequence();
-            if ~sequence.Available
-                app.motionConfigurationChanged();
-                return
-            end
-            runtime = app.MotionRuntime;
-            runtime.Active = true;
-            runtime.Sequence = sequence;
-            runtime.Position = 1;
-            runtime.Loop = app.MotionLoopCheckBox.Value;
-            runtime.HoverEdges = app.MotionHoverCheckBox.Value;
-            runtime.IdentityPinned = app.MotionPinCheckBox.Value;
-            newRate = ProjectionMotionPlayback.rate( ...
-                app.MotionRateSpinner.Value);
-            if runtime.Playing && runtime.RateFps ~= newRate
-                runtime.NextPlaybackTickElapsed = ...
-                    toc(runtime.PlaybackClock) + ...
-                    ProjectionMotionPlayback.delay(newRate);
-            end
-            runtime.RateFps = newRate;
-            runtime.Warning = strjoin(sequence.Warnings, " ");
-            runtime.PauseReason = "";
-            runtime.SceneSignature = app.motionSceneSignature();
-            runtime.Snapshot = struct( ...
-                SelectedLayerIndex=app.SelectedLayerIndex, ...
-                Camera=app.exportCameraState(), ...
-                KeyboardMode=app.ViewportKeyboardMode, ...
-                PairViewpointRuntime=app.PairViewpointRuntime, ...
-                AnaglyphStereoExaggeration=app.AnaglyphStereoExaggeration, ...
-                AnaglyphScreenDepthOffsetMeters= ...
-                app.AnaglyphScreenDepthOffsetMeters);
-            app.MotionRuntime = runtime;
-            app.ViewportKeyboardMode = "motion";
-            app.UIFigure.CurrentObject = app.Axes;
-            app.MotionStartExitButton.Text = "Exit";
-            app.MotionPlayPauseButton.Enable = "on";
-            app.MotionPlayPauseButton.Text = "Play";
-            app.createMotionPlaybackTimer();
-            app.createMotionViewportControls();
-            app.applyMotionFrame();
-            app.refreshPointerMotionCallback();
+            app.enterLayerPresentationMode("single");
         end
 
         function exitMotionImagery(app)
             if ~app.MotionRuntime.Active
+                app.MotionRuntime = app.defaultMotionRuntime();
+                app.refreshSelectedFootprintOutline();
                 return
             end
             app.pauseMotionPlayback("Motion imagery exited.");
@@ -5264,9 +5393,11 @@ classdef ProjectionViewerApp < handle
             end
             if ~isempty(app.MotionStartExitButton) && ...
                     isvalid(app.MotionStartExitButton)
-                app.MotionStartExitButton.Text = "Start";
+                app.MotionStartExitButton.Text = "View All";
                 app.MotionPlayPauseButton.Text = "Play";
                 app.MotionPlayPauseButton.Enable = "off";
+                app.LayerManagerModeDropDown.Value = "viewAll";
+                app.LayerManagerTrackCameraCheckBox.Enable = "off";
                 app.motionConfigurationChanged();
             end
             app.refreshPointerMotionCallback();
@@ -5279,6 +5410,25 @@ classdef ProjectionViewerApp < handle
                 delete(app.MotionFigure);
             end
             app.MotionFigure = [];
+            app.LayerDropDown = [];
+            app.VisibleCheckBox = [];
+            app.MoveLayerUpButton = [];
+            app.MoveLayerDownButton = [];
+            app.LayerManagerModeDropDown = [];
+            app.LayerManagerTrackCameraCheckBox = [];
+            app.LayerManagerAllVisibleButton = [];
+            app.LayerManagerNoneVisibleButton = [];
+            app.MotionTable = [];
+            app.MotionPassDropDown = [];
+            app.MotionLoopCheckBox = [];
+            app.MotionHoverCheckBox = [];
+            app.MotionPinCheckBox = [];
+            app.MotionStartExitButton = [];
+            app.MotionPreviousButton = [];
+            app.MotionNextButton = [];
+            app.MotionPlayPauseButton = [];
+            app.MotionRateSpinner = [];
+            app.MotionStatusLabel = [];
         end
 
         function motionControlChanged(app)
@@ -5314,8 +5464,19 @@ classdef ProjectionViewerApp < handle
                 app.pauseMotionPlayback("Paused for manual step.");
             end
             runtime = app.MotionRuntime;
-            [position, changed, boundary] = ProjectionMotionSequence.step( ...
-                runtime.Sequence, runtime.Position, delta, runtime.Loop);
+            positionCount = app.presentationPositionCount(runtime);
+            requested = runtime.Position + delta;
+            boundary = requested < 1 || requested > positionCount;
+            if boundary && runtime.Loop
+                position = mod(requested - 1, positionCount) + 1;
+                changed = true;
+            elseif boundary
+                position = runtime.Position;
+                changed = false;
+            else
+                position = requested;
+                changed = true;
+            end
             runtime.Position = position;
             app.MotionRuntime = runtime;
             if changed
@@ -5328,8 +5489,8 @@ classdef ProjectionViewerApp < handle
 
         function success = applyMotionFrame(app)
             success = false;
-            layerIndex = app.currentMotionLayerIndex();
-            if layerIndex == 0
+            layerIndices = app.currentPresentationLayerIndices();
+            if isempty(layerIndices)
                 if app.MotionRuntime.Playing
                     app.pauseMotionPlayback( ...
                         "Paused because the sequence contains a stale view.");
@@ -5337,9 +5498,19 @@ classdef ProjectionViewerApp < handle
                 app.refreshMotionStatus();
                 return
             end
-            app.SelectedLayerIndex = layerIndex;
+            app.SelectedLayerIndex = layerIndices(end);
             try
-                app.reconcileTiledPresentationLayers(layerIndex);
+                if app.MotionRuntime.Mode == "pair"
+                    frames = app.MotionRuntime.Sequence.Frames( ...
+                        app.MotionRuntime.Position + (0:1));
+                    app.AlignmentPairController.selectViews( ...
+                        frames(1).ViewId, frames(2).ViewId);
+                    app.refreshAlignmentActivePairControls();
+                    if app.MotionRuntime.TrackCamera
+                        app.applyActivePairViewpoint(false);
+                    end
+                end
+                app.reconcileTiledPresentationLayers(layerIndices);
                 app.updateAllSurfaceBlendAppearance();
             catch exception
                 runtime = app.MotionRuntime;
@@ -5359,6 +5530,37 @@ classdef ProjectionViewerApp < handle
             app.updateMotionEdgeControls();
             app.refreshMotionStatus();
             success = true;
+        end
+
+        function count = presentationPositionCount(~, runtime)
+            count = numel(runtime.Sequence.Frames);
+            if runtime.Mode == "pair"
+                count = max(1, count - 1);
+            end
+        end
+
+        function layerIndices = currentPresentationLayerIndices(app)
+            layerIndices = zeros(1, 0);
+            runtime = app.MotionRuntime;
+            if ~runtime.Active || runtime.Position < 1 || ...
+                    runtime.Position > app.presentationPositionCount(runtime)
+                return
+            end
+            framePositions = runtime.Position;
+            if runtime.Mode == "pair"
+                framePositions = runtime.Position + (0:1);
+            end
+            try
+                layerIndices = arrayfun(@(position) ...
+                    ProjectionViewMetadata.indexForId(app.Scene, ...
+                    runtime.Sequence.Frames(position).ViewId), ...
+                    framePositions);
+            catch exception
+                runtime.Warning = "Presentation frame is stale: " + ...
+                    string(exception.message);
+                app.MotionRuntime = runtime;
+                layerIndices = zeros(1, 0);
+            end
         end
 
         function toggleMotionPlayback(app)
@@ -5520,8 +5722,20 @@ classdef ProjectionViewerApp < handle
                 return
             end
             runtime = app.MotionRuntime;
-            lookahead = ProjectionMotionPlayback.next( ...
-                runtime.Sequence, runtime.Position, runtime.Loop);
+            positionCount = app.presentationPositionCount(runtime);
+            requested = runtime.Position + 1;
+            if requested > positionCount && runtime.Loop
+                requested = 1;
+            end
+            if requested > positionCount
+                runtime.Lookahead = struct(Available=false);
+                app.MotionRuntime = runtime;
+                return
+            end
+            framePosition = requested + double(runtime.Mode == "pair");
+            frame = runtime.Sequence.Frames(framePosition);
+            lookahead = struct(Available=true, Ready=false, ...
+                Position=requested, ViewId=string(frame.ViewId));
             runtime.Lookahead = lookahead;
             app.MotionRuntime = runtime;
             if ~lookahead.Available
@@ -5625,18 +5839,9 @@ classdef ProjectionViewerApp < handle
 
         function layerIndex = currentMotionLayerIndex(app)
             layerIndex = 0;
-            runtime = app.MotionRuntime;
-            if ~runtime.Active || runtime.Position < 1 || ...
-                    runtime.Position > numel(runtime.Sequence.Frames)
-                return
-            end
-            viewId = runtime.Sequence.Frames(runtime.Position).ViewId;
-            try
-                layerIndex = ProjectionViewMetadata.indexForId(app.Scene, viewId);
-            catch exception
-                runtime.Warning = "Motion frame is stale: " + ...
-                    string(exception.message);
-                app.MotionRuntime = runtime;
+            layerIndices = app.currentPresentationLayerIndices();
+            if ~isempty(layerIndices)
+                layerIndex = layerIndices(end);
             end
         end
 
@@ -5674,6 +5879,20 @@ classdef ProjectionViewerApp < handle
                 [axesPosition(1) + axesPosition(3) * 0.15, ...
                 axesPosition(2) + axesPosition(4) - 40, ...
                 axesPosition(3) * 0.70, 28];
+        end
+
+        function positionViewerOverlays(app)
+            if isempty(app.Axes) || ~isvalid(app.Axes)
+                return
+            end
+            axesPosition = getpixelposition(app.Axes, true);
+            if ~isempty(app.ViewVectorLabel) && isvalid(app.ViewVectorLabel)
+                overlaySize = [210 58];
+                app.ViewVectorLabel.Position = [ ...
+                    axesPosition(1) + axesPosition(3) - overlaySize(1) - 8, ...
+                    axesPosition(2) + 8, overlaySize];
+            end
+            app.positionMotionViewportControls();
         end
 
         function updateMotionEdgeControls(app)
@@ -5717,7 +5936,7 @@ classdef ProjectionViewerApp < handle
 
         function updateMotionNavigationControls(app)
             runtime = app.MotionRuntime;
-            count = numel(runtime.Sequence.Frames);
+            count = app.presentationPositionCount(runtime);
             previousEnabled = runtime.Loop || runtime.Position > 1;
             nextEnabled = runtime.Loop || runtime.Position < count;
             app.MotionPreviousButton.Enable = app.onOff(previousEnabled);
@@ -5732,12 +5951,20 @@ classdef ProjectionViewerApp < handle
                     ~isvalid(app.MotionIdentityLabel)
                 return
             end
-            frame = app.MotionRuntime.Sequence.Frames( ...
-                app.MotionRuntime.Position);
-            app.MotionIdentityLabel.Text = char(sprintf( ...
-                "%d/%d  %s | %s | %s | %s", frame.Position, ...
-                frame.Count, frame.LayerName, frame.PassId, frame.TimeText, ...
-                frame.CorrectionStatus));
+            runtime = app.MotionRuntime;
+            frame = runtime.Sequence.Frames(runtime.Position);
+            if runtime.Mode == "pair"
+                second = runtime.Sequence.Frames(runtime.Position + 1);
+                app.MotionIdentityLabel.Text = char(sprintf( ...
+                    "%d/%d  %s + %s", runtime.Position, ...
+                    app.presentationPositionCount(runtime), ...
+                    frame.LayerName, second.LayerName));
+            else
+                app.MotionIdentityLabel.Text = char(sprintf( ...
+                    "%d/%d  %s | %s | %s | %s", frame.Position, ...
+                    frame.Count, frame.LayerName, frame.PassId, ...
+                    frame.TimeText, frame.CorrectionStatus));
+            end
             app.MotionIdentityLabel.Visible = "on";
             app.stopMotionIdentityTimer();
             if ~app.MotionRuntime.IdentityPinned && ...
@@ -5789,13 +6016,27 @@ classdef ProjectionViewerApp < handle
         function text = motionStatusText(app)
             runtime = app.MotionRuntime;
             if ~runtime.Active
-                text = "Motion imagery is not active.";
+                text = "View All shows the current stored visible layers.";
+                if strlength(runtime.Warning) > 0
+                    text = text + " " + runtime.Warning;
+                end
                 return
             end
             frame = runtime.Sequence.Frames(runtime.Position);
-            text = string(sprintf("Frame %d of %d: %s (%s).", ...
-                runtime.Position, numel(runtime.Sequence.Frames), ...
-                frame.LayerName, frame.ViewId));
+            if runtime.Mode == "pair"
+                second = runtime.Sequence.Frames(runtime.Position + 1);
+                text = string(sprintf( ...
+                    "Pair %d of %d: %s + %s.", runtime.Position, ...
+                    app.presentationPositionCount(runtime), ...
+                    frame.LayerName, second.LayerName));
+                if runtime.TrackCamera
+                    text = text + " Track camera is on.";
+                end
+            else
+                text = string(sprintf("Frame %d of %d: %s (%s).", ...
+                    runtime.Position, numel(runtime.Sequence.Frames), ...
+                    frame.LayerName, frame.ViewId));
+            end
             if runtime.Playing
                 text = text + sprintf(" Playing at %.1f fps.", runtime.RateFps);
             elseif strlength(runtime.PauseReason) > 0
@@ -5810,6 +6051,7 @@ classdef ProjectionViewerApp < handle
 
         function runtime = defaultMotionRuntime(~)
             runtime = struct(Active=false, Sequence=struct(), Position=0, ...
+                Mode="viewAll", TrackCamera=false, ...
                 Loop=false, HoverEdges=true, IdentityPinned=false, ...
                 Playing=false, RateFps=ProjectionMotionPlayback.DefaultRateFps, ...
                 PauseReason="", Lookahead=struct(), ...
@@ -5971,6 +6213,7 @@ classdef ProjectionViewerApp < handle
             grid(app.Axes, "off");
             app.stabilizeAxesLimits();
             app.hideImageAxesDecorations();
+            app.refreshSelectedFootprintOutline();
             app.raiseCrosshairOverlay();
         end
 
@@ -6038,6 +6281,28 @@ classdef ProjectionViewerApp < handle
                 StartDelay=app.CameraSettleDelaySeconds, ...
                 TimerFcn=@(source, ~) app.cameraSettleTimerFired(source), ...
                 Name="ProjectionViewerCameraSettleTimer");
+        end
+
+        function viewerAxesInnerPositionChanged(app)
+            if ~app.PendingInitialViewportFrame || ...
+                    ~app.IsPreviewCameraReady || ...
+                    app.Axes.InnerPosition(3) <= ...
+                    0.5 * app.UIFigure.Position(3)
+                return
+            end
+            app.PendingInitialViewportFrame = false;
+            app.deleteInitialViewportFrameListener();
+            app.frameCurrentProjectionView(app.InitialViewportFillFraction);
+            app.refreshTiledProjectionSurfaces();
+            app.positionViewerOverlays();
+        end
+
+        function deleteInitialViewportFrameListener(app)
+            if ~isempty(app.InitialViewportFrameListener) && ...
+                    isvalid(app.InitialViewportFrameListener)
+                delete(app.InitialViewportFrameListener);
+            end
+            app.InitialViewportFrameListener = [];
         end
 
         function deleteCameraSettleTimer(app)
@@ -7435,7 +7700,7 @@ classdef ProjectionViewerApp < handle
                 handled = app.adjustProjectionFromArrowKey(event);
                 return
             end
-            if app.ViewportKeyboardMode == "motion"
+            if any(app.ViewportKeyboardMode == ["single", "pair"])
                 handled = true;
                 if key(1) == "leftarrow"
                     app.stepMotion(-1);
@@ -8376,6 +8641,7 @@ classdef ProjectionViewerApp < handle
             if isequal(meshSamplings, app.DefaultMeshSampling)
                 app.refreshAlignmentOverlays();
             end
+            app.refreshSelectedFootprintOutline();
             drawnow limitrate
             app.finishPerformanceFrame(frameTimer, "ProjectionSeconds");
         end
@@ -8389,6 +8655,7 @@ classdef ProjectionViewerApp < handle
             layer = app.Scene.layers(layerIndex);
             app.updateLabels(app.ProjectionTipDegrees, ...
                 app.ProjectionTiltDegrees, app.ViewTwistDegrees, layer.Alpha);
+            app.refreshSelectedFootprintOutline();
             drawnow limitrate
             app.finishPerformanceFrame(frameTimer, "ProjectionSeconds");
         end
@@ -8446,6 +8713,7 @@ classdef ProjectionViewerApp < handle
                     isequal(meshSamplings, app.DefaultMeshSampling)
                 app.refreshAlignmentOverlays();
             end
+            app.refreshSelectedFootprintOutline();
         end
 
         function updateSurfaceFromMesh(app, layerIndex, mesh)
@@ -8530,7 +8798,7 @@ classdef ProjectionViewerApp < handle
 
         function texture = previewTextureForLayer(app, texture, layerIndex)
             layer = app.Scene.layers(layerIndex);
-            if app.MotionRuntime.Active
+            if app.MotionRuntime.Active && app.MotionRuntime.Mode == "single"
                 return
             end
             if lower(string(layer.BlendMode)) ~= "redblueanaglyph"
@@ -8545,7 +8813,7 @@ classdef ProjectionViewerApp < handle
 
         function alpha = previewFaceAlphaForLayer(app, alpha, layerIndex)
             layer = app.Scene.layers(layerIndex);
-            if app.MotionRuntime.Active
+            if app.MotionRuntime.Active && app.MotionRuntime.Mode == "single"
                 return
             end
             if lower(string(layer.BlendMode)) == "redblueanaglyph" && ...
@@ -9003,6 +9271,14 @@ classdef ProjectionViewerApp < handle
 
         function layerSelectionChanged(app, event)
             app.SelectedLayerIndex = event.Value;
+            if app.MotionRuntime.Active
+                runtime = app.MotionRuntime;
+                runtime.Position = app.presentationPositionForSelectedLayer( ...
+                    runtime.Sequence, runtime.Mode);
+                app.MotionRuntime = runtime;
+                app.applyMotionFrame();
+                return
+            end
             app.reconcileTiledPresentationLayers(event.Value);
             app.updateControlsFromSelectedLayer();
         end
@@ -9167,6 +9443,7 @@ classdef ProjectionViewerApp < handle
             app.PreviewSampledGeometryCache.clear();
             app.SelectedLayerIndex = targetIndex;
             app.reindexAlignmentSessionAfterLayerReorder(priorScene);
+            app.AlignmentPairController.synchronizeScene(app.Scene);
             app.reindexAlignmentPairTableAfterLayerReorder(priorScene);
             app.restoreAlignmentDropDownLayerIds( ...
                 referenceLayerId, movingLayerId);
@@ -9176,6 +9453,10 @@ classdef ProjectionViewerApp < handle
             app.refreshAlignmentSessionViewsAfterLayerReorder();
             if ProjectionSoloPairVisibility.isActive(app.AlignmentSoloState)
                 app.applyAlignmentSoloPresentation();
+            end
+            app.refreshLayerManagerTable();
+            if app.MotionRuntime.Active
+                app.motionConfigurationChanged();
             end
         end
 
@@ -9273,21 +9554,28 @@ classdef ProjectionViewerApp < handle
         function updateControlsFromSelectedLayer(app)
             layer = app.Scene.layers(app.SelectedLayerIndex);
             app.updateLayerDropDownItems();
-            app.LayerDropDown.Value = app.SelectedLayerIndex;
+            if ~isempty(app.LayerDropDown) && isvalid(app.LayerDropDown)
+                app.LayerDropDown.Value = app.SelectedLayerIndex;
+            end
             app.TipSlider.Value = app.ProjectionTipDegrees;
             app.TiltSlider.Value = app.ProjectionTiltDegrees;
             app.TwistSlider.Value = app.ViewTwistDegrees;
             app.AlphaSlider.Value = layer.Alpha;
-            app.VisibleCheckBox.Value = layer.Visible;
+            if ~isempty(app.VisibleCheckBox) && isvalid(app.VisibleCheckBox)
+                app.VisibleCheckBox.Value = layer.Visible;
+            end
             app.updateBlendMenuChecks();
             app.Surface = app.primarySurfaceForLayer(app.SelectedLayerIndex);
             app.updateLabels(app.TipSlider.Value, app.TiltSlider.Value, ...
                 app.TwistSlider.Value, layer.Alpha);
+            app.refreshSelectedFootprintOutline();
         end
 
         function updateLayerDropDownItems(app)
-            app.LayerDropDown.Items = cellstr(app.layerDisplayNames());
-            app.LayerDropDown.ItemsData = 1:numel(app.Scene.layers);
+            if ~isempty(app.LayerDropDown) && isvalid(app.LayerDropDown)
+                app.LayerDropDown.Items = cellstr(app.layerDisplayNames());
+                app.LayerDropDown.ItemsData = 1:numel(app.Scene.layers);
+            end
             app.updateAlignmentLayerItems();
         end
 
@@ -9304,7 +9592,10 @@ classdef ProjectionViewerApp < handle
             layer = app.Scene.layers(layerIndex);
             isVisible = logical(isVisible);
             if layer.Visible == isVisible
-                app.VisibleCheckBox.Value = layer.Visible;
+                if ~isempty(app.VisibleCheckBox) && ...
+                        isvalid(app.VisibleCheckBox)
+                    app.VisibleCheckBox.Value = layer.Visible;
+                end
                 return
             end
             oldPresentationOffsets = app.anaglyphPresentationOffsets();
@@ -9320,8 +9611,86 @@ classdef ProjectionViewerApp < handle
             end
             app.applyAnaglyphPresentationOffsetDelta( ...
                 oldPresentationOffsets);
-            app.VisibleCheckBox.Value = layer.Visible;
+            if ~isempty(app.VisibleCheckBox) && isvalid(app.VisibleCheckBox)
+                app.VisibleCheckBox.Value = layer.Visible;
+            end
+            app.refreshLayerManagerTable();
             app.updateBlendMenuChecks();
+            app.refreshSelectedFootprintOutline();
+        end
+
+        function refreshSelectedFootprintOutline(app)
+            visible = ~app.MotionRuntime.Active && ...
+                app.Scene.layers(app.SelectedLayerIndex).Visible;
+            if ~visible
+                if ~isempty(app.SelectedFootprintOutline) && ...
+                        isgraphics(app.SelectedFootprintOutline)
+                    app.SelectedFootprintOutline.Visible = "off";
+                end
+                return
+            end
+            points = app.selectedLayerOutlineRenderPoints();
+            if size(points, 2) < 3
+                if ~isempty(app.SelectedFootprintOutline) && ...
+                        isgraphics(app.SelectedFootprintOutline)
+                    app.SelectedFootprintOutline.Visible = "off";
+                end
+                return
+            end
+            plane = app.Scene.layers( ...
+                app.SelectedLayerIndex).CurrentProjectionPlane;
+            worldPoints = points + app.Scene.renderOrigin;
+            planeCoordinates = plane.basis.' * ...
+                (worldPoints - plane.P0);
+            finite = all(isfinite(planeCoordinates), 1);
+            planeCoordinates = unique( ...
+                planeCoordinates(:, finite).', "rows", "stable").';
+            if size(planeCoordinates, 2) < 3
+                if ~isempty(app.SelectedFootprintOutline) && ...
+                        isgraphics(app.SelectedFootprintOutline)
+                    app.SelectedFootprintOutline.Visible = "off";
+                end
+                return
+            end
+            hull = convhull(planeCoordinates(1, :).', ...
+                planeCoordinates(2, :).');
+            outline = PlanarProjection.reconstruct3d( ...
+                planeCoordinates(:, hull), plane) - app.Scene.renderOrigin;
+            topOffset = -(numel(app.Scene.layers) + 1) * ...
+                app.previewLayerDepthStepMeters() * ...
+                app.frameCameraViewDirection();
+            outline = outline + topOffset;
+            if isempty(app.SelectedFootprintOutline) || ...
+                    ~isgraphics(app.SelectedFootprintOutline)
+                app.SelectedFootprintOutline = line(app.Axes, ...
+                    outline(1, :), outline(2, :), outline(3, :), ...
+                    Color=[1 1 0], LineWidth=2.5, Clipping="on", ...
+                    HitTest="off", PickableParts="none", ...
+                    Tag="ProjectionViewerSelectedFootprintOutline");
+            else
+                app.SelectedFootprintOutline.XData = outline(1, :);
+                app.SelectedFootprintOutline.YData = outline(2, :);
+                app.SelectedFootprintOutline.ZData = outline(3, :);
+                app.SelectedFootprintOutline.Visible = "on";
+            end
+            uistack(app.SelectedFootprintOutline, "top");
+            app.raiseCrosshairOverlay();
+        end
+
+        function points = selectedLayerOutlineRenderPoints(app)
+            layerIndex = app.SelectedLayerIndex;
+            if app.usesTiledPreview(layerIndex)
+                geometry = app.previewGeometryCacheForLayer(layerIndex);
+                points = geometry.LayerRenderPoints;
+                return
+            end
+            handles = app.validLayerSurfaces(layerIndex);
+            points = zeros(3, 0);
+            for index = 1:numel(handles)
+                handle = handles(index);
+                points = [points, [handle.XData(:).'; ...
+                    handle.YData(:).'; handle.ZData(:).']]; %#ok<AGROW>
+            end
         end
 
         function tf = layerVisibilityRequiresBlendRefresh(app, layerIndex)
@@ -9492,9 +9861,7 @@ classdef ProjectionViewerApp < handle
                 app.AlphaPreviewMinIntervalSeconds;
             runtime.RenderedLayerAlphas = app.RenderedLayerAlphas;
             runtime.PendingAlphaMask = app.PendingAlphaMask;
-            runtime.AlignmentControlsCreated = ...
-                ~isempty(app.AlignmentLauncherGrid) && ...
-                isvalid(app.AlignmentLauncherGrid);
+            runtime.AlignmentControlsCreated = false;
             runtime.AlignmentWorkbenchCreated = ...
                 ~isempty(app.AlignmentWorkbenchFigure) && ...
                 isvalid(app.AlignmentWorkbenchFigure);
@@ -9709,9 +10076,9 @@ classdef ProjectionViewerApp < handle
                 "Left/Right arrows: select the previous/next layer"
                 "Up/Down arrows: nudge the selected layer vertically"
                 "Arrow shortcuts require viewport interaction focus"
-                "Motion imagery: Left/Right step frames; Up/Down are reserved"
-                "Motion imagery: Space toggles 0.5-10 fps Play/Pause"
-                "Escape exits motion imagery and restores the prior view"
+                "Single/Pair View: Left/Right steps frames or overlapping pairs"
+                "Single/Pair View: Space toggles 0.5-10 fps Play/Pause"
+                "Escape returns to View All and restores the prior camera"
                 "W/A/S/D: nudge the selected layer"
                 "I/K: adjust phi"
                 "J/L: adjust omega"
@@ -9720,11 +10087,11 @@ classdef ProjectionViewerApp < handle
                 "Space up: show the selected layer"
                 ""
                 "Context menu"
-                "Right click inside the image for Save, Load, Cycle, Reset, Help, Crosshair, Alignment panel,"
-                "Motion imagery, Clear alignment overlays, and Blend mode."
+                "Right click inside the image for Save, Load, Cycle, Reset, Help, Crosshair, Alignment Workbench...,"
+                "Layer Manager..., Clear alignment overlays, and Blend mode."
                 "Crosshair overlays cyan screen-space guide lines across the viewport."
                 "Reset restores neutral tip, tilt, twist, layer order, visibility, alpha, blend mode, offsets, and OPK corrections."
-                "+/- beside Layer move the selected layer one step up or down in the stack."
+                "Move up/down in Layer Manager changes the selected layer stack order."
                 ];
         end
 

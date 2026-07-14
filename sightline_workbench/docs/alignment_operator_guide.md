@@ -40,8 +40,8 @@ plane geometry, OPK, saved scene data, and backend products remain unchanged.
 ## Recommended workflow
 
 1. Load the scene, set a useful projection plane, and make the layers to align
-   visible. Open **Alignment panel** from the viewport context menu, then open
-   the separate **Alignment Workbench**.
+   visible. Choose **Alignment Workbench...** from the viewport context menu;
+   the separate workbench opens directly or receives focus if already open.
 2. Choose the moving and reference layers for a pair, or choose visible-layer
    scope for a scheduled network. “Reference” defines pair direction and
    scheduling; it is not assumed to be absolute truth. Keep **Allow reference

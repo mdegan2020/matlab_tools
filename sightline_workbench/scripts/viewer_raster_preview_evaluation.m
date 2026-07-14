@@ -150,8 +150,9 @@ end
 
 function timings = evaluateSurfaceInteractions(app, fig, options)
 alphaSlider = findSlider(fig, [0 1]);
-twistSlider = findSlider(fig, [-85 85], 4);
-visibilityCheckBox = findall(fig, "Type", "uicheckbox");
+twistSlider = findSlider(fig, [-85 85], 3);
+visibilityCheckBox = findall(groot, "Tag", ...
+    "ProjectionViewerLayerManagerVisibleCheckBox");
 if isempty(visibilityCheckBox)
     error("viewer_raster_preview_evaluation:missingControl", ...
         "Unable to locate the visibility checkbox.");

@@ -250,7 +250,7 @@ drawnow
 end
 
 function runAlphaScenario(fig, iterations)
-slider = findSliderInColumn(fig, 5);
+slider = findSliderInColumn(fig, 4);
 for k = 1:iterations
     value = 0.25 + 0.5 * mod(k, 2);
     slider.ValueChangingFcn(slider, struct(Value=value));
@@ -268,7 +268,7 @@ menuItem.MenuSelectedFcn(menuItem, struct());
 end
 
 function runTwistScenario(fig, iterations)
-slider = findSliderInColumn(fig, 4);
+slider = findSliderInColumn(fig, 3);
 for k = 1:iterations
     value = 3 * (-1) ^ k;
     slider.ValueChangingFcn(slider, struct(Value=value));

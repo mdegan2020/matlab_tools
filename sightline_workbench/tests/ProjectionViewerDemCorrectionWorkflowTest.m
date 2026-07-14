@@ -89,10 +89,6 @@ classdef ProjectionViewerDemCorrectionWorkflowTest < matlab.unittest.TestCase
                 "ProjectionViewerAlignmentPanelMenuItem");
             menu(1).MenuSelectedFcn(menu(1), struct());
             drawnow
-            launcher = findall(figure(1), "Tag", ...
-                "ProjectionViewerAlignmentOpenWorkbenchButton");
-            launcher(1).ButtonPushedFcn(launcher(1), struct());
-            drawnow
             figure = findall(groot, "Type", "figure", ...
                 "Name", "Alignment Workbench");
             figure = figure(1);

@@ -23,6 +23,57 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
     end
 
     methods (Test)
+        function testRd4ShellOpensManagerAndWorkbenchDirectly(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerAppInteractionTest.makeTwoImageScene());
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            viewer = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+            manager = findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerFigure");
+            alignmentMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAlignmentPanelMenuItem");
+
+            testCase.verifyNumElements(manager, 1);
+            testCase.verifyEqual(string(manager.Name), "Layer Manager");
+            mode = findall(manager, "Tag", ...
+                "ProjectionViewerLayerManagerModeDropDown");
+            testCase.verifyEqual(string(mode.Value), "viewAll");
+            testCase.verifyEqual(string(alignmentMenu.Text), ...
+                "Alignment Workbench...");
+            testCase.verifyEmpty(findall(viewer, "Tag", ...
+                "ProjectionViewerAlignmentGrid"));
+            testCase.verifyEmpty(findall(viewer, "Tag", ...
+                "ProjectionViewerLayerManagerLayerDropDown"));
+            testCase.verifyEmpty(findall(viewer, "Tag", ...
+                "ProjectionViewerLayerManagerVisibleCheckBox"));
+            sliders = findall(viewer, "-isa", ...
+                "matlab.ui.control.Slider");
+            testCase.verifyNumElements(sliders, 4);
+            testCase.verifyEqual(sliders(1).Parent.RowHeight, ...
+                {'fit', 'fit'});
+            overlay = findall(viewer, "Tag", ...
+                "ProjectionViewerViewVectorOverlay");
+            testCase.verifyEqual(overlay.Parent, viewer);
+            testCase.verifyEqual(string(overlay.Enable), "off");
+
+            managerMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerLayerManagerMenuItem");
+            managerMenu.MenuSelectedFcn(managerMenu, struct());
+            drawnow
+            testCase.verifyEqual(findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerFigure"), manager);
+
+            alignmentMenu.MenuSelectedFcn(alignmentMenu, struct());
+            drawnow
+            testCase.verifyNumElements(findall(groot, "Name", ...
+                "Alignment Workbench"), 1);
+            testCase.verifyEmpty(findall(viewer, "Tag", ...
+                "ProjectionViewerAlignmentOpenWorkbenchButton"));
+        end
+
         function testImageAxesDecorationsAreHidden(testCase)
             scene = ProjectionViewerAppInteractionTest.makeScene();
             app = ProjectionViewerApp(scene);
@@ -81,7 +132,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 string(helpMenu.Text) string(crosshairMenu.Text) ...
                 string(alignmentPanelMenu.Text) string(blendMenu.Text)], ...
                 ["Save" "Load" "Cycle" "Reset" "Help" "Crosshair" ...
-                "Alignment panel" "Blend mode"]);
+                "Alignment Workbench..." "Blend mode"]);
             testCase.verifyEqual(ax.ContextMenu, saveMenu.Parent);
             testCase.verifyEqual(surfaceHandle(1).ContextMenu, saveMenu.Parent);
             testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Save"));
@@ -96,7 +147,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(anaglyphBlendMenu.Checked), "off");
         end
 
-        function testAlignmentPanelContextMenuTogglesHiddenPanel(testCase)
+        function testAlignmentContextMenuFocusesOneWorkbench(testCase)
             scene = ProjectionViewerAppInteractionTest.makeScene();
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
@@ -104,44 +155,18 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
 
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
-            layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
-            controlGrid = layerDropDown.Parent;
             alignmentPanelMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAlignmentPanelMenuItem");
 
-            testCase.verifyEqual(controlGrid.Layout.Row, 3);
             testCase.verifyEmpty(findall(fig, "Tag", ...
                 "ProjectionViewerAlignmentGrid"));
             testCase.verifyEmpty(findall(fig, "Tag", ...
                 "ProjectionViewerAlignmentPairTable"));
             testCase.verifyEmpty(findall(fig, "Tag", ...
                 "ProjectionViewerAlignmentMatchTable"));
-            testCase.verifyEqual(string(alignmentPanelMenu.Checked), "off");
-
             alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
             drawnow
 
-            alignmentGrid = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
-                fig, "ProjectionViewerAlignmentGrid");
-
-            testCase.verifyEqual(alignmentGrid.Layout.Row, 2);
-            testCase.verifyEqual(string(alignmentGrid.Visible), "on");
-            testCase.verifyEqual(string(alignmentGrid.Parent.RowHeight{2}), "fit");
-            testCase.verifyEqual(string(alignmentPanelMenu.Checked), "on");
-            diagnosticsAfterCreate = app.performanceDiagnostics();
-            testCase.verifyTrue( ...
-                diagnosticsAfterCreate.Viewer.AlignmentControlsCreated);
-            testCase.verifyEqual( ...
-                diagnosticsAfterCreate.Viewer.AlignmentTableCount, 0);
-            testCase.verifyFalse( ...
-                diagnosticsAfterCreate.Viewer.AlignmentWorkbenchCreated);
-            testCase.verifyEqual( ...
-                diagnosticsAfterCreate.Counters.AlignmentUiCreations, 1);
-
-            launcher = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
-                fig, "ProjectionViewerAlignmentOpenWorkbenchButton");
-            launcher.ButtonPushedFcn(launcher, struct());
-            drawnow
             workbench = findall(groot, "Type", "figure", ...
                 "Name", "Alignment Workbench");
             testCase.verifyNumElements(workbench, 1);
@@ -153,34 +178,28 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 diagnosticsAfterWorkbench.Viewer.AlignmentTableCount, 2);
             testCase.verifyEqual( ...
                 diagnosticsAfterWorkbench.Counters.AlignmentWorkbenchCreations, 1);
+
+            alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
+            drawnow
+            focusedWorkbench = findall(groot, "Type", "figure", ...
+                "Name", "Alignment Workbench");
+            testCase.verifyEqual(focusedWorkbench, workbench);
+            diagnosticsAfterFocus = app.performanceDiagnostics();
+            testCase.verifyEqual( ...
+                diagnosticsAfterFocus.Counters.AlignmentWorkbenchCreations, 1);
+
             workbench.CloseRequestFcn(workbench, struct());
             drawnow
-            testCase.verifyFalse(isvalid(workbench));
-            launcher.ButtonPushedFcn(launcher, struct());
+            alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
             drawnow
             reopenedWorkbench = findall(groot, "Type", "figure", ...
                 "Name", "Alignment Workbench");
             testCase.verifyNumElements(reopenedWorkbench, 1);
-            testCase.verifyEqual(string(reopenedWorkbench.Visible), "on");
-            diagnosticsAfterWorkbenchReopen = app.performanceDiagnostics();
-            testCase.verifyEqual( ...
-                diagnosticsAfterWorkbenchReopen.Counters. ...
-                AlignmentWorkbenchCreations, 2);
-
-            alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
-            drawnow
-
-            testCase.verifyEqual(string(alignmentGrid.Visible), "off");
-            testCase.verifyEqual(alignmentGrid.Parent.RowHeight{2}, 0);
-            testCase.verifyEqual(string(alignmentPanelMenu.Checked), "off");
-
-            alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
-            drawnow
             diagnosticsAfterReopen = app.performanceDiagnostics();
             testCase.verifyEqual( ...
-                diagnosticsAfterReopen.Counters.AlignmentUiCreations, 1);
-            testCase.verifyEqual(findall(fig, "Tag", ...
-                "ProjectionViewerAlignmentGrid"), alignmentGrid);
+                diagnosticsAfterReopen.Counters.AlignmentWorkbenchCreations, 2);
+            testCase.verifyEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentGrid"));
         end
 
         function testHelpContextMenuOpensNonModalDialog(testCase)
@@ -226,20 +245,15 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             alignmentMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAlignmentPanelMenuItem");
             alignmentMenu.MenuSelectedFcn(alignmentMenu, struct());
-            launcher = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
-                viewer, "ProjectionViewerAlignmentOpenWorkbenchButton");
-            launcher.ButtonPushedFcn(launcher, struct());
             helpMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerHelpMenuItem");
             helpMenu.MenuSelectedFcn(helpMenu, struct());
-            motionMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
-                "ProjectionViewerMotionImageryMenuItem");
-            motionMenu.MenuSelectedFcn(motionMenu, struct());
             motionWindow = findall(groot, "Tag", ...
-                "ProjectionViewerMotionFigure");
-            startButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
-                motionWindow, "ProjectionViewerMotionStartExitButton");
-            startButton.ButtonPushedFcn(startButton, struct());
+                "ProjectionViewerLayerManagerFigure");
+            mode = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                motionWindow, "ProjectionViewerLayerManagerModeDropDown");
+            mode.Value = "single";
+            mode.ValueChangedFcn(mode, struct());
             playButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
                 motionWindow, "ProjectionViewerMotionPlayPauseButton");
             playButton.ButtonPushedFcn(playButton, struct());
@@ -255,7 +269,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEmpty(findall(groot, "Name", ...
                 "Projection Viewer Help"));
             testCase.verifyEmpty(findall(groot, "Tag", ...
-                "ProjectionViewerMotionFigure"));
+                "ProjectionViewerLayerManagerFigure"));
             testCase.verifyEmpty(timerfindall("Tag", ...
                 "ProjectionViewerMotionPlaybackTimer"));
             testCase.verifyTrue(isvalid(callerFigure));
@@ -270,20 +284,14 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             alignmentMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAlignmentPanelMenuItem");
             alignmentMenu.MenuSelectedFcn(alignmentMenu, struct());
-            launcher = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
-                viewer, "ProjectionViewerAlignmentOpenWorkbenchButton");
-            launcher.ButtonPushedFcn(launcher, struct());
             helpMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerHelpMenuItem");
             helpMenu.MenuSelectedFcn(helpMenu, struct());
-            motionMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
-                "ProjectionViewerMotionImageryMenuItem");
-            motionMenu.MenuSelectedFcn(motionMenu, struct());
             drawnow
 
             children = [findall(groot, "Name", "Alignment Workbench"); ...
                 findall(groot, "Name", "Projection Viewer Help"); ...
-                findall(groot, "Tag", "ProjectionViewerMotionFigure")];
+                findall(groot, "Tag", "ProjectionViewerLayerManagerFigure")];
             for child = reshape(children, 1, [])
                 child.CloseRequestFcn(child, struct());
             end
@@ -295,7 +303,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEmpty(findall(groot, "Name", ...
                 "Projection Viewer Help"));
             testCase.verifyEmpty(findall(groot, "Tag", ...
-                "ProjectionViewerMotionFigure"));
+                "ProjectionViewerLayerManagerFigure"));
             testCase.verifyWarningFree(@() delete(app));
             testCase.verifyWarningFree(@() delete(app));
             testCase.verifyFalse(isvalid(viewer));
@@ -360,9 +368,10 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
             layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
-            controlGrid = layerDropDown.Parent;
 
-            testCase.verifyGreaterThanOrEqual(controlGrid.ColumnWidth{1}, 420);
+            testCase.verifyEqual(string(layerDropDown.Tag), ...
+                "ProjectionViewerLayerManagerLayerDropDown");
+            testCase.verifyEqual(layerDropDown.Layout.Column, [2 4]);
             testCase.verifyTrue(contains(string(layerDropDown.Items{2}), ...
                 string(scene.layers(2).Name)));
         end
@@ -490,7 +499,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
-            visibleCheckBox = findall(fig, "-isa", "matlab.ui.control.CheckBox");
+            visibleCheckBox = findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerVisibleCheckBox");
             layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
                 ax, scene);
 
@@ -513,7 +523,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyTrue(shownState.Layers(2).Visible);
         end
 
-        function testLayerHeaderContainsOrderingAndVisibilityControls(testCase)
+        function testLayerManagerContainsOrderingAndVisibilityControls(testCase)
             scene = ProjectionViewerAppInteractionTest.makeScene();
             app = ProjectionViewerApp(scene);
             testCase.addTeardown(@() delete(app));
@@ -521,7 +531,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
 
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
-            visibleCheckBox = findall(fig, "-isa", "matlab.ui.control.CheckBox");
+            visibleCheckBox = findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerVisibleCheckBox");
             moveUpButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
                 fig, "ProjectionViewerMoveLayerUpButton");
             moveDownButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
@@ -530,11 +541,12 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEqual(moveUpButton.Parent, moveDownButton.Parent);
             testCase.verifyEqual(moveUpButton.Parent, visibleCheckBox.Parent);
             testCase.verifyEqual( ...
-                ProjectionViewerAppInteractionTest.layoutPosition(moveUpButton), [1 2]);
+                ProjectionViewerAppInteractionTest.layoutPosition(moveUpButton), [1 5]);
             testCase.verifyEqual( ...
-                ProjectionViewerAppInteractionTest.layoutPosition(moveDownButton), [1 3]);
+                ProjectionViewerAppInteractionTest.layoutPosition(moveDownButton), [1 6]);
             testCase.verifyEqual( ...
-                ProjectionViewerAppInteractionTest.layoutPosition(visibleCheckBox), [1 6]);
+                ProjectionViewerAppInteractionTest.layoutPosition(visibleCheckBox), ...
+                [1 7 8]);
             testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findBlendDropDown(fig));
         end
 
@@ -984,13 +996,11 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
 
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
-            layerDropDown = ...
-                ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
             tipSlider = ...
                 ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
             initial = app.exportState();
 
-            fig.CurrentObject = layerDropDown;
+            fig.CurrentObject = [];
             fig.WindowKeyPressFcn(fig, ...
                 ProjectionViewerAppInteractionTest.makeKeyEvent("leftarrow"));
             fig.CurrentObject = tipSlider;
@@ -1481,7 +1491,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
             twistSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 4);
             alphaSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 5);
-            visibleCheckBox = findall(fig, "-isa", "matlab.ui.control.CheckBox");
+            visibleCheckBox = findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerVisibleCheckBox");
             moveUpButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
                 fig, "ProjectionViewerMoveLayerUpButton");
             anaglyphBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
@@ -1782,7 +1793,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 delete(timerObject);
             end
             figureNames = ["Sightline Workbench" "Alignment Workbench" ...
-                "Projection Viewer Help" "Motion Imagery"];
+                "Projection Viewer Help" "Layer Manager"];
             for figureName = figureNames
                 delete(findall(groot, "Type", "figure", ...
                     "Name", figureName));
@@ -1842,17 +1853,15 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
 
         function component = findTaggedComponent(parent, tag)
             components = findall(parent, "Tag", tag);
+            if isempty(components)
+                components = findall(groot, "Tag", tag);
+            end
             component = components(1);
         end
 
-        function dropdown = findLayerDropDown(fig)
-            dropdowns = findall(fig, "-isa", "matlab.ui.control.DropDown");
-            isLayerDropDown = false(size(dropdowns));
-            for k = 1:numel(dropdowns)
-                isLayerDropDown(k) = isnumeric(dropdowns(k).ItemsData) && ...
-                    isequal(dropdowns(k).ItemsData, 1:numel(dropdowns(k).Items));
-            end
-            dropdown = dropdowns(isLayerDropDown);
+        function dropdown = findLayerDropDown(~)
+            dropdown = findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerLayerDropDown");
         end
 
         function dropdown = findBlendDropDown(fig)
@@ -1881,7 +1890,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
         function slider = findSliderInColumn(fig, column)
             sliders = findall(fig, "-isa", "matlab.ui.control.Slider");
             sliderColumns = arrayfun(@(slider) slider.Layout.Column, sliders);
-            slider = sliders(sliderColumns == column);
+            slider = sliders(sliderColumns == column - 1);
         end
 
         function label = findOpkLabel(fig)

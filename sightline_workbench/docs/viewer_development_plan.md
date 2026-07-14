@@ -540,7 +540,7 @@ buildtool test
 The current suite exercises pure geometry, scene construction, sparse geometry,
 mesh building, readback, layer workflows, state serialization, and app
 interactions. The viewer plan first reached 416/416 at its historical completion
-checkpoint. The current grouped fresh-class repository baseline is 735/735 with
+checkpoint. The current grouped fresh-class repository baseline is 743/743 with
 no failures or incomplete tests; see `docs/project_status.md` and
 `docs/test_suite_grouping.md` for the maintained total and group counts.
 
@@ -1216,10 +1216,12 @@ that diagnosis. See
 Current real-data testing additionally exposed implicit-camera orientation,
 unbounded global-solve cost/progress, stale frame-change LOD state, incomplete
 child-window cleanup, and Layer Manager/stereo-cursor workflow needs. RD-2,
-RD-3, and RD-1 now resolve the first four repository defects with bounded
-solving, coherent active LOD, owned shutdown, and a presentation-only
-side-invariant camera convention. Representative private orientation
-confirmation remains pending; RD-4 through RD-6 remain in
+RD-3, RD-1, and RD-4 now resolve the first five repository defects with bounded
+solving, coherent active LOD, owned shutdown, a presentation-only
+side-invariant camera convention, and the default-open stable-ID Layer Manager
+with runtime View All/Single/Pair masks and no-drift pair tracking.
+Representative private orientation confirmation remains pending; RD-5 and
+RD-6 remain in
 `docs/real_data_validation_followup_workpack.md`. This corrective queue does
 not reopen the completed reliability tree.
 

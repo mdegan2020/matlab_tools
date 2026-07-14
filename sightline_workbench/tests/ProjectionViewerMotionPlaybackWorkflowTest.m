@@ -133,8 +133,7 @@ classdef ProjectionViewerMotionPlaybackWorkflowTest < matlab.uitest.TestCase
             axes = findall(viewer, "Type", "axes");
             testCase.press(play);
             ProjectionViewerMotionPlaybackWorkflowTest.stopPlaybackTimer();
-            viewer.CurrentObject = ...
-                ProjectionViewerMotionPlaybackWorkflowTest.layerDropDown(viewer);
+            viewer.CurrentObject = [];
             ProjectionViewerMotionPlaybackWorkflowTest.firePlaybackTick();
             focusPaused = app.motionDiagnostics();
 
@@ -222,15 +221,20 @@ classdef ProjectionViewerMotionPlaybackWorkflowTest < matlab.uitest.TestCase
             scene = ProjectionViewMetadata.ensureScene(scene);
         end
 
-        function openAndStart(testCase)
+        function openAndStart(~)
             menu = findall(groot, "Tag", ...
-                "ProjectionViewerMotionImageryMenuItem");
+                "ProjectionViewerLayerManagerMenuItem");
             menu(1).MenuSelectedFcn(menu(1), struct());
             drawnow
-            start = ProjectionViewerMotionPlaybackWorkflowTest.tagged( ...
+            layer = findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerLayerDropDown");
+            layer(1).Value = 1;
+            layer(1).ValueChangedFcn(layer(1), struct(Value=1));
+            mode = ProjectionViewerMotionPlaybackWorkflowTest.tagged( ...
                 ProjectionViewerMotionPlaybackWorkflowTest.motionWindow(), ...
-                "ProjectionViewerMotionStartExitButton");
-            testCase.press(start);
+                "ProjectionViewerLayerManagerModeDropDown");
+            mode.Value = "single";
+            mode.ValueChangedFcn(mode, struct());
             drawnow
         end
 
@@ -265,25 +269,13 @@ classdef ProjectionViewerMotionPlaybackWorkflowTest < matlab.uitest.TestCase
 
         function figureHandle = motionWindow()
             figures = findall(groot, "Tag", ...
-                "ProjectionViewerMotionFigure");
+                "ProjectionViewerLayerManagerFigure");
             figureHandle = figures(1);
         end
 
         function component = tagged(parent, tag)
             components = findall(parent, "Tag", tag);
             component = components(1);
-        end
-
-        function dropdown = layerDropDown(viewer)
-            dropdowns = findall(viewer, ...
-                "-isa", "matlab.ui.control.DropDown");
-            for index = 1:numel(dropdowns)
-                if isnumeric(dropdowns(index).ItemsData)
-                    dropdown = dropdowns(index);
-                    return
-                end
-            end
-            dropdown = matlab.ui.control.DropDown.empty();
         end
 
         function event = keyEvent(key)
@@ -294,7 +286,7 @@ classdef ProjectionViewerMotionPlaybackWorkflowTest < matlab.uitest.TestCase
             delete(findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench"));
             delete(findall(groot, "Tag", ...
-                "ProjectionViewerMotionFigure"));
+                "ProjectionViewerLayerManagerFigure"));
             timers = timerfindall("Tag", ...
                 "ProjectionViewerMotionPlaybackTimer");
             if ~isempty(timers)

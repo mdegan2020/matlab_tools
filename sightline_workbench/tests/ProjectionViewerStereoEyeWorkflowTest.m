@@ -131,6 +131,51 @@ classdef ProjectionViewerStereoEyeWorkflowTest < matlab.uitest.TestCase
                 ProjectionViewerStereoEyeWorkflowTest.redLayerIndex(viewer(1)), 1);
             testCase.verifyEqual(diagnostics.StereoEyes.Status, "unavailable");
         end
+
+        function testPairTurnoverReappliesPhysicalEyeChannels(testCase)
+            scene = ProjectionViewerStereoEyeWorkflowTest.makeThreeViewScene();
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            viewer = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+            manager = findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerFigure");
+            layer = ProjectionViewerStereoEyeWorkflowTest.findTagged( ...
+                manager, "ProjectionViewerLayerManagerLayerDropDown");
+            layer.Value = 1;
+            layer.ValueChangedFcn(layer, struct(Value=1));
+            mode = ProjectionViewerStereoEyeWorkflowTest.findTagged( ...
+                manager, "ProjectionViewerLayerManagerModeDropDown");
+            mode.Value = "pair";
+            mode.ValueChangedFcn(mode, struct());
+            drawnow
+
+            first = app.alignmentDiagnostics();
+            firstRedIndex = ...
+                ProjectionViewerStereoEyeWorkflowTest.redVisibleLayerIndex( ...
+                viewer(1));
+            testCase.verifyEqual(scene.layers(firstRedIndex).ViewId, ...
+                first.StereoEyes.RedViewId);
+
+            testCase.press(ProjectionViewerStereoEyeWorkflowTest.findTagged( ...
+                manager, "ProjectionViewerMotionNextButton"));
+            drawnow
+            second = app.alignmentDiagnostics();
+            secondRedIndex = ...
+                ProjectionViewerStereoEyeWorkflowTest.redVisibleLayerIndex( ...
+                viewer(1));
+            pairIds = [string(second.ActivePair.ReferenceViewId) ...
+                string(second.ActivePair.MovingViewId)];
+
+            testCase.verifyEqual(scene.layers(secondRedIndex).ViewId, ...
+                second.StereoEyes.RedViewId);
+            testCase.verifyTrue(any(second.StereoEyes.RedViewId == pairIds));
+            testCase.verifyEqual(second.StereoEyes.RedViewId, ...
+                second.StereoEyes.LeftViewId);
+            testCase.verifyEqual(second.StereoEyes.CyanViewId, ...
+                second.StereoEyes.RightViewId);
+        end
     end
 
     methods (Static, Access = private)
@@ -144,10 +189,6 @@ classdef ProjectionViewerStereoEyeWorkflowTest < matlab.uitest.TestCase
             menuItem = findall(viewer, "Tag", ...
                 "ProjectionViewerAlignmentPanelMenuItem");
             menuItem.MenuSelectedFcn(menuItem, struct());
-            drawnow
-            launcher = findall(viewer, "Tag", ...
-                "ProjectionViewerAlignmentOpenWorkbenchButton");
-            launcher.ButtonPushedFcn(launcher, struct());
             drawnow
             workbench = findall(groot, "Type", "figure", ...
                 "Name", "Alignment Workbench");
@@ -169,6 +210,26 @@ classdef ProjectionViewerStereoEyeWorkflowTest < matlab.uitest.TestCase
             scene = ProjectionViewMetadata.ensureScene(scene);
         end
 
+        function scene = makeThreeViewScene()
+            images = {uint8(40 * ones(16, 20, 3)), ...
+                uint8(80 * ones(16, 20, 3)), ...
+                uint8(120 * ones(16, 20, 3))};
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                images, ["eye-a.tif" "eye-b.tif" "eye-c.tif"], ...
+                struct(RowStride=4, ColumnStride=4));
+            viewIds = ["view-a" "view-b" "view-c"];
+            lateral = [-2 0 2];
+            for index = 1:3
+                scene.layers(index).ViewId = viewIds(index);
+                scene.layers(index).PassId = "eye-pass";
+                scene.layers(index).AcquisitionStartTime = index;
+                scene.layers(index).SourceGeometry.ReferenceOrigin = ...
+                    [0; lateral(index); 0];
+                scene.layers(index).BlendMode = "redBlueAnaglyph";
+            end
+            scene = ProjectionViewMetadata.ensureScene(scene);
+        end
+
         function layerIndex = redLayerIndex(viewer)
             axesHandle = findall(viewer, "Type", "axes");
             surfaces = findall(axesHandle, "Type", "surface", ...
@@ -181,8 +242,26 @@ classdef ProjectionViewerStereoEyeWorkflowTest < matlab.uitest.TestCase
             [~, layerIndex] = max(dominance);
         end
 
+        function layerIndex = redVisibleLayerIndex(viewer)
+            axesHandle = findall(viewer, "Type", "axes");
+            surfaces = findall(axesHandle, "Type", "surface", ...
+                "Tag", "ProjectionViewerLayerSurface");
+            surfaces = flip(reshape(surfaces, 1, []));
+            visible = string({surfaces.Visible}) == "on";
+            visibleIndices = find(visible);
+            dominance = -inf(1, numel(surfaces));
+            for index = visibleIndices
+                channelMean = squeeze(mean(surfaces(index).CData, [1 2]));
+                dominance(index) = channelMean(1) - channelMean(3);
+            end
+            [~, layerIndex] = max(dominance);
+        end
+
         function component = findTagged(parent, tag)
             component = findall(parent, "Tag", tag);
+            if isempty(component)
+                component = findall(groot, "Tag", tag);
+            end
             component = component(1);
         end
 

@@ -1363,18 +1363,11 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
             fig = fig(1);
-            if isempty(findall(fig, "Tag", ...
-                    "ProjectionViewerAlignmentGrid"))
+            if isempty(findall(groot, "Type", "figure", ...
+                    "Name", "Alignment Workbench"))
                 menuItem = findall(fig, "Tag", ...
                     "ProjectionViewerAlignmentPanelMenuItem");
                 menuItem.MenuSelectedFcn(menuItem, struct());
-                drawnow
-            end
-            if isempty(findall(groot, "Type", "figure", ...
-                    "Name", "Alignment Workbench"))
-                launcher = findall(fig, "Tag", ...
-                    "ProjectionViewerAlignmentOpenWorkbenchButton");
-                launcher.ButtonPushedFcn(launcher, struct());
                 drawnow
             end
         end

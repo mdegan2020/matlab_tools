@@ -26,7 +26,7 @@ classdef ProjectionMotionSequence
                 PassIds=strings(1, 0), Frames=struct([]), ...
                 OrderingMode=mode, OrderingExplanation=explanation, ...
                 UsedStableFallback=~isempty(warnings), Warnings=warnings);
-            if numel(selected) < 2
+            if isempty(selected)
                 return
             end
 
@@ -38,11 +38,14 @@ classdef ProjectionMotionSequence
                 frames(position) = ProjectionMotionSequence.frame( ...
                     layer, layerIndex, position, numel(selected));
             end
-            sequence.Available = true;
-            sequence.Explanation = "";
             sequence.ViewIds = string({frames.ViewId});
             sequence.PassIds = string({frames.PassId});
             sequence.Frames = frames;
+            if numel(selected) < 2
+                return
+            end
+            sequence.Available = true;
+            sequence.Explanation = "";
         end
 
         function [position, changed, boundary] = step( ...

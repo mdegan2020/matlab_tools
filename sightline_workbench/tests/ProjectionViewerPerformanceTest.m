@@ -61,7 +61,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             drawnow
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
-            alphaSlider = ProjectionViewerPerformanceTest.findSlider(fig, 5);
+            alphaSlider = ProjectionViewerPerformanceTest.findSlider(fig, 4);
             app.resetPerformanceDiagnostics();
 
             alphaSlider.ValueChangingFcn(alphaSlider, struct(Value=0.5));
@@ -82,7 +82,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             drawnow
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
-            alphaSlider = ProjectionViewerPerformanceTest.findSlider(fig, 5);
+            alphaSlider = ProjectionViewerPerformanceTest.findSlider(fig, 4);
             surfaceHandle = findall(fig, "Type", "surface", ...
                 "Tag", "ProjectionViewerLayerSurface");
             app.configurePreviewBudget(struct( ...
@@ -125,7 +125,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             drawnow
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
-            alphaSlider = ProjectionViewerPerformanceTest.findSlider(fig, 5);
+            alphaSlider = ProjectionViewerPerformanceTest.findSlider(fig, 4);
             surfaceHandle = findall(fig, "Type", "surface", ...
                 "Tag", "ProjectionViewerLayerSurface");
             app.resetPerformanceDiagnostics();
@@ -278,7 +278,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             drawnow
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
-            twistSlider = ProjectionViewerPerformanceTest.findSlider(fig, 4);
+            twistSlider = ProjectionViewerPerformanceTest.findSlider(fig, 3);
             app.resetPerformanceDiagnostics();
 
             twistSlider.ValueChangingFcn(twistSlider, struct(Value=2));
@@ -434,17 +434,14 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
             ax = findall(fig, "Type", "axes");
-            tipSlider = ProjectionViewerPerformanceTest.findSlider(fig, 2);
+            tipSlider = ProjectionViewerPerformanceTest.findSlider(fig, 1);
             fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
             tipSlider.Value = 2;
-            tipSlider.ValueChangedFcn(tipSlider, struct());
             app.resetPerformanceDiagnostics();
-
-            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=1));
-            app.flushPreviewUpdates();
+            tipSlider.ValueChangedFcn(tipSlider, struct());
             invalidatedDiagnostics = app.performanceDiagnostics();
             app.resetPerformanceDiagnostics();
-            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=-1));
+            fig.WindowScrollWheelFcn(fig, struct(VerticalScrollCount=0));
             app.flushPreviewUpdates();
             cachedDiagnostics = app.performanceDiagnostics();
 
@@ -595,7 +592,7 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             drawnow
             fig = findall(groot, "Type", "figure", ...
                 "Name", "Sightline Workbench");
-            tipSlider = ProjectionViewerPerformanceTest.findSlider(fig, 2);
+            tipSlider = ProjectionViewerPerformanceTest.findSlider(fig, 1);
             tipSlider.Value = 1;
             app.resetPerformanceDiagnostics();
 

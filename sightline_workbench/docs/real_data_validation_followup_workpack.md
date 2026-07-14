@@ -1,6 +1,6 @@
 # Real-Data Validation Follow-Up Workpack
 
-Status: active implementation. RD-2, RD-3, and RD-1 are complete; RD-4 is next
+Status: active implementation. RD-2, RD-3, RD-1, and RD-4 are complete; RD-5 is next
 in the recorded execution order. This workpack remains the highest-priority
 implementation queue and temporarily precedes independent D2 native CPU work
 and all hardware-gated GPU work.
@@ -56,8 +56,8 @@ completed feature trees except where a regression is demonstrated.
 
 ### RD-0 — July 13 Operator Findings And Execution Order
 
-Status: intake and presentation decisions complete; RD-2, RD-3, and RD-1
-complete.
+Status: intake and presentation decisions complete; RD-2, RD-3, RD-1, and
+RD-4 complete.
 
 The implementation order is deliberately independent of the historical pack
 numbers retained below:
@@ -119,7 +119,7 @@ same screen-basis convention. Focused tests also prove that the scene struct,
 plane, sampling handles and coordinates, OPK state, exported backend scene,
 output grid, and backend pixels remain bitwise unchanged. The procedural
 anaglyph oracle and all six fresh-class groups remain green. The validated
-group counts are 143, 185, 237, 74, 62, and 34, totaling 735/735 with zero
+group counts are 143, 185, 237, 75, 69, and 34, totaling 743/743 with zero
 failures or incomplete tests.
 
 The active operator advisory is intentionally retained until representative
@@ -432,7 +432,7 @@ including parent-first, child-first, repeated, and in-flight cleanup cases.
 
 ### RD-4 — Layer Manager And Main-Viewer Shell
 
-Status: approved direction and behavior; implementation not started.
+Status: complete.
 
 #### RD-4A — Remove the redundant alignment launcher bar
 
@@ -515,6 +515,27 @@ all three modes, keyboard and button parity, forward/reverse pair turnover,
 track-camera stability, anaglyph assignment, layer reorder/removal, saved scene
 compatibility, the top-most yellow selected-footprint overlay in View All, and
 main-viewer rendering/interaction performance.
+
+Implementation evidence: the redundant launcher was removed; the context menu
+opens or focuses one Alignment Workbench directly; the default-open Layer
+Manager owns layer order/visibility, sequence filtering, playback, and the
+three runtime presentation modes. Single View accepts one eligible frame; Pair
+View uses exactly reversible overlapping pairs and owns persistent absolute
+pair-camera tracking. Runtime masks preserve serialized visibility, including
+manager edits and bulk actions made while a presentation mask is active.
+Physical-eye resolution runs after pair selection, and the selected visible
+footprint is a clipped yellow runtime overlay raised above all image surfaces.
+Layer selection and outline refresh do not rebuild geometry or textures. The
+main viewer now has a two-row four-slider strip and a non-interactive
+bottom-right OPK overlay. Hover reveal was not adopted because the existing
+explicit compact strip is deterministic across desktop platforms.
+
+Fresh-class acceptance passes `coreGeometryState` 143/143, `alignment`
+185/185, `backendSurface` 237/237, `viewerAlignmentUi` 75/75,
+`viewerPresentationWorkflows` 69/69, and `viewerPerformancePrecision` 34/34,
+totaling 743/743 with zero failures or incomplete tests. MATLAB Code Analyzer
+reports zero issues for every changed MATLAB source, test, and evaluation
+script.
 
 ### RD-5 — Dense-Surface Controls, Evidence, And Quality Recovery
 

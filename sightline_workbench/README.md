@@ -115,7 +115,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 735 tests;
+- the latest grouped fresh-class repository validation passes all 743 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate;
@@ -125,9 +125,9 @@ The current implementation baseline is summarized in
   `docs/real_data_validation_followup_workpack.md`, which incorporates the
   July 13 operator findings as ordered network-solve, viewer correctness,
   orientation, Layer Manager, dense-surface, and stereo-cursor packs; RD-2's
-  bounded network solve, RD-3's LOD/lifecycle correction, and RD-1's
-  explicit-plane orientation correction are complete, and RD-4 Layer Manager
-  work is next; and
+  bounded network solve, RD-3's LOD/lifecycle correction, RD-1's explicit-plane
+  orientation correction, and RD-4's Layer Manager/viewer shell are complete;
+  RD-5 dense-surface evidence and quality recovery is next; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -247,7 +247,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 735 passing tests with no failures or incomplete
+fresh-class baseline is 743 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -1190,24 +1190,28 @@ current camera before presenting them, including an incoming cached view.
 representative sensor origins over the active pair's shared footprint, aims at
 the overlap centroid, derives a stable up direction from the current plane, and
 fits the overlap with padding. `Restore viewpoint` returns to the camera saved
-before the first pair view. Runtime-only `Follow active pair` is off by default;
-pair navigation reapplies the view when enabled, while manual pan, zoom, or
-twist suspends it for the current pair and the next pair navigation resumes it.
-Unavailable overlap or geometry disables the commands with an explanation.
-These controls change camera presentation only and never mutate the plane,
-source geometry, rays, output grids, radiometry, or serialized scientific state.
+before the first pair view. Persistent runtime-only `Track camera` now belongs
+to Pair View in the default-open Layer Manager; each accepted pair transition
+recomputes and applies the absolute pair viewpoint without incremental camera
+drift. Unavailable overlap or geometry is explained. These controls change
+camera presentation only and never mutate the plane, source geometry, rays,
+output grids, radiometry, or serialized scientific state.
 
-`Motion imagery...` in the image context menu opens a nonmodal configuration
-window without adding permanent main-view controls. Its runtime sequence is
-independent of layer visibility, defaults to every image, supports pass and
-per-view inclusion, and requires at least two frames. Caller order is preserved
-when supplied programmatically; otherwise frames remain grouped by pass and are
-ordered by comparable acquisition time, with visible stable-order warnings.
-Plain Left/Right steps one applied-geometry frame at a time, plain Up/Down is
-reserved, Shift+Arrows retains Tip/Tilt, and Loop is off by default. Edge
-buttons can be hover-activated or persistently visible; frame identity is
-transient or pinnable. Escape, Exit, or closing the window restores the prior
-camera, selected layer, visibility/blend/anaglyph/stereo presentation exactly.
+The default-open nonmodal `Layer Manager` owns layer selection, stack ordering,
+individual and bulk visibility, pass/per-view sequence inclusion, playback,
+loop/rate, and Pair View camera tracking. `View All` shows the exact stored
+visible set and outlines the selected visible footprint in yellow above the
+image stack. `Single View` shows one eligible frame and `Pair View` shows an
+overlapping adjacent pair, regardless of stored visibility; both masks are
+runtime-only. Returning to View All restores the current stored visible set.
+Caller order is preserved when supplied programmatically; otherwise frames
+remain grouped by pass and are ordered by comparable acquisition time, with
+visible stable-order warnings. Plain Left/Right selects layers in View All,
+steps frames in Single View, and steps exactly reversible overlapping pairs in
+Pair View. Shift+Arrows retains Tip/Tilt and Loop is off by default. Edge
+buttons can be hover-activated or persistently visible; identity is transient
+or pinnable. Escape returns to View All and restores the pre-presentation
+camera and selection without closing the Layer Manager.
 Play/Pause adds operator-selected 0.5-10 fps playback with a 2 fps default;
 acquisition time continues to control ordering and labels, not playback delay.
 Space toggles playback only in motion mode, a manual step pauses before moving
@@ -1225,7 +1229,7 @@ backend/scientific input.
 Closing the main Sightline Workbench window uses the same idempotent cleanup as
 programmatic app deletion. It stops preview, identity, and playback timers,
 detaches callbacks, exits transient presentation modes, and closes its owned
-Alignment Workbench, Motion Imagery, help, and dense-result windows. Closing a
+Alignment Workbench, Layer Manager, help, and dense-result windows. Closing a
 child first affects only that child, and independent caller-owned figures are
 never closed by the viewer.
 
