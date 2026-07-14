@@ -115,7 +115,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 730 tests;
+- the latest grouped fresh-class repository validation passes all 735 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate;
@@ -125,8 +125,9 @@ The current implementation baseline is summarized in
   `docs/real_data_validation_followup_workpack.md`, which incorporates the
   July 13 operator findings as ordered network-solve, viewer correctness,
   orientation, Layer Manager, dense-surface, and stereo-cursor packs; RD-2's
-  bounded network solve and RD-3's LOD/lifecycle correction are complete, and
-  RD-1 camera-up orientation is next; and
+  bounded network solve, RD-3's LOD/lifecycle correction, and RD-1's
+  explicit-plane orientation correction are complete, and RD-4 Layer Manager
+  work is next; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -246,7 +247,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 719 passing tests with no failures or incomplete
+fresh-class baseline is 735 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -859,11 +860,11 @@ Core controls:
   to one estimated IFOV per key press; kappa defaults to 0.1 degrees.
 - Save and Load write/read a human-readable JSON viewer state containing camera,
   layer, alpha, blend, projection offset, OPK, tip, tilt, and twist settings.
-- Twist spans `+/-85` degrees. The intended real-data default is for an
-  explicitly supplied oblique plane to appear naturally upright. A current
-  regression can choose the opposite display-up sign for some caller-supplied
-  planes; a disposable-copy sign reversal corrected several user datasets, and
-  the convention-level fix is tracked in
+- Twist spans `+/-85` degrees. An implicit real-data camera now uses the
+  viewing-side-invariant explicit-plane convention so `LL, LR, UR, UL` ground
+  markers retain their declared screen handedness. Distinct caller-supplied
+  cameras remain authoritative. Representative private real-data confirmation
+  is still pending and tracked in
   `docs/real_data_validation_followup_workpack.md`. For exactly two
   visible anaglyph layers, the current-view sensor baseline assigns the left
   eye to red and updates that assignment after twist. The presentation submenu
@@ -1238,6 +1239,13 @@ never enter serialized viewer or backend state.
 
 The viewer frame camera is placed at the arithmetic mean of the per-layer
 `NominalSceneCenter` vectors and looks toward the supplied projection plane.
+For a verified implicit real-data camera, the app derives monitor up as
+`-sign(VN dot V) * (VN - (VN dot V) * V)` and monitor right as `V x up`, where
+`V` points from the camera toward the plane. This keeps `LL, LR, UR, UL`
+ground-corner handedness stable even if an equivalent plane definition reverses
+`VN`; image rows still increase downward, and a distinct caller camera remains
+authoritative. The corrected basis is presentation-only and is not written
+back into the scientific scene.
 The initial view translates the camera position and target together to center
 the visible projected footprint, preserves the configured view direction and
 camera distance, and fits that footprint to half the viewport. This also

@@ -8,21 +8,21 @@ to exactly one group.
 
 | Group | Scope | Current tests |
 | --- | --- | ---: |
-| `coreGeometryState` | Geometry, identities, state, metadata, caches, native golden-fixture parity, and non-UI controllers | 142 |
+| `coreGeometryState` | Geometry, identities, state, metadata, caches, native golden-fixture parity, and non-UI controllers | 143 |
 | `alignment` | Sparse matching/filtering, track and graph logic, global network solving, synthetic acceptance, correction SDK, A7 research, and atomic DEM position apply | 185 |
 | `backendSurface` | Backend jobs/rendering, dense matchers/search/audit, pair covariance, procedural anaglyph parity, robust multi-ray, surface-fusion SDK/audit, DEM registration SDK/audit, Surface Workbench model, dense surface, synthetic truth, inverse warp, and raster paths | 237 |
-| `viewerAlignmentUi` | Viewer alignment, active-pair, DEM-correction invalidation, and general app interaction | 71 |
-| `viewerPresentationWorkflows` | Viewer motion, framing, harness, stereo, and Surface Workbench/3-D/DEM-preview workflows | 55 |
-| `viewerPerformancePrecision` | Viewer performance evidence and long-range precision | 33 |
+| `viewerAlignmentUi` | Viewer alignment, active-pair, DEM-correction invalidation, and general app interaction | 74 |
+| `viewerPresentationWorkflows` | Viewer motion, framing, harness, stereo, and Surface Workbench/3-D/DEM-preview workflows | 62 |
+| `viewerPerformancePrecision` | Viewer performance evidence and long-range precision | 34 |
 
-The validated July 14, 2026 baseline is 723/723 with zero failures and zero
+The validated July 14, 2026 baseline is 735/735 with zero failures and zero
 incomplete tests.
 
 The viewer suite is intentionally subdivided. A combined viewer/UI/
 performance group exceeded 600 seconds after repeated UI execution, while the
-same files passed when split by subsystem. The current UI groups contain 71
-alignment/app UI tests and 55 motion/framing/stereo/Workbench workflow tests;
-the performance/precision group contains 33 tests. No individual test timed
+same files passed when split by subsystem. The current UI groups contain 74
+alignment/app UI tests and 62 motion/framing/stereo/Workbench workflow tests;
+the performance/precision group contains 34 tests. No individual test timed
 out; the observed failure mode was cumulative group/session behavior.
 
 ## MATLAB MCP Validation

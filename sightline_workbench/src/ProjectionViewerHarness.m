@@ -353,6 +353,72 @@ classdef ProjectionViewerHarness
             end
         end
 
+        function camera = initialPresentationCamera(scene)
+            %initialPresentationCamera Orient only a verified implicit camera.
+            ProjectionViewerHarness.validateProjectionScene(scene);
+            camera = scene.frameCamera;
+            if ~ProjectionViewerHarness.isRealDataScene(scene)
+                return
+            end
+
+            plane = scene.layers(1).BaseProjectionPlane;
+            sourceGeometries = reshape( ...
+                [scene.layers.SourceGeometry], 1, []);
+            nominalSceneCenters = reshape( ...
+                [sourceGeometries.NominalSceneCenter], 3, []);
+            implicitCamera = ...
+                ProjectionViewerHarness.createRealDataFrameCamera( ...
+                plane, nominalSceneCenters, camera.F);
+            isImplicit = isequaln(camera, implicitCamera);
+            if ~isImplicit
+                return
+            end
+
+            [up, ~] = ProjectionViewerHarness.presentationScreenBasis( ...
+                camera.V0, plane);
+            focalX = ProjectionViewerHarness.unitVector( ...
+                cross(up, camera.V0), "PresentationCameraFocalX");
+            camera.focalPlane = PlanarProjection.definePlaneFromBasis( ...
+                camera.G0 + camera.F * camera.V0, focalX, up);
+            PlanarProjection.validateCamera(camera);
+        end
+
+        function [up, right] = presentationScreenBasis(viewDirection, plane)
+            %presentationScreenBasis Apply the explicit-plane screen convention.
+            %
+            % Ground corners are interpreted lower-left, lower-right,
+            % upper-right, upper-left. Image rows increase downward, screen
+            % +Y increases upward, screen +X points right, and camera view
+            % points into the screen. Thus screen right is view cross up;
+            % stored focal-plane +X is up cross view because the camera looks
+            % through that plane. Reversing an equivalent plane normal must
+            % not rotate the presentation by 180 degrees.
+            PlanarProjection.validatePlane(plane);
+            viewDirection = ProjectionViewerHarness.unitVector( ...
+                viewDirection, "PresentationViewDirection");
+            normalProjection = plane.VN - ...
+                dot(plane.VN, viewDirection) * viewDirection;
+            viewingSide = dot(plane.VN, viewDirection);
+            tolerance = 1e-10;
+            if abs(viewingSide) > tolerance && ...
+                    norm(normalProjection) > tolerance
+                up = -sign(viewingSide) * normalProjection;
+            else
+                up = plane.basis(:, 2) - viewDirection * ...
+                    (viewDirection.' * plane.basis(:, 2));
+                if norm(up) <= tolerance
+                    up = plane.basis(:, 1) - viewDirection * ...
+                        (viewDirection.' * plane.basis(:, 1));
+                end
+            end
+            up = ProjectionViewerHarness.unitVector( ...
+                up, "PresentationCameraUp");
+            right = ProjectionViewerHarness.unitVector( ...
+                cross(viewDirection, up), "PresentationCameraRight");
+            up = ProjectionViewerHarness.unitVector( ...
+                cross(right, viewDirection), "PresentationCameraUp");
+        end
+
         function imagePath = defaultImagePath()
             %defaultImagePath Return the local ignored prototype TIFF path.
             projectRoot = fileparts(fileparts(mfilename("fullpath")));
@@ -361,6 +427,20 @@ classdef ProjectionViewerHarness
     end
 
     methods (Static, Access = private)
+        function tf = isRealDataScene(scene)
+            tf = true;
+            for layer = reshape(scene.layers, 1, [])
+                sourceGeometry = layer.SourceGeometry;
+                tf = tf && isfield(sourceGeometry, "Metadata") && ...
+                    isstruct(sourceGeometry.Metadata) && ...
+                    isfield(sourceGeometry.Metadata, ...
+                    "GeometryDefinitionFormat") && ...
+                    string(sourceGeometry.Metadata. ...
+                    GeometryDefinitionFormat) == ...
+                    "ProjectionViewerRealDataGeometry";
+            end
+        end
+
         function options = mergeOptions(options)
             if isempty(options)
                 options = struct();

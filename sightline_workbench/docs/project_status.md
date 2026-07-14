@@ -21,14 +21,15 @@ As of July 14, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 730/730 tests with zero
+- The latest grouped fresh-class repository suite passes 735/735 tests with zero
   failures and zero incomplete tests.
 - `docs/real_data_validation_followup_workpack.md` is the active top-priority
-  corrective queue. RD-2 and RD-3 are complete: the default network path is
-  bounded and observable, active tiled presentations reconcile against the
+  corrective queue. RD-2, RD-3, and RD-1 are complete: the default network
+  path is bounded and observable, active tiled presentations reconcile against the
   current camera before display, playback lookahead rejects stale requests,
-  and the main viewer owns one idempotent child/timer shutdown path. RD-1
-  explicit-plane camera-up orientation is next.
+  the main viewer owns one idempotent child/timer shutdown path, and implicit
+  real-data cameras use the side-invariant explicit-plane presentation
+  convention. RD-4 Layer Manager/viewer-shell work is next.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
   existing viewer launch signature and legacy `LayerId` contracts.
@@ -94,6 +95,7 @@ As of July 14, 2026:
 | D0 portable native CPU/C ABI/CMake foundation | Complete on macOS; Windows/WSL/Ceres evidence gated |
 | Real-data follow-up RD-2 bounded network solve | Complete |
 | Real-data follow-up RD-3 LOD/lifecycle correctness | Complete |
+| Real-data follow-up RD-1 explicit-plane camera orientation | Complete; representative real-data confirmation pending |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -119,11 +121,15 @@ The completed orientation/anaglyph pack extends twist to `+/-85` degrees,
 assigns the left-eye layer to red from the current-view sensor baseline,
 brightens the preview, and provides runtime-only separation/depth controls
 without rebuilding projection geometry or changing serialized/backend state.
-A later real-data regression report shows that the implicit initial camera for
-some caller-supplied oblique planes uses the opposite display-up sign. Negating
-the localized `desiredUp` value corrected several disposable-copy trials, but
-the repository fix remains open pending a convention-level regression test;
-see `docs/real_data_validation_followup_workpack.md`.
+The RD-1 correction now gives verified implicit real-data cameras a
+presentation-only, viewing-side-invariant screen basis. It declares the
+`LL, LR, UR, UL` ground-corner, image-row, camera-look, monitor-up/right, and
+focal-plane handedness convention; equivalent normal reversal cannot rotate
+the display by 180 degrees. Distinct caller-supplied cameras remain
+authoritative, while plane/source/OPK data, backend pixels, and procedural
+anaglyph outputs remain unchanged. Representative private real-data
+confirmation is still required before removing the operator advisory; see
+`docs/real_data_validation_followup_workpack.md`.
 
 The completed Alignment Workbench usability pack groups controls into Setup,
 Filter/Solve Settings, Staged Workflow/Review, Pair Schedule, Match Ledger, and
@@ -217,7 +223,7 @@ items are preserved there. The active corrective queue is now
 Its July 13 operator findings are incorporated in the order RD-2 network-solve,
 RD-3 LOD/lifecycle correctness, RD-1 camera-up orientation, RD-4 Layer
 Manager/viewer shell, RD-5 dense-surface recovery, and RD-6 stereo cursor.
-RD-2 and RD-3 are complete; RD-1 is the next active pack. MI-0 through MI-3, A2
+RD-2, RD-3, and RD-1 are complete; RD-4 is the next active pack. MI-0 through MI-3, A2
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
 A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are

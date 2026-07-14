@@ -69,6 +69,26 @@ classdef ProjectionPairViewpointTest < matlab.unittest.TestCase
 
             testCase.verifyEqual(scene, original);
         end
+
+        function testPairCameraUsesSharedPresentationConvention(testCase)
+            [scene, pair] = ProjectionPairViewpointTest.sceneAndPair();
+            plane = scene.layers(1).CurrentProjectionPlane;
+
+            result = ProjectionPairViewpoint.compute(scene, pair);
+            testCase.verifyTrue(result.Available);
+            viewDirection = result.Camera.TargetWorld - ...
+                result.Camera.PositionWorld;
+            [expectedUp, expectedRight] = ...
+                ProjectionViewerHarness.presentationScreenBasis( ...
+                viewDirection, plane);
+
+            testCase.verifyEqual(result.Camera.UpVector, expectedUp, ...
+                AbsTol=1e-12);
+            actualRight = cross(viewDirection / norm(viewDirection), ...
+                result.Camera.UpVector);
+            testCase.verifyEqual(actualRight, expectedRight, ...
+                AbsTol=1e-12);
+        end
     end
 
     methods (Static, Access = private)

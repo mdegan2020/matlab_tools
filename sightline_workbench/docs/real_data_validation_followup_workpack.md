@@ -1,7 +1,7 @@
 # Real-Data Validation Follow-Up Workpack
 
-Status: active implementation. RD-2 and RD-3 are complete; RD-1 is next in the
-recorded execution order. This workpack remains the highest-priority
+Status: active implementation. RD-2, RD-3, and RD-1 are complete; RD-4 is next
+in the recorded execution order. This workpack remains the highest-priority
 implementation queue and temporarily precedes independent D2 native CPU work
 and all hardware-gated GPU work.
 
@@ -56,7 +56,8 @@ completed feature trees except where a regression is demonstrated.
 
 ### RD-0 — July 13 Operator Findings And Execution Order
 
-Status: intake and presentation decisions complete; RD-2 and RD-3 complete.
+Status: intake and presentation decisions complete; RD-2, RD-3, and RD-1
+complete.
 
 The implementation order is deliberately independent of the historical pack
 numbers retained below:
@@ -95,7 +96,34 @@ review surface would otherwise be too broad.
 
 ### RD-1 — Explicit-Plane Initial Camera Orientation
 
-Status: confirmed real-data regression; implementation not started.
+Status: implementation complete July 14, 2026; representative real-data
+confirmation remains pending.
+
+Completion evidence: the presentation convention is now explicit. Four ground
+corners are named `LL, LR, UR, UL` in anticlockwise order, with plane `+X`
+from `LL` toward `LR`, plane `+Y` toward `UL`, and `VN = VX x VY`. Image rows
+increase downward; monitor `+X` is right and monitor `+Y` is up. The camera
+look vector `V` is positive from the camera toward the plane. Away from the
+head-on degeneracy, monitor up is
+`-sign(VN dot V) * (VN - (VN dot V) * V)`, monitor right is `V x up`, and the
+stored positive focal-plane `X` axis is `up x V`. The sign factor makes the
+presentation invariant to reversing an equivalent plane normal instead of
+embedding a bare sign flip. A head-on view uses projected plane `+Y`, then
+plane `+X`, as a deterministic fallback.
+
+Only a frame camera that exactly matches the real-data harness's implicit
+camera is reoriented, and only in app presentation state. Distinct
+caller-supplied camera poses remain authoritative. Initial framing, Pair View
+and Restore, twist, motion entry/exit, and physical-eye workflows share the
+same screen-basis convention. Focused tests also prove that the scene struct,
+plane, sampling handles and coordinates, OPK state, exported backend scene,
+output grid, and backend pixels remain bitwise unchanged. The procedural
+anaglyph oracle and all six fresh-class groups remain green. The validated
+group counts are 143, 185, 237, 74, 62, and 34, totaling 735/735 with zero
+failures or incomplete tests.
+
+The active operator advisory is intentionally retained until representative
+private real datasets confirm the repository convention.
 
 #### Observed evidence
 
@@ -106,8 +134,8 @@ viewed from the wrong side. In an external disposable copy, negating the
 produced the expected orientation across several datasets. That experiment is
 strong localization evidence, not yet an accepted fix.
 
-The current implementation projects `projectionPlane.VN` into the camera image
-plane and uses the result as `desiredUp`. Existing tests did not distinguish
+The pre-fix implementation projected `projectionPlane.VN` into the camera image
+plane and used the result as `desiredUp`. Existing tests did not distinguish
 that sign from a 180-degree display inversion for the user's explicit-plane
 convention. This conflicts with SRS requirement `FR-VIEW-022` and with the
 documented claim that an explicit oblique plane launches naturally upright.

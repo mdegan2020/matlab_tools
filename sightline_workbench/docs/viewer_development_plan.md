@@ -371,8 +371,8 @@ The Viewer Orientation and Anaglyph Presentation Pack is complete:
 
 - extend twist slider/control range to `+/-85` degrees;
 - for real-data launches with an explicit oblique projection plane and no
-  caller-specified camera pose, orient the default camera so the plane normal's
-  projection onto the monitor/glass points toward the top of the screen;
+  caller-specified camera pose, use the viewing-side-invariant screen-up rule
+  `-sign(VN dot V) * (VN - (VN dot V) * V)`, with monitor right `V x up`;
 - infer two-image anaglyph left/right roles from the sensor baseline projected
   into the current view, with left eye rendered red;
 - add display-only stereo separation/exaggeration and screen-depth offset
@@ -540,7 +540,7 @@ buildtool test
 The current suite exercises pure geometry, scene construction, sparse geometry,
 mesh building, readback, layer workflows, state serialization, and app
 interactions. The viewer plan first reached 416/416 at its historical completion
-checkpoint. The current grouped fresh-class repository baseline is 719/719 with
+checkpoint. The current grouped fresh-class repository baseline is 735/735 with
 no failures or incomplete tests; see `docs/project_status.md` and
 `docs/test_suite_grouping.md` for the maintained total and group counts.
 
@@ -1213,13 +1213,15 @@ that diagnosis. See
 `docs/alignment_reliability_validation_report.md`, and
 `docs/dense_surface_feature_pack.md`.
 
-Current real-data testing has additionally exposed an implicit-camera up-vector
-sign regression for some explicit oblique planes, unbounded cost/progress in
-large all-visible global solves, stale frame-change LOD state, incomplete child-
-window cleanup, and Layer Manager/stereo-cursor workflow needs. These are
-corrective implementation items in
-`docs/real_data_validation_followup_workpack.md`, not a reopening of the
-completed reliability tree.
+Current real-data testing additionally exposed implicit-camera orientation,
+unbounded global-solve cost/progress, stale frame-change LOD state, incomplete
+child-window cleanup, and Layer Manager/stereo-cursor workflow needs. RD-2,
+RD-3, and RD-1 now resolve the first four repository defects with bounded
+solving, coherent active LOD, owned shutdown, and a presentation-only
+side-invariant camera convention. Representative private orientation
+confirmation remains pending; RD-4 through RD-6 remain in
+`docs/real_data_validation_followup_workpack.md`. This corrective queue does
+not reopen the completed reliability tree.
 
 ### Preview/Exact Comparison Mode
 

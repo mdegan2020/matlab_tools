@@ -7,12 +7,13 @@ retain full source imagery and the ordinary source-ray inverse warp.
 
 ## Current corrective advisories
 
-- Some caller-supplied explicit oblique planes can launch with the implicit
-  presentation camera vertically inverted. This is a camera-up sign regression,
-  not evidence that the plane, source rays, or imagery should be modified. A
-  convention-level fix is queued in
-  `docs/real_data_validation_followup_workpack.md`; a caller-supplied camera pose
-  remains the non-mutating workaround when available.
+- RD-1 implements the repository correction for implicit cameras on explicit
+  oblique planes, but representative private real-data confirmation remains
+  pending. Do not modify the plane, source rays, imagery, or OPK to compensate
+  for a presentation concern. Distinct caller-supplied cameras remain
+  authoritative. Report any dataset that still appears inverted with its
+  corner order, camera side, and plane definition; keep the advisory active
+  until representative datasets confirm the convention.
 - Visible-layer network solving now reports stage, iteration/function count,
   elapsed time, sensitivity-child progress, and cancellation state. Fast runs
   no sensitivity children, Balanced returns the primary result with sensitivity
@@ -21,6 +22,20 @@ retain full source imagery and the ordinary source-ray inverse warp.
   Cancelling primary optimization leaves the prior scene/correction state
   authoritative; cancelling optional diagnostics preserves the completed
   primary result for separate review and apply.
+
+### Explicit-plane presentation convention
+
+Name ground corners `LL, LR, UR, UL` in anticlockwise order. Plane `+X` points
+from `LL` toward `LR`, plane `+Y` points toward `UL`, and
+`VN = VX x VY`. Image row indices increase downward. The camera look vector
+`V` points from the camera toward the plane; monitor `+X` points right and
+monitor `+Y` points up. For a non-head-on view, monitor up is proportional to
+`-sign(VN dot V) * (VN - (VN dot V) * V)` and monitor right is `V x up`.
+The stored focal-plane `+X` direction is `up x V`. Reversing an equivalent
+plane normal therefore cannot introduce a 180-degree display rotation. A
+head-on view falls back deterministically to projected plane `+Y`, then `+X`.
+This rule changes presentation only; image rows, source coordinates, rays,
+plane geometry, OPK, saved scene data, and backend products remain unchanged.
 
 ## Recommended workflow
 

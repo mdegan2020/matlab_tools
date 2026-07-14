@@ -3,6 +3,7 @@ classdef ProjectionViewerApp < handle
 
     properties (Access = private)
         Scene struct
+        PresentationFrameCamera struct
         CurrentMesh struct
         Surfaces cell
         DefaultMeshSampling struct
@@ -267,6 +268,8 @@ classdef ProjectionViewerApp < handle
             scene = ProjectionViewMetadata.ensureScene(scene);
 
             app.Scene = scene;
+            app.PresentationFrameCamera = ...
+                ProjectionViewerHarness.initialPresentationCamera(scene);
             app.AlignmentSession = ProjectionAlignmentSession();
             app.ResetScene = app.createResetScene(scene);
             app.PerformanceMonitor = ProjectionViewerPerformanceMonitor();
@@ -6961,7 +6964,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function configureFrameCamera(app)
-            camera = app.Scene.frameCamera;
+            camera = app.PresentationFrameCamera;
             renderOrigin = app.Scene.renderOrigin;
             target = app.Scene.layers(1).BaseProjectionPlane.P0 - renderOrigin;
             cameraPosition = camera.G0 - renderOrigin;
@@ -7011,7 +7014,8 @@ classdef ProjectionViewerApp < handle
 
         function applyViewTwist(app)
             cameraViewAngle = app.Axes.CameraViewAngle;
-            baseUpVector = app.Scene.frameCamera.focalPlane.basis(:, 2);
+            baseUpVector = ...
+                app.PresentationFrameCamera.focalPlane.basis(:, 2);
             viewDirection = camtarget(app.Axes).' - campos(app.Axes).';
             upVector = app.rotateVectorAboutAxis( ...
                 baseUpVector, viewDirection, deg2rad(app.ViewTwistDegrees));
@@ -8738,7 +8742,8 @@ classdef ProjectionViewerApp < handle
                     end
                 end
             end
-            rightVector = app.Scene.frameCamera.focalPlane.basis(:, 1);
+            rightVector = ...
+                app.PresentationFrameCamera.focalPlane.basis(:, 1);
             rightVector = rightVector / norm(rightVector);
         end
 

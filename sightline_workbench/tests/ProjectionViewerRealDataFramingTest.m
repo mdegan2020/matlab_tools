@@ -74,7 +74,7 @@ classdef ProjectionViewerRealDataFramingTest < matlab.unittest.TestCase
                 diagnostics.Viewer.PredictedVisibleTileCounts(1), 0);
         end
 
-        function testObliquePlaneNormalProjectsTowardScreenTop(testCase)
+        function testObliquePlaneUpUsesViewingSideInvariantNormal(testCase)
             scene = ProjectionViewerRealDataFramingTest.makeObliquePlaneScene();
             planeNormal = scene.layers.BaseProjectionPlane.VN;
 
@@ -85,11 +85,134 @@ classdef ProjectionViewerRealDataFramingTest < matlab.unittest.TestCase
             viewDirection = ProjectionViewerRealDataFramingTest.viewDirection(ax);
             expectedUp = planeNormal - dot(planeNormal, viewDirection) * ...
                 viewDirection;
+            expectedUp = -sign(dot(planeNormal, viewDirection)) * expectedUp;
             expectedUp = expectedUp / norm(expectedUp);
             actualUp = camup(ax).';
             actualUp = actualUp / norm(actualUp);
 
             testCase.verifyGreaterThan(dot(actualUp, expectedUp), 1 - 1e-10);
+        end
+
+        function testGroundCornerConventionAcrossViewingSides(testCase)
+            referencePlane = PlanarProjection.definePlaneFromBasis( ...
+                [10; -20; 30], [1; 0; 0], [0; 1; 0]);
+            azimuthDegrees = [0 75 210];
+            normalComponents = [0.55 -0.65 0.4];
+
+            for index = 1:numel(azimuthDegrees)
+                horizontal = [cosd(azimuthDegrees(index)); ...
+                    sind(azimuthDegrees(index)); 0];
+                normalComponent = normalComponents(index);
+                viewDirection = sqrt(1 - normalComponent ^ 2) * ...
+                    horizontal + normalComponent * referencePlane.VN;
+                groundUp = viewDirection - ...
+                    dot(viewDirection, referencePlane.VN) * ...
+                    referencePlane.VN;
+                groundUp = groundUp / norm(groundUp);
+                groundRight = -sign(normalComponent) * ...
+                    cross(viewDirection, referencePlane.VN);
+                groundRight = groundRight / norm(groundRight);
+                plane = PlanarProjection.definePlaneFromBasis( ...
+                    referencePlane.P0, groundRight, groundUp);
+                [up, right] = ...
+                    ProjectionViewerHarness.presentationScreenBasis( ...
+                    viewDirection, plane);
+                corners = plane.P0 + [-groundRight - groundUp, ...
+                    groundRight - groundUp, groundRight + groundUp, ...
+                    -groundRight + groundUp];
+                imageRows = [2 2 1 1]; % LL, LR, UR, UL; rows grow down.
+                screenX = right.' * (corners - plane.P0);
+                screenY = up.' * (corners - plane.P0);
+                signedArea = 0.5 * sum(screenX .* circshift(screenY, -1) - ...
+                    screenY .* circshift(screenX, -1));
+                cameraOrigin = plane.P0 - 100 * viewDirection;
+                forwardRanges = viewDirection.' * ...
+                    (corners - cameraOrigin);
+
+                testCase.verifyEqual(sign(screenX), [-1 1 1 -1]);
+                testCase.verifyEqual(sign(screenY), [-1 -1 1 1]);
+                testCase.verifyGreaterThan(mean(screenY(imageRows == 1)), ...
+                    mean(screenY(imageRows == 2)));
+                testCase.verifyGreaterThan(signedArea, 0);
+                testCase.verifyGreaterThan(forwardRanges, zeros(1, 4));
+            end
+        end
+
+        function testEquivalentPlaneNormalsPreserveScreenHandedness(testCase)
+            plane = PlanarProjection.definePlaneFromBasis( ...
+                [10; -20; 30], [1; 0; 0], [0; 1; 0]);
+            reversedNormalPlane = PlanarProjection.definePlaneFromBasis( ...
+                plane.P0, -plane.basis(:, 1), plane.basis(:, 2));
+            viewDirection = [0.4; -0.3; 0.8];
+            viewDirection = viewDirection / norm(viewDirection);
+
+            [up, right] = ...
+                ProjectionViewerHarness.presentationScreenBasis( ...
+                viewDirection, plane);
+            [reversedUp, reversedRight] = ...
+                ProjectionViewerHarness.presentationScreenBasis( ...
+                viewDirection, reversedNormalPlane);
+
+            testCase.verifyEqual(reversedUp, up, AbsTol=1e-12);
+            testCase.verifyEqual(reversedRight, right, AbsTol=1e-12);
+        end
+
+        function testCallerSuppliedCameraRemainsAuthoritative(testCase)
+            scene = ProjectionViewerRealDataFramingTest.makeObliquePlaneScene();
+            implicitCamera = scene.frameCamera;
+            customFocalPlane = PlanarProjection.definePlaneFromBasis( ...
+                implicitCamera.focalPlane.P0, ...
+                implicitCamera.focalPlane.basis(:, 2), ...
+                -implicitCamera.focalPlane.basis(:, 1));
+            customCamera = implicitCamera;
+            customCamera.focalPlane = customFocalPlane;
+            scene.frameCamera = customCamera;
+
+            presentationCamera = ...
+                ProjectionViewerHarness.initialPresentationCamera(scene);
+            testCase.verifyEqual(presentationCamera, customCamera);
+
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            actualUp = camup( ...
+                ProjectionViewerRealDataFramingTest.viewerAxes()).';
+            actualUp = actualUp / norm(actualUp);
+            expectedUp = customCamera.focalPlane.basis(:, 2);
+            testCase.verifyEqual(actualUp, expectedUp, AbsTol=1e-12);
+        end
+
+        function testPresentationCameraLeavesScientificOutputsBitwiseStable( ...
+                testCase)
+            scene = ProjectionViewerRealDataFramingTest.makeObliquePlaneScene();
+            originalScene = scene;
+            correctedCamera = ...
+                ProjectionViewerHarness.initialPresentationCamera(scene);
+
+            testCase.verifyEqual(scene, originalScene);
+            testCase.verifyEqual(correctedCamera.G0, scene.frameCamera.G0);
+            testCase.verifyEqual(correctedCamera.V0, scene.frameCamera.V0);
+            testCase.verifyEqual(correctedCamera.F, scene.frameCamera.F);
+            testCase.verifyNotEqual(correctedCamera.focalPlane.basis(:, 2), ...
+                scene.frameCamera.focalPlane.basis(:, 2));
+
+            renderOptions = struct(OutputSize=[5 7], ...
+                Interpolation="nearest");
+            reference = ProjectionBackendProcessor.run(struct( ...
+                Scene=scene, RenderOptions=renderOptions));
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            exportedJob = app.exportBackendJob(struct( ...
+                RenderOptions=renderOptions));
+            testCase.verifyEqual(exportedJob.Scene, scene);
+            actual = ProjectionBackendProcessor.run(exportedJob);
+
+            testCase.verifyEqual(actual.Scene.frameCamera, ...
+                reference.Scene.frameCamera);
+            testCase.verifyEqual(actual.Scene.layers, reference.Scene.layers);
+            testCase.verifyEqual(actual.OutputGrid, reference.OutputGrid);
+            testCase.verifyEqual(actual.Readback.Image, ...
+                reference.Readback.Image);
         end
 
         function testForwardFacingPlaneUsesValidCameraFallback(testCase)
@@ -100,6 +223,10 @@ classdef ProjectionViewerRealDataFramingTest < matlab.unittest.TestCase
             testCase.verifyTrue(PlanarProjection.validateCamera(camera));
             testCase.verifyEqual(camera.focalPlane.basis(:, 1), ...
                 scene.layers.BaseProjectionPlane.basis(:, 1), AbsTol=1e-12);
+            presentationCamera = ...
+                ProjectionViewerHarness.initialPresentationCamera(scene);
+            testCase.verifyTrue( ...
+                PlanarProjection.validateCamera(presentationCamera));
         end
     end
 

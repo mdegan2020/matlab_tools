@@ -327,21 +327,15 @@ classdef ProjectionPairViewpoint
         end
 
         function [up, right] = stableScreenBasis(viewDirection, plane)
-            up = plane.basis(:, 2) - viewDirection * ...
-                (viewDirection.' * plane.basis(:, 2));
-            if norm(up) <= ProjectionPairViewpoint.tolerance(plane.basis)
-                up = plane.basis(:, 1) - viewDirection * ...
-                    (viewDirection.' * plane.basis(:, 1));
-            end
-            if norm(up) <= ProjectionPairViewpoint.tolerance(plane.basis)
+            try
+                [up, right] = ...
+                    ProjectionViewerHarness.presentationScreenBasis( ...
+                    viewDirection, plane);
+            catch exception
                 error("ProjectionPairViewpoint:unstableUp", ...
-                    "The current plane cannot define a stable camera up vector.");
+                    "The current plane cannot define a stable camera up " + ...
+                    "vector: %s", exception.message);
             end
-            up = up / norm(up);
-            right = cross(viewDirection, up);
-            right = right / norm(right);
-            up = cross(right, viewDirection);
-            up = up / norm(up);
         end
 
         function value = tolerance(values)
