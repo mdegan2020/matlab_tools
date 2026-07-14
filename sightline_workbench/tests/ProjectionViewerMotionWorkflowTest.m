@@ -211,6 +211,182 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
                 performance.Timings.MotionHoverSeconds.Count, 3);
         end
 
+        function testZoomedTiledFrameChangeReconcilesLodWithoutBlank(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerMotionWorkflowTest.makeTiledScene());
+            testCase.addTeardown(@() delete(app));
+            viewer = ProjectionViewerMotionWorkflowTest.viewer();
+            viewer.Position = [100 100 360 300];
+            drawnow
+            app.configurePreviewTiling(struct(TileSize=64, ...
+                MinTiledImagePixels=1, MaxVisibleTilesPerLayer=96));
+            ProjectionViewerMotionWorkflowTest.openAndStartMotion(testCase);
+            axesHandle = findall(viewer, "Type", "axes");
+            viewer.CurrentObject = axesHandle;
+            position = axesHandle.InnerPosition;
+            viewer.CurrentPoint = position(1:2) + position(3:4) / 2;
+            for index = 1:16
+                viewer.WindowScrollWheelFcn( ...
+                    viewer, struct(VerticalScrollCount=-1));
+            end
+            app.flushPreviewUpdates();
+            before = app.performanceDiagnostics();
+            testCase.verifyNotEqual( ...
+                before.Viewer.CurrentLevelIndices(1), ...
+                before.Viewer.CurrentLevelIndices(2));
+
+            next = ProjectionViewerMotionWorkflowTest.tagged( ...
+                ProjectionViewerMotionWorkflowTest.motionWindow(), ...
+                "ProjectionViewerMotionNextButton");
+            testCase.press(next);
+            drawnow
+            after = app.performanceDiagnostics();
+
+            testCase.verifyEqual(after.Viewer.CurrentLevelIndices(2), ...
+                after.Viewer.CurrentLevelIndices(1));
+            testCase.verifyEqual(after.Viewer.DesiredLevelIndices(2), ...
+                after.Viewer.CurrentLevelIndices(2));
+            testCase.verifyGreaterThan( ...
+                after.Viewer.VisibleTileSurfaceCount, 0);
+            testCase.verifyEqual( ...
+                after.Counters.BlankPreviewTransitions, 0);
+
+            for index = 1:16
+                viewer.WindowScrollWheelFcn( ...
+                    viewer, struct(VerticalScrollCount=1));
+            end
+            app.flushPreviewUpdates();
+            zoomedOut = app.performanceDiagnostics();
+            testCase.verifyNotEqual( ...
+                zoomedOut.Viewer.CurrentLevelIndices(1), ...
+                zoomedOut.Viewer.CurrentLevelIndices(2));
+            previous = ProjectionViewerMotionWorkflowTest.tagged( ...
+                ProjectionViewerMotionWorkflowTest.motionWindow(), ...
+                "ProjectionViewerMotionPreviousButton");
+            testCase.press(previous);
+            reversed = app.performanceDiagnostics();
+            testCase.verifyEqual(reversed.Viewer.CurrentLevelIndices(1), ...
+                reversed.Viewer.DesiredLevelIndices(1));
+
+            loop = ProjectionViewerMotionWorkflowTest.tagged( ...
+                ProjectionViewerMotionWorkflowTest.motionWindow(), ...
+                "ProjectionViewerMotionLoopCheckBox");
+            loop.Value = true;
+            loop.ValueChangedFcn(loop, struct());
+            testCase.press(previous);
+            loopedReverse = app.performanceDiagnostics();
+            testCase.verifyEqual(app.motionDiagnostics().Position, 3);
+            testCase.verifyEqual( ...
+                loopedReverse.Viewer.CurrentLevelIndices(3), ...
+                loopedReverse.Viewer.DesiredLevelIndices(3));
+            testCase.press(next);
+            loopedForward = app.performanceDiagnostics();
+            testCase.verifyEqual(app.motionDiagnostics().Position, 1);
+            testCase.verifyEqual( ...
+                loopedForward.Viewer.CurrentLevelIndices(1), ...
+                loopedForward.Viewer.DesiredLevelIndices(1));
+            testCase.verifyEqual( ...
+                loopedForward.Counters.BlankPreviewTransitions, 0);
+        end
+
+        function testPlaybackRejectsStaleLookaheadAfterCameraChange(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerMotionWorkflowTest.makeTiledScene());
+            testCase.addTeardown(@() delete(app));
+            viewer = ProjectionViewerMotionWorkflowTest.viewer();
+            viewer.Position = [100 100 360 300];
+            drawnow
+            app.configurePreviewTiling(struct(TileSize=64, ...
+                MinTiledImagePixels=1, MaxVisibleTilesPerLayer=96));
+            ProjectionViewerMotionWorkflowTest.openAndStartMotion(testCase);
+            axesHandle = findall(viewer, "Type", "axes");
+            viewer.CurrentObject = axesHandle;
+            position = axesHandle.InnerPosition;
+            viewer.CurrentPoint = position(1:2) + position(3:4) / 2;
+            play = ProjectionViewerMotionWorkflowTest.tagged( ...
+                ProjectionViewerMotionWorkflowTest.motionWindow(), ...
+                "ProjectionViewerMotionPlayPauseButton");
+            testCase.press(play);
+            beforeCameraChange = app.performanceDiagnostics();
+
+            for index = 1:12
+                viewer.WindowScrollWheelFcn( ...
+                    viewer, struct(VerticalScrollCount=-1));
+            end
+            playbackTimer = timerfindall("Tag", ...
+                "ProjectionViewerMotionPlaybackTimer");
+            stop(playbackTimer);
+            playbackTimer.TimerFcn(playbackTimer, struct());
+            drawnow
+            afterTick = app.performanceDiagnostics();
+
+            testCase.verifyGreaterThan( ...
+                afterTick.Viewer.CameraScheduleGeneration, ...
+                beforeCameraChange.Viewer.CameraScheduleGeneration);
+            testCase.verifyEqual(app.motionDiagnostics().Position, 2);
+            testCase.verifyEqual(afterTick.Viewer.CurrentLevelIndices(2), ...
+                afterTick.Viewer.DesiredLevelIndices(2));
+            testCase.verifyGreaterThan( ...
+                afterTick.Viewer.VisibleTileSurfaceCount, 0);
+            testCase.verifyEqual( ...
+                afterTick.Counters.BlankPreviewTransitions, 0);
+        end
+
+        function testSelectionAndVisibilityReconcileHiddenTiledLayer(testCase)
+            scene = ProjectionViewerMotionWorkflowTest.makeTiledScene();
+            scene.layers(2).Visible = false;
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            viewer = ProjectionViewerMotionWorkflowTest.viewer();
+            viewer.Position = [100 100 360 300];
+            drawnow
+            app.configurePreviewTiling(struct(TileSize=64, ...
+                MinTiledImagePixels=1, MaxVisibleTilesPerLayer=96));
+            axesHandle = findall(viewer, "Type", "axes");
+            viewer.CurrentObject = axesHandle;
+            position = axesHandle.InnerPosition;
+            viewer.CurrentPoint = position(1:2) + position(3:4) / 2;
+            for index = 1:16
+                viewer.WindowScrollWheelFcn( ...
+                    viewer, struct(VerticalScrollCount=-1));
+            end
+            app.flushPreviewUpdates();
+            hidden = app.performanceDiagnostics();
+            testCase.verifyNotEqual(hidden.Viewer.CurrentLevelIndices(2), ...
+                hidden.Viewer.CurrentLevelIndices(1));
+
+            layerDropDown = ...
+                ProjectionViewerMotionWorkflowTest.layerDropDown(viewer);
+            layerDropDown.Value = 2;
+            layerDropDown.ValueChangedFcn( ...
+                layerDropDown, struct(Value=2));
+            selected = app.performanceDiagnostics();
+            testCase.verifyEqual(selected.Viewer.CurrentLevelIndices(2), ...
+                selected.Viewer.DesiredLevelIndices(2));
+
+            for index = 1:16
+                viewer.WindowScrollWheelFcn( ...
+                    viewer, struct(VerticalScrollCount=1));
+            end
+            app.flushPreviewUpdates();
+            staleAgain = app.performanceDiagnostics();
+            testCase.verifyNotEqual( ...
+                staleAgain.Viewer.CurrentLevelIndices(2), ...
+                staleAgain.Viewer.CurrentLevelIndices(1));
+            visibleCheckBox = findall(viewer, ...
+                "-isa", "matlab.ui.control.CheckBox");
+            visibleCheckBox.Value = true;
+            visibleCheckBox.ValueChangedFcn( ...
+                visibleCheckBox, struct(Value=true));
+            visible = app.performanceDiagnostics();
+            testCase.verifyEqual(visible.Viewer.CurrentLevelIndices(2), ...
+                visible.Viewer.DesiredLevelIndices(2));
+            testCase.verifyGreaterThan( ...
+                visible.Viewer.VisibleTileSurfaceCount, 0);
+            testCase.verifyEqual( ...
+                visible.Counters.BlankPreviewTransitions, 0);
+        end
+
         function testDeleteAfterExternalViewerCloseIsWarningFree(testCase)
             app = ProjectionViewerApp( ...
                 ProjectionViewerMotionWorkflowTest.makeScene());
@@ -231,6 +407,20 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             for index = 1:3
                 scene.layers(index).ViewId = "motion-view-" + string(index);
                 scene.layers(index).PassId = "motion-pass";
+                scene.layers(index).AcquisitionStartTime = index;
+            end
+            scene = ProjectionViewMetadata.ensureScene(scene);
+        end
+
+        function scene = makeTiledScene()
+            images = {zeros(512, 512, "uint8"), ...
+                ones(512, 512, "uint8"), 2 * ones(512, 512, "uint8")};
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                images, ["lod-1.tif" "lod-2.tif" "lod-3.tif"], ...
+                struct(RowStride=32, ColumnStride=32));
+            for index = 1:3
+                scene.layers(index).ViewId = "lod-view-" + string(index);
+                scene.layers(index).PassId = "lod-pass";
                 scene.layers(index).AcquisitionStartTime = index;
             end
             scene = ProjectionViewMetadata.ensureScene(scene);
@@ -267,6 +457,18 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
         function component = tagged(parent, tag)
             components = findall(parent, "Tag", tag);
             component = components(1);
+        end
+
+        function dropdown = layerDropDown(viewer)
+            dropdowns = findall(viewer, ...
+                "-isa", "matlab.ui.control.DropDown");
+            isLayer = false(size(dropdowns));
+            for index = 1:numel(dropdowns)
+                isLayer(index) = isnumeric(dropdowns(index).ItemsData) && ...
+                    isequal(dropdowns(index).ItemsData, ...
+                    1:numel(dropdowns(index).Items));
+            end
+            dropdown = dropdowns(isLayer);
         end
 
         function event = keyEvent(key)

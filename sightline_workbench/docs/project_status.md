@@ -21,14 +21,14 @@ As of July 14, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 723/723 tests with zero
+- The latest grouped fresh-class repository suite passes 730/730 tests with zero
   failures and zero incomplete tests.
 - `docs/real_data_validation_followup_workpack.md` is the active top-priority
-  corrective queue. RD-2 is complete: the default network path uses one global
-  optimization, setup-bounded compiled evidence, a supplied stable
-  semi-analytic Jacobian, reused diagnostics, bounded progress/cancellation,
-  and explicit sensitivity states. RD-3 frame-change LOD and viewer-owned
-  child-window lifecycle is next.
+  corrective queue. RD-2 and RD-3 are complete: the default network path is
+  bounded and observable, active tiled presentations reconcile against the
+  current camera before display, playback lookahead rejects stale requests,
+  and the main viewer owns one idempotent child/timer shutdown path. RD-1
+  explicit-plane camera-up orientation is next.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
   existing viewer launch signature and legacy `LayerId` contracts.
@@ -93,6 +93,7 @@ As of July 14, 2026:
 | C3 multi-image/dense mathematical appendices | Complete |
 | D0 portable native CPU/C ABI/CMake foundation | Complete on macOS; Windows/WSL/Ceres evidence gated |
 | Real-data follow-up RD-2 bounded network solve | Complete |
+| Real-data follow-up RD-3 LOD/lifecycle correctness | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -106,6 +107,14 @@ camera scheduling, LOD hysteresis and halo retention, cached/vectorized tile
 visibility, differential surface reuse, bounded runtime caches/pools, targeted
 geometry invalidation, coalesced alpha rendering, lazy UI/pyramid storage,
 scalar single-band textures, and the decision to keep raster preview optional.
+RD-3 extends that contract to every active motion frame, Solo pair, visibility
+transition, and ordinary selection: desired LOD is recomputed from the current
+camera/viewport/generation even when a valid stale surface exists, replacement
+is coherent with no blank transition, and one bounded next-frame lookahead is
+keyed by camera, geometry, desired/applied LOD, and tile identity. The main
+viewer close callback now routes through the same idempotent cleanup as
+programmatic deletion, stops preview/playback callbacks and timers, closes
+viewer-owned children, and leaves independent caller-owned figures untouched.
 The completed orientation/anaglyph pack extends twist to `+/-85` degrees,
 assigns the left-eye layer to red from the current-view sensor baseline,
 brightens the preview, and provides runtime-only separation/depth controls
@@ -205,10 +214,10 @@ consolidated product roadmap remains
 `docs/multi_image_surface_reconstruction_workplan.md`; its completed and gated
 items are preserved there. The active corrective queue is now
 `docs/real_data_validation_followup_workpack.md`, ahead of independent D2 work.
-Its July 13 operator findings are incorporated, with RD-2 network-solve
-optimization first, followed by RD-3 LOD/lifecycle correctness, RD-1 camera-up
-orientation, RD-4 Layer Manager/viewer shell, RD-5 dense-surface recovery, and
-RD-6 stereo cursor. MI-0 through MI-3, A2
+Its July 13 operator findings are incorporated in the order RD-2 network-solve,
+RD-3 LOD/lifecycle correctness, RD-1 camera-up orientation, RD-4 Layer
+Manager/viewer shell, RD-5 dense-surface recovery, and RD-6 stereo cursor.
+RD-2 and RD-3 are complete; RD-1 is the next active pack. MI-0 through MI-3, A2
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
 A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are

@@ -1,10 +1,9 @@
 # Real-Data Validation Follow-Up Workpack
 
-Status: active planning and operator-feedback intake. No implementation pack in
-this document has started. This workpack is the highest-priority implementation
-queue once the pending July 13, 2026 operator findings are incorporated. It
-temporarily precedes independent D2 native CPU work and all hardware-gated GPU
-work.
+Status: active implementation. RD-2 and RD-3 are complete; RD-1 is next in the
+recorded execution order. This workpack remains the highest-priority
+implementation queue and temporarily precedes independent D2 native CPU work
+and all hardware-gated GPU work.
 
 ## Purpose
 
@@ -57,7 +56,7 @@ completed feature trees except where a regression is demonstrated.
 
 ### RD-0 — July 13 Operator Findings And Execution Order
 
-Status: intake and presentation decisions complete; implementation ready.
+Status: intake and presentation decisions complete; RD-2 and RD-3 complete.
 
 The implementation order is deliberately independent of the historical pack
 numbers retained below:
@@ -333,7 +332,7 @@ changing their gauge or priors.
 
 ### RD-3 — Frame-Change LOD Correctness And Child-Window Lifecycle
 
-Status: confirmed correctness defects; implementation not started.
+Status: complete.
 
 #### RD-3A — Active-frame LOD reconciliation
 
@@ -381,6 +380,27 @@ Acceptance shall cover window close-button use, programmatic app deletion,
 child-first closure, parent-first closure, in-flight playback/preview work, and
 repeated cleanup. No timer, callback, graphics handle, or runtime cache may
 survive the owning viewer.
+
+Acceptance is complete. Active-frame reconciliation now runs for manual motion
+steps in both directions, loop rollover, measured playback, Solo-pair turnover,
+ordinary selection, and visibility restoration even when a valid tiled surface
+already exists. It recomputes desired LOD from one current camera context,
+retains the last valid representation through a coherent replacement, consumes
+pending state, and leaves backend/full-source image paths unchanged. Playback
+retains only one next-frame lookahead; its identity includes layer/geometry and
+camera-schedule generations, camera/viewport context, desired/current/pending
+LOD, and tile keys. A stale lookahead is synchronously replaced before the
+frame becomes active, and stale delayed camera completions are dropped.
+
+The main figure close callback and programmatic deletion now share one guarded,
+idempotent shutdown. It clears main callbacks, stops and deletes camera,
+identity, and playback timers, exits transient presentation modes, clears
+runtime preview/alignment/dense state, and closes the currently viewer-owned
+Alignment Workbench, Motion Imagery window, help dialog, and dense result
+figures. Child close callbacks unregister/delete only that child, permitting a
+fresh reopen. Independent caller-owned figures are not touched. Focused RD-3
+acceptance passes 8/8 tests and the four complete affected classes pass 92/92,
+including parent-first, child-first, repeated, and in-flight cleanup cases.
 
 ### RD-4 — Layer Manager And Main-Viewer Shell
 

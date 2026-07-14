@@ -324,6 +324,54 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
             testCase.verifyFalse(diagnostics.Viewer.CameraReconcilePending);
         end
 
+        function testDelayedStaleCameraCompletionCannotReplaceLatestLod(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerPerformanceTest.makeTiledScene());
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            fig = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+            ax = findall(fig, "Type", "axes");
+            fig.CurrentPoint = ProjectionViewerPerformanceTest.axesCenter(ax);
+            app.resetPerformanceDiagnostics();
+
+            fig.WindowScrollWheelFcn(fig, ...
+                struct(VerticalScrollCount=-1));
+            cameraTimer = timerfindall( ...
+                "Name", "ProjectionViewerCameraSettleTimer");
+            staleGeneration = cameraTimer.UserData;
+            fig.WindowScrollWheelFcn(fig, ...
+                struct(VerticalScrollCount=-1));
+            latestGeneration = uint64( ...
+                app.performanceDiagnostics().Viewer. ...
+                CameraScheduleGeneration);
+            stop(cameraTimer);
+            cameraTimer.UserData = staleGeneration;
+            cameraTimer.TimerFcn(cameraTimer, struct());
+            staleCompletion = app.performanceDiagnostics();
+
+            testCase.verifyEqual(staleCompletion.Counters.DroppedRequests, 1);
+            testCase.verifyEqual( ...
+                staleCompletion.Counters.CameraReconciliations, 0);
+            testCase.verifyTrue( ...
+                staleCompletion.Viewer.CameraReconcilePending);
+            testCase.verifyGreaterThan( ...
+                staleCompletion.Viewer.VisibleTileSurfaceCount, 0);
+
+            cameraTimer.UserData = latestGeneration;
+            cameraTimer.TimerFcn(cameraTimer, struct());
+            latestCompletion = app.performanceDiagnostics();
+            testCase.verifyEqual( ...
+                latestCompletion.Counters.CameraReconciliations, 1);
+            testCase.verifyFalse( ...
+                latestCompletion.Viewer.CameraReconcilePending);
+            testCase.verifyEqual( ...
+                latestCompletion.Viewer.CurrentLevelIndices, ...
+                latestCompletion.Viewer.DesiredLevelIndices);
+            testCase.verifyEqual( ...
+                latestCompletion.Counters.BlankPreviewTransitions, 0);
+        end
+
         function testSettledCameraRefreshUsesCachedVectorizedGeometry(testCase)
             scene = ProjectionViewerPerformanceTest.makeTiledScene();
             app = ProjectionViewerApp(scene);

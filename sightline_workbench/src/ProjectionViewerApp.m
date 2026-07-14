@@ -218,6 +218,7 @@ classdef ProjectionViewerApp < handle
         DenseSurfaceHandles struct = struct()
         DenseSurfaceDiagnostics struct = struct()
         DenseSurfaceRunning logical = false
+        IsClosing logical = false
         CorrectionStore
         AlignmentAppliedGenerationId string = ""
     end
@@ -320,6 +321,19 @@ classdef ProjectionViewerApp < handle
         end
 
         function delete(app)
+            if app.IsClosing
+                return
+            end
+            app.IsClosing = true;
+            if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
+                app.UIFigure.CloseRequestFcn = [];
+                app.UIFigure.WindowScrollWheelFcn = [];
+                app.UIFigure.WindowKeyPressFcn = [];
+                app.UIFigure.WindowKeyReleaseFcn = [];
+                app.UIFigure.WindowButtonDownFcn = [];
+                app.UIFigure.WindowButtonMotionFcn = [];
+                app.UIFigure.WindowButtonUpFcn = [];
+            end
             app.closeMotionImagery();
             app.exitAlignmentSoloPair();
             app.deleteCameraSettleTimer();
@@ -328,16 +342,12 @@ classdef ProjectionViewerApp < handle
             app.clearAlignmentOverlays();
             app.clearAlignmentRoi(false);
             app.closeDenseSurfaceWindows();
-            if ~isempty(app.AlignmentWorkbenchFigure) && ...
-                    isvalid(app.AlignmentWorkbenchFigure)
-                delete(app.AlignmentWorkbenchFigure);
-            end
+            app.closeAlignmentWorkbench();
+            app.closeHelpDialog();
             if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
                 delete(app.UIFigure);
             end
-            if ~isempty(app.HelpFigure) && isvalid(app.HelpFigure)
-                delete(app.HelpFigure);
-            end
+            app.UIFigure = [];
         end
 
         function state = exportState(app)
@@ -951,6 +961,7 @@ classdef ProjectionViewerApp < handle
         function createComponents(app)
             app.UIFigure = uifigure(Name="Sightline Workbench", ...
                 Position=[100 100 1100 760], ...
+                CloseRequestFcn=@(~, ~) delete(app), ...
                 WindowScrollWheelFcn=@(~, event) app.scrollWheel(event), ...
                 WindowKeyPressFcn=@(~, event) app.keyPressed(event), ...
                 WindowKeyReleaseFcn=@(~, event) app.keyReleased(event), ...
@@ -1125,18 +1136,20 @@ classdef ProjectionViewerApp < handle
             app.refreshAlignmentSessionIndicators();
         end
 
-        function hideAlignmentWorkbench(app)
+        function closeAlignmentWorkbench(app)
             app.exitAlignmentSoloPair();
             if ~isempty(app.AlignmentWorkbenchFigure) && ...
                     isvalid(app.AlignmentWorkbenchFigure)
-                app.AlignmentWorkbenchFigure.Visible = "off";
+                app.AlignmentWorkbenchFigure.CloseRequestFcn = [];
+                delete(app.AlignmentWorkbenchFigure);
             end
+            app.AlignmentWorkbenchFigure = [];
         end
 
         function createAlignmentControls(app)
             app.AlignmentWorkbenchFigure = uifigure( ...
                 Name="Alignment Workbench", Position=[140 100 1400 900], ...
-                CloseRequestFcn=@(~, ~) app.hideAlignmentWorkbench(), ...
+                CloseRequestFcn=@(~, ~) app.closeAlignmentWorkbench(), ...
                 Tag="ProjectionViewerAlignmentWorkbench");
             app.AlignmentGrid = uigridlayout(app.AlignmentWorkbenchFigure, ...
                 [6 17]);
@@ -2178,6 +2191,7 @@ classdef ProjectionViewerApp < handle
             for layerIndex = 1:numel(app.Scene.layers)
                 app.setLayerSurfaceVisible(layerIndex, mask(layerIndex));
             end
+            app.reconcileTiledPresentationLayers(find(mask));
             app.raiseCrosshairOverlay();
         end
 
@@ -2199,6 +2213,8 @@ classdef ProjectionViewerApp < handle
                 app.setLayerSurfaceVisible( ...
                     layerIndex, app.Scene.layers(layerIndex).Visible);
             end
+            app.reconcileTiledPresentationLayers( ...
+                find([app.Scene.layers.Visible]));
             app.updateAllSurfaceBlendAppearance();
             app.raiseCrosshairOverlay();
         end
@@ -5320,10 +5336,7 @@ classdef ProjectionViewerApp < handle
             end
             app.SelectedLayerIndex = layerIndex;
             try
-                if app.usesTiledPreview(layerIndex) && ...
-                        isempty(app.validLayerSurfaces(layerIndex))
-                    app.refreshTiledLayerSurfaces(layerIndex);
-                end
+                app.reconcileTiledPresentationLayers(layerIndex);
                 app.updateAllSurfaceBlendAppearance();
             catch exception
                 runtime = app.MotionRuntime;
@@ -5466,7 +5479,8 @@ classdef ProjectionViewerApp < handle
             lookahead = app.MotionRuntime.Lookahead;
             if ~isstruct(lookahead) || ...
                     ~isfield(lookahead, "Available") || ...
-                    ~lookahead.Available || ~lookahead.Ready
+                    ~lookahead.Available || ~lookahead.Ready || ...
+                    ~app.motionLookaheadIsCurrent(lookahead)
                 if ~app.prepareMotionLookahead()
                     if app.MotionRuntime.Playing
                         app.pauseMotionPlayback( ...
@@ -5519,10 +5533,8 @@ classdef ProjectionViewerApp < handle
                         "Playback paused because the next frame is missing data.");
                     return
                 end
-                if app.usesTiledPreview(layerIndex) && ...
-                        isempty(app.validLayerSurfaces(layerIndex))
-                    app.refreshTiledLayerSurfaces(layerIndex);
-                end
+                app.reconcileTiledPresentationLayers(layerIndex);
+                app.setLayerSurfaceVisible(layerIndex, false);
             catch exception
                 app.pauseMotionPlayback( ...
                     "Playback paused because lookahead loading failed: " + ...
@@ -5531,12 +5543,23 @@ classdef ProjectionViewerApp < handle
             end
             runtime = app.MotionRuntime;
             lookahead.LayerIndex = layerIndex;
+            lookahead.PreviewRequestKey = ...
+                app.previewPresentationRequestKey(layerIndex);
             lookahead.Ready = true;
             runtime.Lookahead = lookahead;
             app.MotionRuntime = runtime;
             app.PerformanceMonitor.increment("MotionLookaheadReady");
             ready = true;
             app.refreshMotionStatus();
+        end
+
+        function tf = motionLookaheadIsCurrent(app, lookahead)
+            tf = isfield(lookahead, "LayerIndex") && ...
+                isfield(lookahead, "PreviewRequestKey") && ...
+                lookahead.LayerIndex >= 1 && ...
+                lookahead.LayerIndex <= numel(app.Scene.layers) && ...
+                isequaln(lookahead.PreviewRequestKey, ...
+                app.previewPresentationRequestKey(lookahead.LayerIndex));
         end
 
         function [valid, reason] = motionPlaybackStateIsValid(app)
@@ -6098,6 +6121,50 @@ classdef ProjectionViewerApp < handle
             tf = ~isempty(app.PreviewTiledLayerMask) && ...
                 layerIndex <= numel(app.PreviewTiledLayerMask) && ...
                 app.PreviewTiledLayerMask(layerIndex);
+        end
+
+        function reconcileTiledPresentationLayers(app, layerIndices)
+            if app.IsClosing || isempty(layerIndices) || ...
+                    isempty(app.PreviewTiledLayerMask)
+                return
+            end
+            layerIndices = unique(double(layerIndices(:).'), "stable");
+            layerIndices = layerIndices(isfinite(layerIndices) & ...
+                layerIndices == fix(layerIndices) & layerIndices >= 1 & ...
+                layerIndices <= numel(app.PreviewTiledLayerMask));
+            layerIndices = layerIndices( ...
+                app.PreviewTiledLayerMask(layerIndices));
+            if isempty(layerIndices)
+                return
+            end
+
+            refreshTimer = tic;
+            app.PerformanceMonitor.increment("TileRefreshes");
+            cameraContext = app.previewCameraContext();
+            for layerIndex = layerIndices
+                app.refreshTiledLayerSurfaces(layerIndex, cameraContext);
+            end
+            app.raiseCrosshairOverlay();
+            app.PerformanceMonitor.recordTiming( ...
+                "TileRefreshSeconds", toc(refreshTimer));
+        end
+
+        function key = previewPresentationRequestKey(app, layerIndex)
+            key = struct();
+            key.LayerIndex = double(layerIndex);
+            key.LayerId = string(app.Scene.layers(layerIndex).ViewId);
+            key.GeometryGeneration = ...
+                double(app.PreviewGeometryGenerations(layerIndex));
+            key.CameraScheduleGeneration = ...
+                double(app.CameraScheduleGeneration);
+            key.CameraContext = app.previewCameraContext();
+            key.CurrentLevelIndex = ...
+                app.PreviewCurrentLevelIndices(layerIndex);
+            key.DesiredLevelIndex = ...
+                app.PreviewDesiredLevelIndices(layerIndex);
+            key.PendingLevelIndex = ...
+                app.PreviewPendingLevelIndices(layerIndex);
+            key.TileKeys = app.currentPreviewTileKeys(layerIndex);
         end
 
         function surfaceHandle = createPreviewSurface(app, layerIndex, ...
@@ -7412,6 +7479,7 @@ classdef ProjectionViewerApp < handle
                 return
             end
             app.SelectedLayerIndex = targetIndex;
+            app.reconcileTiledPresentationLayers(targetIndex);
             app.updateControlsFromSelectedLayer();
         end
 
@@ -8930,6 +8998,7 @@ classdef ProjectionViewerApp < handle
 
         function layerSelectionChanged(app, event)
             app.SelectedLayerIndex = event.Value;
+            app.reconcileTiledPresentationLayers(event.Value);
             app.updateControlsFromSelectedLayer();
         end
 
@@ -9022,9 +9091,7 @@ classdef ProjectionViewerApp < handle
                 app.Scene.layers(layerIndex) = layer;
                 app.setLayerSurfaceVisible(layerIndex, layer.Visible);
             end
-            if app.usesTiledPreview(nextLayerIndex)
-                app.refreshTiledLayerSurfaces(nextLayerIndex);
-            end
+            app.reconcileTiledPresentationLayers(nextLayerIndex);
             app.updateAllSurfaceBlendAppearance();
             app.applyAnaglyphPresentationOffsetDelta( ...
                 oldPresentationOffsets);
@@ -9238,8 +9305,8 @@ classdef ProjectionViewerApp < handle
             oldPresentationOffsets = app.anaglyphPresentationOffsets();
             layer.Visible = isVisible;
             app.Scene.layers(layerIndex) = layer;
-            if isVisible && app.usesTiledPreview(layerIndex)
-                app.refreshTiledLayerSurfaces(layerIndex);
+            if isVisible
+                app.reconcileTiledPresentationLayers(layerIndex);
             end
             if app.layerVisibilityRequiresBlendRefresh(layerIndex)
                 app.updateAllSurfaceBlendAppearance();

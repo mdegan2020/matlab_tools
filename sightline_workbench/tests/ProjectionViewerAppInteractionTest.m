@@ -16,14 +16,9 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
 
     methods (TestMethodSetup)
         function closeExistingViewer(testCase)
-            delete(findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench"));
-            delete(findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Help"));
-            testCase.addTeardown(@() delete(findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench")));
-            testCase.addTeardown(@() delete(findall(groot, "Type", "figure", ...
-                "Name", "Projection Viewer Help")));
+            ProjectionViewerAppInteractionTest.closeOwnedWindowsAndTimers();
+            testCase.addTeardown( ...
+                @ProjectionViewerAppInteractionTest.closeOwnedWindowsAndTimers);
         end
     end
 
@@ -160,14 +155,17 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 diagnosticsAfterWorkbench.Counters.AlignmentWorkbenchCreations, 1);
             workbench.CloseRequestFcn(workbench, struct());
             drawnow
-            testCase.verifyEqual(string(workbench.Visible), "off");
+            testCase.verifyFalse(isvalid(workbench));
             launcher.ButtonPushedFcn(launcher, struct());
             drawnow
-            testCase.verifyEqual(string(workbench.Visible), "on");
+            reopenedWorkbench = findall(groot, "Type", "figure", ...
+                "Name", "Alignment Workbench");
+            testCase.verifyNumElements(reopenedWorkbench, 1);
+            testCase.verifyEqual(string(reopenedWorkbench.Visible), "on");
             diagnosticsAfterWorkbenchReopen = app.performanceDiagnostics();
             testCase.verifyEqual( ...
                 diagnosticsAfterWorkbenchReopen.Counters. ...
-                AlignmentWorkbenchCreations, 1);
+                AlignmentWorkbenchCreations, 2);
 
             alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
             drawnow
@@ -213,6 +211,94 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 "Up/Down arrows: adjust Tip by 0.5 deg")));
             testCase.verifyTrue(any(contains(string(helpTextArea.Value), ...
                 "Left/Right arrows: adjust Tilt by 0.5 deg")));
+        end
+
+        function testMainCloseOwnsChildrenTimersAndNotCallerFigure(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerAppInteractionTest.makeTwoImageScene());
+            testCase.addTeardown(@() delete(app));
+            callerFigure = uifigure(Name="Caller-owned sentinel");
+            testCase.addTeardown(@() delete(callerFigure));
+            drawnow
+            viewer = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+
+            alignmentMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAlignmentPanelMenuItem");
+            alignmentMenu.MenuSelectedFcn(alignmentMenu, struct());
+            launcher = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                viewer, "ProjectionViewerAlignmentOpenWorkbenchButton");
+            launcher.ButtonPushedFcn(launcher, struct());
+            helpMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerHelpMenuItem");
+            helpMenu.MenuSelectedFcn(helpMenu, struct());
+            motionMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerMotionImageryMenuItem");
+            motionMenu.MenuSelectedFcn(motionMenu, struct());
+            motionWindow = findall(groot, "Tag", ...
+                "ProjectionViewerMotionFigure");
+            startButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                motionWindow, "ProjectionViewerMotionStartExitButton");
+            startButton.ButtonPushedFcn(startButton, struct());
+            playButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                motionWindow, "ProjectionViewerMotionPlayPauseButton");
+            playButton.ButtonPushedFcn(playButton, struct());
+            drawnow
+
+            closeViewer = viewer.CloseRequestFcn;
+            closeViewer(viewer, struct());
+            drawnow
+
+            testCase.verifyFalse(isvalid(viewer));
+            testCase.verifyEmpty(findall(groot, "Name", ...
+                "Alignment Workbench"));
+            testCase.verifyEmpty(findall(groot, "Name", ...
+                "Projection Viewer Help"));
+            testCase.verifyEmpty(findall(groot, "Tag", ...
+                "ProjectionViewerMotionFigure"));
+            testCase.verifyEmpty(timerfindall("Tag", ...
+                "ProjectionViewerMotionPlaybackTimer"));
+            testCase.verifyTrue(isvalid(callerFigure));
+            testCase.verifyWarningFree(@() closeViewer([], struct()));
+        end
+
+        function testChildFirstThenProgrammaticDeleteIsIdempotent(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerAppInteractionTest.makeTwoImageScene());
+            viewer = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+            alignmentMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerAlignmentPanelMenuItem");
+            alignmentMenu.MenuSelectedFcn(alignmentMenu, struct());
+            launcher = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
+                viewer, "ProjectionViewerAlignmentOpenWorkbenchButton");
+            launcher.ButtonPushedFcn(launcher, struct());
+            helpMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerHelpMenuItem");
+            helpMenu.MenuSelectedFcn(helpMenu, struct());
+            motionMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerMotionImageryMenuItem");
+            motionMenu.MenuSelectedFcn(motionMenu, struct());
+            drawnow
+
+            children = [findall(groot, "Name", "Alignment Workbench"); ...
+                findall(groot, "Name", "Projection Viewer Help"); ...
+                findall(groot, "Tag", "ProjectionViewerMotionFigure")];
+            for child = reshape(children, 1, [])
+                child.CloseRequestFcn(child, struct());
+            end
+            drawnow
+
+            testCase.verifyTrue(isvalid(viewer));
+            testCase.verifyEmpty(findall(groot, "Name", ...
+                "Alignment Workbench"));
+            testCase.verifyEmpty(findall(groot, "Name", ...
+                "Projection Viewer Help"));
+            testCase.verifyEmpty(findall(groot, "Tag", ...
+                "ProjectionViewerMotionFigure"));
+            testCase.verifyWarningFree(@() delete(app));
+            testCase.verifyWarningFree(@() delete(app));
+            testCase.verifyFalse(isvalid(viewer));
         end
 
         function testCrosshairContextMenuToggleTracksPointer(testCase)
@@ -1686,6 +1772,23 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
     end
 
     methods (Static, Access = private)
+        function closeOwnedWindowsAndTimers()
+            timers = timerfindall("Tag", ...
+                "ProjectionViewerMotionPlaybackTimer");
+            for timerObject = reshape(timers, 1, [])
+                if string(timerObject.Running) == "on"
+                    stop(timerObject);
+                end
+                delete(timerObject);
+            end
+            figureNames = ["Sightline Workbench" "Alignment Workbench" ...
+                "Projection Viewer Help" "Motion Imagery"];
+            for figureName = figureNames
+                delete(findall(groot, "Type", "figure", ...
+                    "Name", figureName));
+            end
+        end
+
         function scene = makeScene()
             imageData = uint8(reshape(1:60, 4, 5, 3));
             options = struct();

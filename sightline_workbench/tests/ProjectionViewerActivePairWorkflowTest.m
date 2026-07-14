@@ -173,6 +173,73 @@ classdef ProjectionViewerActivePairWorkflowTest < matlab.uitest.TestCase
                 visibleBefore);
         end
 
+        function testSoloPairTurnoverReconcilesCurrentLodWithoutBlank(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerActivePairWorkflowTest.makeTiledScene());
+            testCase.addTeardown(@() delete(app));
+            viewer = findall(groot, "Type", "figure", ...
+                "Name", "Sightline Workbench");
+            viewer.Position = [100 100 360 300];
+            drawnow
+            app.configurePreviewTiling(struct(TileSize=64, ...
+                MinTiledImagePixels=1, MaxVisibleTilesPerLayer=96));
+            workbench = ProjectionViewerActivePairWorkflowTest.showWorkbench();
+            solo = ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentSoloPairCheckBox");
+            next = ProjectionViewerActivePairWorkflowTest.findTagged( ...
+                workbench, "ProjectionViewerAlignmentNextPairButton");
+            testCase.press(solo);
+            firstPair = app.alignmentDiagnostics().ActivePair;
+            firstIndices = [firstPair.ReferenceLayerIndex ...
+                firstPair.MovingLayerIndex];
+            axesHandle = findall(viewer, "Type", "axes");
+            viewer.CurrentObject = axesHandle;
+            position = axesHandle.InnerPosition;
+            viewer.CurrentPoint = position(1:2) + position(3:4) / 2;
+            for index = 1:16
+                viewer.WindowScrollWheelFcn( ...
+                    viewer, struct(VerticalScrollCount=-1));
+            end
+            app.flushPreviewUpdates();
+            beforeTurnover = app.performanceDiagnostics();
+            outsideIndices = setdiff(1:4, firstIndices);
+            testCase.verifyTrue(any( ...
+                beforeTurnover.Viewer.CurrentLevelIndices(outsideIndices) ~= ...
+                beforeTurnover.Viewer.CurrentLevelIndices(firstIndices(1))));
+
+            testCase.press(next);
+            afterTurnover = app.performanceDiagnostics();
+            secondPair = app.alignmentDiagnostics().ActivePair;
+            secondIndices = [secondPair.ReferenceLayerIndex ...
+                secondPair.MovingLayerIndex];
+            incomingIndices = setdiff(secondIndices, firstIndices);
+
+            testCase.verifyNotEqual(secondPair.PairId, firstPair.PairId);
+            testCase.verifyEqual( ...
+                afterTurnover.Viewer.CurrentLevelIndices(secondIndices), ...
+                repmat(afterTurnover.Viewer.CurrentLevelIndices( ...
+                secondIndices(1)), 1, 2));
+            testCase.verifyEqual( ...
+                afterTurnover.Viewer.PendingLevelIndices(secondIndices), ...
+                [0 0]);
+            testCase.verifyNotEqual( ...
+                afterTurnover.Viewer.CurrentLevelIndices(incomingIndices), ...
+                beforeTurnover.Viewer.CurrentLevelIndices(incomingIndices));
+            testCase.verifyGreaterThan( ...
+                afterTurnover.Viewer.VisibleTileSurfaceCount, 0);
+            testCase.verifyEqual( ...
+                afterTurnover.Counters.BlankPreviewTransitions, 0);
+
+            workbench.CloseRequestFcn(workbench, struct());
+            restored = app.performanceDiagnostics();
+            testCase.verifyEqual(restored.Viewer.CurrentLevelIndices, ...
+                repmat(restored.Viewer.CurrentLevelIndices(1), 1, 4));
+            testCase.verifyEqual(restored.Viewer.PendingLevelIndices, ...
+                zeros(1, 4));
+            testCase.verifyEqual( ...
+                restored.Counters.BlankPreviewTransitions, 0);
+        end
+
         function testPairViewpointAppliesAndRestoresCameraOnly(testCase)
             [app, workbench] = ...
                 ProjectionViewerActivePairWorkflowTest.openWorkbench();
@@ -328,6 +395,27 @@ classdef ProjectionViewerActivePairWorkflowTest < matlab.uitest.TestCase
                     "view-" + string(char('a' + layerIndex - 1));
                 scene.layers(layerIndex).PassId = "pass-one";
                 scene.layers(layerIndex).AcquisitionStartTime = layerIndex - 1;
+                scene.layers(layerIndex).LineRateHz = 1;
+            end
+            scene = ProjectionViewMetadata.ensureScene(scene);
+        end
+
+        function scene = makeTiledScene()
+            images = cell(1, 4);
+            paths = strings(1, 4);
+            for layerIndex = 1:4
+                images{layerIndex} = uint8( ...
+                    (layerIndex - 1) * ones(512, 512));
+                paths(layerIndex) = "pair-lod-" + ...
+                    string(layerIndex) + ".tif";
+            end
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                images, paths, struct(RowStride=32, ColumnStride=32));
+            for layerIndex = 1:4
+                scene.layers(layerIndex).ViewId = ...
+                    "pair-lod-view-" + string(layerIndex);
+                scene.layers(layerIndex).PassId = "pair-lod-pass";
+                scene.layers(layerIndex).AcquisitionStartTime = layerIndex;
                 scene.layers(layerIndex).LineRateHz = 1;
             end
             scene = ProjectionViewMetadata.ensureScene(scene);

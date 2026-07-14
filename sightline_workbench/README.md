@@ -115,7 +115,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 723 tests;
+- the latest grouped fresh-class repository validation passes all 730 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate;
@@ -125,7 +125,8 @@ The current implementation baseline is summarized in
   `docs/real_data_validation_followup_workpack.md`, which incorporates the
   July 13 operator findings as ordered network-solve, viewer correctness,
   orientation, Layer Manager, dense-surface, and stereo-cursor packs; RD-2's
-  bounded, observable network solve is complete and RD-3 is next; and
+  bounded network solve and RD-3's LOD/lifecycle correction are complete, and
+  RD-1 camera-up orientation is next; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -825,7 +826,11 @@ Large layers can use display-only preview pyramids and tiled preview surfaces so
 the app stays responsive while panning, zooming, and adjusting projection state.
 These pyramids do not change the layer `Image` data used by readback or backend
 jobs; backend processing keeps the full source image and renders through the
-configured output grid.
+configured output grid. When an active frame, Solo pair, selection, or
+visibility changes, the tiled presentation recomputes desired LOD from the
+current camera and viewport even if a valid cached surface exists. The prior
+valid representation remains until a coherent replacement is ready; stale
+camera/lookahead completions cannot blank or replace the latest presentation.
 
 Core controls:
 
@@ -877,11 +882,13 @@ Core controls:
   the explicit Match, Filter, Solve, Preview, Apply, Revert, and Clear stages.
   Match stops after deterministic feature matching and reports raw observations;
   Filter is a distinct action that applies geometric, optional coplanarity, and
-  ROI filtering. Solve reuses the stored filtered matches. Large all-visible
-  networks can currently spend substantial time in
-  default leave-one-pair-out sensitivity solves after the primary optimization;
-  bounded diagnostic policy, cached observation evidence, and progress/cancel
-  reporting are tracked in `docs/real_data_validation_followup_workpack.md`.
+  ROI filtering. Solve reuses the stored filtered matches. The interactive
+  default performs one compiled-evidence global solve and defers or bounds
+  sensitivity work by preset: Fast requests none, Balanced reports it deferred,
+  and Quality permits at most three warm-started children within 15 seconds.
+  SDK callers may request exhaustive evidence explicitly. Progress,
+  cancellation, evaluation counts, timing, and partial/deferred/cancelled
+  diagnostic states remain visible.
   Completed solves report residual/OPK summaries in the status text, including
   warnings when corrections hit OPK bounds. Fewer than three observations in
   any enabled pair is a hard failure;
@@ -1175,7 +1182,8 @@ visibility. Pair navigation refreshes inspection overlays without matching,
 applying corrections, or rebuilding projection geometry. Solo mode is keyed by
 stable view IDs, follows pair changes, leaves serialized visibility untouched,
 and restores every surviving layer's prior visibility when disabled or when the
-workbench/viewer closes.
+workbench/viewer closes. Pair turnover reconciles both tiled views against the
+current camera before presenting them, including an incoming cached view.
 
 `Pair viewpoint` places the presentation camera at the midpoint of
 representative sensor origins over the active pair's shared footprint, aims at
@@ -1204,11 +1212,21 @@ acquisition time continues to control ordering and labels, not playback delay.
 Space toggles playback only in motion mode, a manual step pauses before moving
 once, and Escape stops/exits/restores. A self-rearming target-time scheduler
 displays every frame without silent skipping and retains at most one next-frame
-display lookahead. It pauses with a persistent reason on viewport-focus loss,
+display lookahead. That lookahead is keyed by layer/geometry generation,
+camera/viewport state, LOD state, and tile identity; a camera change invalidates
+and refreshes it before the next frame is presented. It pauses with a persistent
+reason on viewport-focus loss,
 sequence/layer mutation, stale or missing data, load failure, or the no-wrap
 boundary. Playback remains direct single-frame presentation: no interpolation,
 crossfade, or display-only cache product can enter viewer serialization or a
 backend/scientific input.
+
+Closing the main Sightline Workbench window uses the same idempotent cleanup as
+programmatic app deletion. It stops preview, identity, and playback timers,
+detaches callbacks, exits transient presentation modes, and closes its owned
+Alignment Workbench, Motion Imagery, help, and dense-result windows. Closing a
+child first affects only that child, and independent caller-owned figures are
+never closed by the viewer.
 
 Stereo-eye assignment is independent of moving/reference roles and layer order.
 For each rendered stereo pair, the viewer projects the existing center-column
