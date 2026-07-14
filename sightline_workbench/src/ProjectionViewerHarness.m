@@ -200,6 +200,56 @@ classdef ProjectionViewerHarness
             scene.layers = ProjectionViewMetadata.ensureLayers(layers);
         end
 
+        function layer = createLayerFromSourceGeometry( ...
+                imageData, sourceGeometry, projectionPlane, options)
+            %createLayerFromSourceGeometry Build one append-ready viewer layer.
+            if nargin < 4
+                options = struct();
+            end
+            ProjectionViewerHarness.validateImageData(imageData);
+            projectionPlane = ProjectionViewerHarness.validateProjectionPlane( ...
+                projectionPlane);
+            if ~isstruct(sourceGeometry) || ~isscalar(sourceGeometry) || ...
+                    ~isfield(sourceGeometry, "ImageSize") || ...
+                    ~isfield(sourceGeometry, "SampleFcn") || ...
+                    ~isa(sourceGeometry.SampleFcn, "function_handle")
+                error("ProjectionViewerHarness:invalidSourceGeometry", ...
+                    "Source geometry must contain ImageSize and SampleFcn.");
+            end
+            imageSize = [size(imageData, 1), size(imageData, 2)];
+            sourceImageSize = ProjectionViewerHarness.validateImageSize( ...
+                sourceGeometry.ImageSize);
+            if ~isequal(sourceImageSize, imageSize)
+                error("ProjectionViewerHarness:imageGeometrySizeMismatch", ...
+                    "SourceGeometry.ImageSize must match imageData.");
+            end
+
+            options = ProjectionViewerHarness.realDataOptions(options);
+            if ~isfield(options, "Name")
+                options.Name = "Image";
+            end
+            options.Name = ProjectionViewerHarness.validateScalarString( ...
+                options.Name, "Name");
+            if strlength(options.Name) == 0
+                error("ProjectionViewerHarness:invalidLayerName", ...
+                    "Name must be nonempty.");
+            end
+            if ~isfield(options, "ImagePath")
+                options.ImagePath = "";
+            end
+            options.ImagePath = string(options.ImagePath);
+            if ~isscalar(options.ImagePath) || ismissing(options.ImagePath)
+                error("ProjectionViewerHarness:invalidImagePath", ...
+                    "ImagePath must be a scalar string.");
+            end
+            meshSampling = ProjectionViewerHarness.createMeshSampling( ...
+                imageSize, options.RowStride, options.ColumnStride);
+            layer = ProjectionViewerHarness.createLayer( ...
+                imageData, options.ImagePath, sourceGeometry, ...
+                projectionPlane, meshSampling, options);
+            layer = ProjectionViewMetadata.applyOverrides(layer, options);
+        end
+
         function sourceGeometry = createRealSourceGeometry(imageSize, ...
                 geometryDefinition, options)
             %createRealSourceGeometry Adapt sparse real geometry to SampleFcn.

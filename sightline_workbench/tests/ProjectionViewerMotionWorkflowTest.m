@@ -543,11 +543,14 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             axesHandle = findall(viewer, "Type", "axes");
             outline = findall(axesHandle, "Tag", ...
                 "ProjectionViewerSelectedFootprintOutline");
+            outlineMenu = findall(groot, "Tag", ...
+                "ProjectionViewerActiveLayerOutlineMenuItem");
 
             testCase.verifyNumElements(outline, 1);
             testCase.verifyEqual(outline.Color, [1 1 0]);
             testCase.verifyEqual(string(outline.Clipping), "on");
             testCase.verifyEqual(string(outline.Visible), "on");
+            testCase.verifyEqual(string(outlineMenu.Checked), "on");
             surfaces = findall(axesHandle, "Type", "surface");
             children = axesHandle.Children;
             outlinePosition = find(children == outline, 1);
@@ -568,6 +571,49 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             testCase.verifyEqual(string(outline.Visible), "on");
             testCase.verifyFalse(isfield(app.exportState(), ...
                 "SelectedFootprintOutline"));
+
+            outlineMenu.MenuSelectedFcn(outlineMenu, struct());
+            drawnow
+            testCase.verifyEqual(string(outlineMenu.Checked), "off");
+            testCase.verifyEqual(string(outline.Visible), "off");
+            outlineMenu.MenuSelectedFcn(outlineMenu, struct());
+            drawnow
+            testCase.verifyEqual(string(outlineMenu.Checked), "on");
+            testCase.verifyEqual(string(outline.Visible), "on");
+
+            window = ProjectionViewerMotionWorkflowTest.motionWindow();
+            ProjectionViewerMotionWorkflowTest.setMode(window, "single");
+            testCase.verifyEqual(string(outline.Visible), "off");
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            testCase.verifyEqual(string(outline.Visible), "off");
+        end
+
+        function testSingleAndPairExposePersistentEdgeControls(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerMotionWorkflowTest.makeScene());
+            testCase.addTeardown(@() delete(app));
+            window = ProjectionViewerMotionWorkflowTest.motionWindow();
+            hover = ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerMotionHoverCheckBox");
+            hover.Value = false;
+            hover.ValueChangedFcn(hover, struct());
+
+            ProjectionViewerMotionWorkflowTest.setMode(window, "single");
+            left = ProjectionViewerMotionWorkflowTest.tagged( ...
+                ProjectionViewerMotionWorkflowTest.viewer(), ...
+                "ProjectionViewerMotionLeftEdgeButton");
+            right = ProjectionViewerMotionWorkflowTest.tagged( ...
+                ProjectionViewerMotionWorkflowTest.viewer(), ...
+                "ProjectionViewerMotionRightEdgeButton");
+            testCase.verifyEqual(string(left.Visible), "on");
+            testCase.verifyEqual(string(right.Visible), "on");
+            testCase.verifyEqual(app.motionDiagnostics().Mode, "single");
+
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            testCase.verifyEqual(string(left.Visible), "on");
+            testCase.verifyEqual(string(right.Visible), "on");
+            testCase.verifyEqual(app.motionDiagnostics().Mode, "pair");
+            testCase.verifyFalse(app.motionDiagnostics().HoverEdges);
         end
 
         function testSingleViewSupportsOneEligibleLayer(testCase)
@@ -687,7 +733,7 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
 
         function figureHandle = viewer()
             figures = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             figureHandle = figures(1);
         end
 
@@ -713,7 +759,7 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
 
         function closeFigures()
             delete(findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench"));
+                "Name", "Sightline"));
             delete(findall(groot, "Tag", ...
                 "ProjectionViewerLayerManagerFigure"));
         end

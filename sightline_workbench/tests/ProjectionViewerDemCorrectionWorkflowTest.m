@@ -84,7 +84,7 @@ classdef ProjectionViewerDemCorrectionWorkflowTest < matlab.unittest.TestCase
 
         function figure = openAlignmentWorkbench()
             figure = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             menu = findall(figure(1), "Tag", ...
                 "ProjectionViewerAlignmentPanelMenuItem");
             menu(1).MenuSelectedFcn(menu(1), struct());
@@ -95,7 +95,7 @@ classdef ProjectionViewerDemCorrectionWorkflowTest < matlab.unittest.TestCase
         end
 
         function closeAll()
-            names = ["Sightline Workbench" "Alignment Workbench"];
+            names = ["Sightline" "Alignment Workbench"];
             for name = names
                 delete(findall(groot, "Type", "figure", "Name", name));
             end

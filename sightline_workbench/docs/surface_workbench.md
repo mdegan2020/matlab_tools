@@ -3,9 +3,10 @@
 B6 provides a separate floating Surface Workbench for inspecting B5 multi-ray
 and S6 fusion products. RD-5 connects that existing product viewer to the
 active scene without making graphics state part of any scientific value. The
-Alignment Workbench now distinguishes the one-click **Selected-pair SGM**
-action from **Surface Workbench...**, which opens or focuses one scene-bound
-Workbench and preselects the active physical pair.
+Alignment Workbench exposes **Surface Workbench...**, which opens or focuses
+one scene-bound Workbench and preselects the active physical pair. The former
+direct Selected-pair SGM button has been retired so dense matching, surface
+reconstruction, fusion, and 3-D extraction all start in the appropriate bench.
 
 `ProjectionSurfaceWorkbenchRunner` is the graphics-independent execution
 boundary. It consumes fresh pair working images and full-source coordinate/ray

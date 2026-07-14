@@ -105,6 +105,8 @@ classdef ProjectionViewerApp < handle
         ResetMenuItem
         HelpMenuItem
         CrosshairMenuItem
+        ActiveLayerOutlineMenuItem
+        InvertCameraUpMenuItem
         StereoCursorMenuItem
         StereoCursorRepositionMenuItem
         AlignmentPanelMenuItem
@@ -138,6 +140,8 @@ classdef ProjectionViewerApp < handle
         MoveLayerDownButton matlab.ui.control.Button
         IsCrosshairEnabled logical = false
         IsCrosshairVisible logical = false
+        IsSelectedFootprintOutlineEnabled logical = true
+        IsCameraUpInverted logical = false
         IsPointerMotionBusy logical = false
         StereoCursorRuntime struct = struct()
         AlignmentGrid matlab.ui.container.GridLayout
@@ -184,7 +188,6 @@ classdef ProjectionViewerApp < handle
         AlignmentFeatureOverlayCheckBox matlab.ui.control.StateButton
         AlignmentDeleteMatchButton matlab.ui.control.Button
         AlignmentUndoCurationButton matlab.ui.control.Button
-        AlignmentDenseSurfaceButton matlab.ui.control.Button
         AlignmentSurfaceWorkbenchButton matlab.ui.control.Button
         AlignmentStatusLabel matlab.ui.control.Label
         AlignmentPairTable matlab.ui.control.Table
@@ -230,7 +233,6 @@ classdef ProjectionViewerApp < handle
         AlignmentAnchorDragCancelled logical = false
         DenseSurfaceHandles struct = struct()
         DenseSurfaceDiagnostics struct = struct()
-        DenseSurfaceRunning logical = false
         SurfaceWorkbench
         IsClosing logical = false
         CorrectionStore
@@ -533,6 +535,88 @@ classdef ProjectionViewerApp < handle
                 options = struct();
             end
             ProjectionBackendJob.write(filePath, app.exportBackendJob(options));
+        end
+
+        function result = addImage(app, imageData, sourceGeometry, options)
+            %addImage Append an image and compatible source geometry in place.
+            if nargin < 4 || isempty(options)
+                options = struct();
+            end
+            if ~isstruct(options) || ~isscalar(options)
+                error("ProjectionViewerApp:invalidAddImageOptions", ...
+                    "addImage options must be a scalar struct.");
+            end
+            app.assertImageAdditionIsAllowed();
+            nextLayerIndex = numel(app.Scene.layers) + 1;
+            if ~isfield(options, "Name")
+                options.Name = "Image " + string(nextLayerIndex);
+            end
+            if ~isfield(options, "RowStride")
+                options.RowStride = ...
+                    app.Scene.layers(end).MeshSampling.RowStride;
+            end
+            if ~isfield(options, "ColumnStride")
+                options.ColumnStride = ...
+                    app.Scene.layers(end).MeshSampling.ColumnStride;
+            end
+            layer = ProjectionViewerHarness.createLayerFromSourceGeometry( ...
+                imageData, sourceGeometry, ...
+                app.Scene.layers(1).BaseProjectionPlane, options);
+            layer.CurrentProjectionPlane = app.currentProjectionPlane();
+
+            candidateScene = app.Scene;
+            candidateScene.layers = app.appendCompatibleLayer( ...
+                candidateScene.layers, layer);
+            candidateScene = ProjectionViewMetadata.ensureScene(candidateScene);
+            candidateScene.preview = app.previewMetadataForLayers( ...
+                candidateScene.layers);
+            newLayer = candidateScene.layers(end);
+
+            cameraState = app.exportCameraState();
+            priorMode = app.MotionRuntime.Mode;
+            presentationWasActive = app.MotionRuntime.Active;
+            if presentationWasActive
+                app.exitMotionImagery();
+            end
+            app.exitAlignmentSoloPair();
+            app.disableStereoCursor();
+            app.cancelCameraReconciliation();
+            app.CorrectionStore.synchronizeScene(candidateScene);
+            app.Scene = candidateScene;
+            app.ResetScene = app.createResetScene(candidateScene);
+            app.SelectedLayerIndex = nextLayerIndex;
+            app.AlignmentPairController.regenerate(app.Scene);
+            app.PairViewpointRuntime = app.defaultPairViewpointRuntime();
+            app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
+            app.DragMeshSampling = app.createDragMeshSampling();
+            app.clearAlignmentComputationState();
+            app.clearAlignmentWorkingImageCache();
+            app.clearAlignmentOverlays();
+            app.clearAlignmentRoi(false);
+            app.AlignmentAppliedGenerationId = "";
+            app.initializePreviewPyramids(app.PreviewTilingOptions);
+            app.rebuildSurfaces();
+            app.applyCameraState(cameraState);
+            app.updateLayerDropDownItems();
+            app.refreshMotionPassItems();
+            app.refreshLayerManagerTable();
+            app.includeMotionView(newLayer.ViewId);
+            app.updateAllSurfaceBlendAppearance();
+            app.updateControlsFromSelectedLayer();
+            app.motionConfigurationChanged();
+            if presentationWasActive
+                app.enterLayerPresentationMode(priorMode);
+            end
+            app.refreshTiledProjectionSurfaces();
+            app.PreviewTimer = tic;
+
+            result = struct( ...
+                LayerIndex=nextLayerIndex, ...
+                LayerId=string(newLayer.LayerId), ...
+                ViewId=string(newLayer.ViewId), ...
+                LayerCount=numel(app.Scene.layers), ...
+                PairCount=numel(app.AlignmentPairController.Schedule.Pairs), ...
+                PresentationMode=app.MotionRuntime.Mode);
         end
 
         function diagnostics = alignmentDiagnostics(app)
@@ -1083,6 +1167,39 @@ classdef ProjectionViewerApp < handle
     end
 
     methods (Access = private)
+        function assertImageAdditionIsAllowed(app)
+            lifecycles = ["proposed", "accepted", "applied"];
+            for lifecycle = lifecycles
+                if ~isempty(app.CorrectionStore.current(lifecycle))
+                    error("ProjectionViewerApp:activeCorrectionDuringAddImage", ...
+                        "Finish the active correction before adding images.");
+                end
+            end
+        end
+
+        function layers = appendCompatibleLayer(~, layers, layer)
+            existingFields = string(fieldnames(layers));
+            newFields = string(fieldnames(layer));
+            for fieldName = reshape(setdiff(existingFields, newFields), 1, [])
+                layer.(fieldName) = [];
+            end
+            for fieldName = reshape(setdiff(newFields, existingFields), 1, [])
+                [layers.(fieldName)] = deal([]);
+            end
+            layer = orderfields(layer, layers);
+            layers(end + 1) = layer;
+        end
+
+        function preview = previewMetadataForLayers(~, layers)
+            preview = struct();
+            preview.MeshSampling = layers(1).MeshSampling;
+            preview.LayerMeshSampling = [layers.MeshSampling];
+            preview.DisplayTextureSize = size(layers(1).DisplayTexture);
+            preview.LayerDisplayTextureSize = arrayfun( ...
+                @(layer) size(layer.DisplayTexture), layers, ...
+                UniformOutput=false);
+        end
+
         function refreshCorrectionScene(app, previousScene)
             layerIndices = app.changedProjectionLayerIndices( ...
                 previousScene, app.Scene);
@@ -1111,7 +1228,7 @@ classdef ProjectionViewerApp < handle
             app.setAlignmentFilterEnabled(false);
             app.setAlignmentSolveEnabled(false);
             app.setAlignmentActionEnabled(false);
-            app.refreshDenseSurfaceButton();
+            app.refreshSurfaceWorkbenchButton();
             app.updateAlignmentMatchTable([], []);
             app.refreshAlignmentSessionIndicators();
             app.setAlignmentStatus( ...
@@ -1122,7 +1239,7 @@ classdef ProjectionViewerApp < handle
 
 
         function createComponents(app)
-            app.UIFigure = uifigure(Name="Sightline Workbench", ...
+            app.UIFigure = uifigure(Name="Sightline", ...
                 Position=[100 100 1100 760], ...
                 AutoResizeChildren="off", ...
                 SizeChangedFcn=@(~, ~) app.positionViewerOverlays(), ...
@@ -1469,16 +1586,6 @@ classdef ProjectionViewerApp < handle
             app.AlignmentUndoCurationButton.Layout.Row = 4;
             app.AlignmentUndoCurationButton.Layout.Column = 13;
 
-            app.AlignmentDenseSurfaceButton = uibutton(app.AlignmentGrid, ...
-                Text="Selected-pair SGM", Enable="off", ...
-                Tooltip=["One-click CPU SGM and immediate display for the " ...
-                "currently selected aligned pair"], ...
-                Tag="ProjectionViewerAlignmentDenseSurfaceButton", ...
-                ButtonPushedFcn=@(~, ~) ...
-                app.extractDenseSurfaceFromAlignment());
-            app.AlignmentDenseSurfaceButton.Layout.Row = 4;
-            app.AlignmentDenseSurfaceButton.Layout.Column = [14 15];
-
             app.AlignmentSurfaceWorkbenchButton = uibutton( ...
                 app.AlignmentGrid, Text="Surface Workbench...", Enable="off", ...
                 Tooltip=["Open planned multi-pair matching, multi-ray " ...
@@ -1760,10 +1867,10 @@ classdef ProjectionViewerApp < handle
                 Tag="ProjectionViewerAlignmentWorkflowPanel");
             workflowPanel.Layout.Row = 4;
             workflowPanel.Layout.Column = [1 2];
-            workflowGrid = uigridlayout(workflowPanel, [2 10]);
+            workflowGrid = uigridlayout(workflowPanel, [2 9]);
             workflowGrid.RowHeight = {"fit", "fit"};
             workflowGrid.ColumnWidth = {80, 80, 80, 80, 80, 80, 80, ...
-                135, 150, "1x"};
+                150, "1x"};
             workflowGrid.Padding = [8 6 8 8];
             workflowGrid.RowSpacing = 6;
             workflowGrid.ColumnSpacing = 8;
@@ -1771,7 +1878,6 @@ classdef ProjectionViewerApp < handle
                 app.AlignmentFilterButton app.AlignmentSolveButton ...
                 app.AlignmentPreviewButton app.AlignmentApplyButton ...
                 app.AlignmentRevertButton app.AlignmentCancelButton ...
-                app.AlignmentDenseSurfaceButton ...
                 app.AlignmentSurfaceWorkbenchButton];
             for column = 1:numel(stageControls)
                 stageControls(column).Parent = workflowGrid;
@@ -1781,7 +1887,7 @@ classdef ProjectionViewerApp < handle
             stageHint = uilabel(workflowGrid, ...
                 Text="Run stages left to right; inspect before Solve");
             stageHint.Layout.Row = 1;
-            stageHint.Layout.Column = 10;
+            stageHint.Layout.Column = 9;
             app.AlignmentAcceptedOverlayCheckBox.Text = "Accepted lines";
             app.AlignmentRejectedOverlayCheckBox.Text = "Rejected lines";
             app.AlignmentWorstOverlayCheckBox.Text = "Worst 10%";
@@ -2022,7 +2128,7 @@ classdef ProjectionViewerApp < handle
                 Position=(plan.Camera.PositionWorld - ...
                 app.Scene.renderOrigin).', ...
                 Target=(plan.Camera.TargetWorld - app.Scene.renderOrigin).', ...
-                UpVector=plan.Camera.UpVector.', ...
+                UpVector=app.cameraUpOverride(plan.Camera.UpVector).', ...
                 ViewAngle=plan.Camera.ViewAngle, Projection="orthographic");
             app.applyCameraState(cameraState);
             runtime.LastAppliedPairId = plan.PairId;
@@ -2647,53 +2753,6 @@ classdef ProjectionViewerApp < handle
             app.setAlignmentStatus("Reverted alignment preview.");
         end
 
-        function extractDenseSurfaceFromAlignment(app)
-            if ~app.hasDenseSurfaceInput()
-                app.setAlignmentStatus( ...
-                    "Preview or apply an aligned pair with at least three accepted matches first.");
-                return
-            end
-            app.DenseSurfaceRunning = true;
-            app.AlignmentDenseSurfaceButton.Enable = "off";
-            cleanup = onCleanup(@() app.finishDenseSurfaceRun());
-            app.setAlignmentStatus("Rendering the current aligned stereo pair...");
-            drawnow limitrate
-            try
-                [pairMatch, pair] = app.currentDenseSurfacePairMatch();
-                options = app.currentAlignmentOptions();
-                options.Scheduling.Strategy = "twoImage";
-                options.Scheduling.ReferenceLayerIndex = pair(2);
-                request = ProjectionAlignmentRequest.validate(struct( ...
-                    Scene=app.Scene, LayerIndices=pair, ...
-                    ReferenceLayerIndex=pair(2), AnalysisBands=[1 1], ...
-                    Options=options));
-                workingImages = app.renderAlignmentWorkingImages( ...
-                    request, app.alignmentRenderOptions());
-                pairWorking = workingImages.PairWorkingImages(1);
-                app.setAlignmentStatus("Running CPU semi-global matching...");
-                drawnow limitrate
-                result = ProjectionDenseSurfaceExtractor.extract( ...
-                    app.Scene, pairWorking, pairMatch);
-                app.closeDenseSurfaceWindows();
-                app.DenseSurfaceHandles = ...
-                    ProjectionDenseSurfaceViewer.show(result);
-                app.DenseSurfaceDiagnostics = result.Diagnostics;
-                app.DenseSurfaceDiagnostics.Status = result.Status;
-                app.setAlignmentStatus(sprintf( ...
-                    "Dense surface: %d points, median height %.4g m, %.3g s.", ...
-                    result.Diagnostics.SurfacePointCount, ...
-                    result.Diagnostics.HeightMedianMeters, ...
-                    result.Diagnostics.TotalSeconds));
-            catch ME
-                app.DenseSurfaceDiagnostics = struct(Status="failed", ...
-                    Identifier=string(ME.identifier), ...
-                    Message=string(ME.message));
-                app.setAlignmentStatus( ...
-                    "Dense surface failed: " + string(ME.message));
-            end
-            clear cleanup
-        end
-
         function [pairMatch, pair] = currentDenseSurfacePairMatch(app)
             movingIndex = app.validAlignmentLayerValue( ...
                 app.AlignmentMovingDropDown.Value, numel(app.Scene.layers));
@@ -2714,12 +2773,6 @@ classdef ProjectionViewerApp < handle
                 error("ProjectionViewerApp:missingDenseSurfacePair", ...
                     "The selected moving-to-reference pair has no accepted matches.");
             end
-        end
-
-        function tf = hasDenseSurfaceInput(app)
-            capabilities = ProjectionDenseSurfaceExtractor.capabilities();
-            tf = capabilities.HasDisparitySgm && ...
-                app.hasSurfaceWorkbenchInput();
         end
 
         function tf = hasSurfaceWorkbenchInput(app)
@@ -2743,31 +2796,20 @@ classdef ProjectionViewerApp < handle
             end
         end
 
-        function refreshDenseSurfaceButton(app, state)
-            if isempty(app.AlignmentDenseSurfaceButton) || ...
-                    ~isvalid(app.AlignmentDenseSurfaceButton)
+        function refreshSurfaceWorkbenchButton(app, state)
+            if isempty(app.AlignmentSurfaceWorkbenchButton) || ...
+                    ~isvalid(app.AlignmentSurfaceWorkbenchButton)
                 return
             end
             if nargin < 2
                 state = app.AlignmentSession.diagnostics();
             end
-            capabilities = ProjectionDenseSurfaceExtractor.capabilities();
             hasAlignedScene = any(state.Stage == ["previewed", "applied"]) || ...
                 state.ManualAdjustmentUndoCount > 0;
-            workbenchEnabled = ~app.DenseSurfaceRunning && hasAlignedScene && ...
+            workbenchEnabled = hasAlignedScene && ...
                 app.hasSurfaceWorkbenchInput();
-            directEnabled = workbenchEnabled && capabilities.HasDisparitySgm;
-            app.AlignmentDenseSurfaceButton.Enable = app.onOff(directEnabled);
-            if ~isempty(app.AlignmentSurfaceWorkbenchButton) && ...
-                    isvalid(app.AlignmentSurfaceWorkbenchButton)
-                app.AlignmentSurfaceWorkbenchButton.Enable = ...
-                    app.onOff(workbenchEnabled);
-            end
-        end
-
-        function finishDenseSurfaceRun(app)
-            app.DenseSurfaceRunning = false;
-            app.refreshDenseSurfaceButton();
+            app.AlignmentSurfaceWorkbenchButton.Enable = ...
+                app.onOff(workbenchEnabled);
         end
 
         function closeDenseSurfaceWindows(app)
@@ -4064,7 +4106,6 @@ classdef ProjectionViewerApp < handle
         function clearAlignmentComputationState(app)
             app.AlignmentSession.clearComputation();
             app.DenseSurfaceDiagnostics = struct();
-            app.DenseSurfaceRunning = false;
             app.closeDenseSurfaceWindows();
             app.closeSurfaceWorkbench();
             app.updateAlignmentMatchTable([], []);
@@ -4100,7 +4141,7 @@ classdef ProjectionViewerApp < handle
 
         function refreshAlignmentSessionIndicators(app)
             state = app.AlignmentSession.diagnostics();
-            app.refreshDenseSurfaceButton(state);
+            app.refreshSurfaceWorkbenchButton(state);
             if isempty(app.AlignmentDiagnosticsTextArea) || ...
                     ~isvalid(app.AlignmentDiagnosticsTextArea)
                 return
@@ -5073,7 +5114,7 @@ classdef ProjectionViewerApp < handle
         function createImageContextMenu(app)
             app.ImageContextMenu = uicontextmenu(app.UIFigure, ...
                 ContextMenuOpeningFcn=@(~, ~) ...
-                app.refreshStereoCursorMenuState());
+                app.refreshImageContextMenuState());
             app.SaveMenuItem = uimenu(app.ImageContextMenu, Text="Save", ...
                 MenuSelectedFcn=@(~, ~) app.saveStateFromDialog(), ...
                 Tag="ProjectionViewerSaveMenuItem");
@@ -5093,6 +5134,14 @@ classdef ProjectionViewerApp < handle
                 Text="Crosshair", Checked="off", ...
                 MenuSelectedFcn=@(~, ~) app.toggleCrosshair(), ...
                 Tag="ProjectionViewerCrosshairMenuItem");
+            app.ActiveLayerOutlineMenuItem = uimenu(app.ImageContextMenu, ...
+                Text="Active layer outline", Checked="on", ...
+                MenuSelectedFcn=@(~, ~) app.toggleActiveLayerOutline(), ...
+                Tag="ProjectionViewerActiveLayerOutlineMenuItem");
+            app.InvertCameraUpMenuItem = uimenu(app.ImageContextMenu, ...
+                Text="Invert desired up and reset camera", Checked="off", ...
+                MenuSelectedFcn=@(~, ~) app.invertCameraUpAndReset(), ...
+                Tag="ProjectionViewerInvertCameraUpMenuItem");
             app.StereoCursorMenuItem = uimenu(app.ImageContextMenu, ...
                 Text="Stereo cursor", Checked="off", ...
                 MenuSelectedFcn=@(~, ~) app.toggleStereoCursor(), ...
@@ -5152,6 +5201,42 @@ classdef ProjectionViewerApp < handle
                 MenuSelectedFcn=@(~, ~) app.resetAnaglyphPresentation(), ...
                 Tag="ProjectionViewerAnaglyphResetPresentationMenuItem");
             app.Axes.ContextMenu = app.ImageContextMenu;
+        end
+
+        function refreshImageContextMenuState(app)
+            app.refreshStereoCursorMenuState();
+            if ~isempty(app.ActiveLayerOutlineMenuItem) && ...
+                    isvalid(app.ActiveLayerOutlineMenuItem)
+                app.ActiveLayerOutlineMenuItem.Checked = app.onOff( ...
+                    app.IsSelectedFootprintOutlineEnabled);
+            end
+            if ~isempty(app.InvertCameraUpMenuItem) && ...
+                    isvalid(app.InvertCameraUpMenuItem)
+                app.InvertCameraUpMenuItem.Checked = app.onOff( ...
+                    app.IsCameraUpInverted);
+            end
+        end
+
+        function toggleActiveLayerOutline(app)
+            app.IsSelectedFootprintOutlineEnabled = ...
+                ~app.IsSelectedFootprintOutlineEnabled;
+            app.refreshImageContextMenuState();
+            app.refreshSelectedFootprintOutline();
+        end
+
+        function invertCameraUpAndReset(app)
+            app.IsCameraUpInverted = ~app.IsCameraUpInverted;
+            app.ViewTwistDegrees = 0;
+            app.TwistSlider.Value = 0;
+            app.PendingInitialViewportFrame = false;
+            app.deleteInitialViewportFrameListener();
+            app.cancelCameraReconciliation();
+            app.configureFrameCamera();
+            app.frameCurrentProjectionView(app.InitialViewportFillFraction);
+            app.refreshImageContextMenuState();
+            app.updateControlsFromSelectedLayer();
+            app.refreshStereoCursor();
+            app.refreshTiledProjectionSurfaces();
         end
 
         function openMotionImagery(app)
@@ -5369,6 +5454,34 @@ classdef ProjectionViewerApp < handle
             end
             data = app.motionConfigurationTable();
             data.Include = ismember(string(data.ViewId), previousInclude);
+            app.MotionTable.Data = data;
+        end
+
+        function refreshMotionPassItems(app)
+            if isempty(app.MotionPassDropDown) || ...
+                    ~isvalid(app.MotionPassDropDown)
+                return
+            end
+            priorValue = string(app.MotionPassDropDown.Value);
+            passIds = unique(string({app.Scene.layers.PassId}), "stable");
+            app.MotionPassDropDown.Items = cellstr(["All passes" passIds]);
+            app.MotionPassDropDown.ItemsData = ...
+                cellstr(["__all__" passIds]);
+            if any(priorValue == ["__all__" passIds])
+                app.MotionPassDropDown.Value = char(priorValue);
+            else
+                app.MotionPassDropDown.Value = "__all__";
+            end
+        end
+
+        function includeMotionView(app, viewId)
+            if isempty(app.MotionTable) || ~isvalid(app.MotionTable) || ...
+                    ~istable(app.MotionTable.Data)
+                return
+            end
+            data = app.MotionTable.Data;
+            row = string(data.ViewId) == string(viewId);
+            data.Include(row) = true;
             app.MotionTable.Data = data;
         end
 
@@ -7517,7 +7630,8 @@ classdef ProjectionViewerApp < handle
             renderOrigin = app.Scene.renderOrigin;
             target = app.Scene.layers(1).BaseProjectionPlane.P0 - renderOrigin;
             cameraPosition = camera.G0 - renderOrigin;
-            upVector = camera.focalPlane.basis(:, 2);
+            upVector = app.cameraUpOverride( ...
+                camera.focalPlane.basis(:, 2));
 
             camproj(app.Axes, "orthographic");
             campos(app.Axes, cameraPosition.');
@@ -7564,13 +7678,19 @@ classdef ProjectionViewerApp < handle
 
         function applyViewTwist(app)
             cameraViewAngle = app.Axes.CameraViewAngle;
-            baseUpVector = ...
-                app.PresentationFrameCamera.focalPlane.basis(:, 2);
+            baseUpVector = app.cameraUpOverride( ...
+                app.PresentationFrameCamera.focalPlane.basis(:, 2));
             viewDirection = camtarget(app.Axes).' - campos(app.Axes).';
             upVector = app.rotateVectorAboutAxis( ...
                 baseUpVector, viewDirection, deg2rad(app.ViewTwistDegrees));
             camup(app.Axes, upVector.');
             app.Axes.CameraViewAngle = cameraViewAngle;
+        end
+
+        function upVector = cameraUpOverride(app, upVector)
+            if app.IsCameraUpInverted
+                upVector = -upVector;
+            end
         end
 
         function handled = nudgeSelectedLayerFromKey(app, event)
@@ -9919,7 +10039,8 @@ classdef ProjectionViewerApp < handle
         end
 
         function refreshSelectedFootprintOutline(app)
-            visible = ~app.MotionRuntime.Active && ...
+            visible = app.IsSelectedFootprintOutlineEnabled && ...
+                ~app.MotionRuntime.Active && ...
                 app.Scene.layers(app.SelectedLayerIndex).Visible;
             if ~visible
                 if ~isempty(app.SelectedFootprintOutline) && ...

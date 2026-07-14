@@ -214,7 +214,7 @@ end
 
 function trace = runScenario(app, name, options)
 fig = findall(groot, "Type", "figure", ...
-    "Name", "Sightline Workbench");
+    "Name", "Sightline");
 ax = findall(fig, "Type", "axes");
 center = axesCenterPoint(ax);
 iterations = options.ScenarioIterations;

@@ -124,7 +124,7 @@ classdef ProjectionViewerStereoEyeWorkflowTest < matlab.uitest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             viewer = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             diagnostics = app.alignmentDiagnostics();
 
             testCase.verifyEqual( ...
@@ -138,7 +138,7 @@ classdef ProjectionViewerStereoEyeWorkflowTest < matlab.uitest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             viewer = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             manager = findall(groot, "Tag", ...
                 "ProjectionViewerLayerManagerFigure");
             layer = ProjectionViewerStereoEyeWorkflowTest.findTagged( ...
@@ -184,7 +184,7 @@ classdef ProjectionViewerStereoEyeWorkflowTest < matlab.uitest.TestCase
                 ProjectionViewerStereoEyeWorkflowTest.makeScene());
             drawnow
             viewer = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             viewer = viewer(1);
             menuItem = findall(viewer, "Tag", ...
                 "ProjectionViewerAlignmentPanelMenuItem");
@@ -269,7 +269,7 @@ classdef ProjectionViewerStereoEyeWorkflowTest < matlab.uitest.TestCase
             delete(findall(groot, "Type", "figure", ...
                 "Name", "Alignment Workbench"));
             delete(findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench"));
+                "Name", "Sightline"));
         end
     end
 end

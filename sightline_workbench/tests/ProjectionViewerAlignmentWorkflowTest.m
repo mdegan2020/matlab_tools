@@ -19,7 +19,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             originalRng = rng;
             testCase.addTeardown(@() rng(originalRng));
             rng("default");
-            names = ["Sightline Workbench", "Alignment Workbench"];
+            names = ["Sightline", "Alignment Workbench"];
             for name = names
                 delete(findall(groot, "Type", "figure", "Name", name));
             end
@@ -83,8 +83,6 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentDeleteMatchButton");
             undoCurationButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentUndoCurationButton");
-            denseSurfaceButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
-                fig, "ProjectionViewerAlignmentDenseSurfaceButton");
             surfaceWorkbenchButton = ...
                 ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentSurfaceWorkbenchButton");
@@ -158,9 +156,8 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyTrue(featureOverlayCheckBox.Value);
             testCase.verifyEqual(string(deleteMatchButton.Enable), "on");
             testCase.verifyEqual(string(undoCurationButton.Enable), "on");
-            testCase.verifyEqual(string(denseSurfaceButton.Enable), "off");
-            testCase.verifyEqual(string(denseSurfaceButton.Text), ...
-                "Selected-pair SGM");
+            testCase.verifyEmpty(findall(fig, "Tag", ...
+                "ProjectionViewerAlignmentDenseSurfaceButton"));
             testCase.verifyEqual(string(surfaceWorkbenchButton.Text), ...
                 "Surface Workbench...");
             testCase.verifyEqual(string(surfaceWorkbenchButton.Enable), "off");
@@ -502,8 +499,6 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 fig, "ProjectionViewerAlignmentApplyButton");
             revertButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentRevertButton");
-            denseSurfaceButton = ProjectionViewerAlignmentWorkflowTest.findTagged( ...
-                fig, "ProjectionViewerAlignmentDenseSurfaceButton");
             surfaceWorkbenchButton = ...
                 ProjectionViewerAlignmentWorkflowTest.findTagged( ...
                 fig, "ProjectionViewerAlignmentSurfaceWorkbenchButton");
@@ -529,7 +524,6 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(previewButton.Enable), "off");
             testCase.verifyEqual(string(applyButton.Enable), "off");
             testCase.verifyEqual(string(revertButton.Enable), "off");
-            testCase.verifyEqual(string(denseSurfaceButton.Enable), "off");
             testCase.verifyEqual(string(surfaceWorkbenchButton.Enable), "off");
             testCase.verifyTrue(contains(string(statusLabel.Text), ...
                 "Ready to solve"));
@@ -568,7 +562,6 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(previewButton.Enable), "on");
             testCase.verifyEqual(string(applyButton.Enable), "on");
             testCase.verifyEqual(string(revertButton.Enable), "on");
-            testCase.verifyEqual(string(denseSurfaceButton.Enable), "off");
             testCase.verifyTrue(contains(string(statusLabel.Text), "RMS"));
             testCase.verifyTrue(diagnosticsAfterSolve.Stage.HasSolveResult);
             testCase.verifyEqual( ...
@@ -623,7 +616,6 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
             testCase.verifyLessThan(changedLayerCount, statePreview.LayerCount);
             testCase.verifyEqual( ...
                 previewPerformance.Counters.SampleFcnCalls, 0);
-            testCase.verifyEqual(string(denseSurfaceButton.Enable), "on");
             testCase.verifyEqual(string(surfaceWorkbenchButton.Enable), "on");
 
             surfaceWorkbenchButton.ButtonPushedFcn( ...
@@ -660,7 +652,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets(stateApplied), ...
                 ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets(statePreview), ...
                 AbsTol=ProjectionViewerAlignmentWorkflowTest.Tol);
-            testCase.verifyEqual(string(denseSurfaceButton.Enable), "on");
+            testCase.verifyEqual(string(surfaceWorkbenchButton.Enable), "on");
 
             revertButton.ButtonPushedFcn(revertButton, struct());
             drawnow
@@ -669,7 +661,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
                 ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets(stateReverted), ...
                 ProjectionViewerAlignmentWorkflowTest.viewVectorOffsets(stateBefore), ...
                 AbsTol=ProjectionViewerAlignmentWorkflowTest.Tol);
-            testCase.verifyEqual(string(denseSurfaceButton.Enable), "off");
+            testCase.verifyEqual(string(surfaceWorkbenchButton.Enable), "off");
         end
 
         function testSolveReusesStoredMatchesAfterPairDisable(testCase)
@@ -1361,7 +1353,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
 
     methods (Static, Access = private)
         function closeAlignmentFigures()
-            names = ["Sightline Workbench", "Alignment Workbench"];
+            names = ["Sightline", "Alignment Workbench"];
             for name = names
                 delete(findall(groot, "Type", "figure", "Name", name));
             end
@@ -1389,7 +1381,7 @@ classdef ProjectionViewerAlignmentWorkflowTest < matlab.unittest.TestCase
 
         function fig = findViewerFigure()
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             fig = fig(1);
             if isempty(findall(groot, "Type", "figure", ...
                     "Name", "Alignment Workbench"))

@@ -176,7 +176,7 @@ classdef ProjectionViewerActivePairWorkflowTest < matlab.uitest.TestCase
                 ProjectionViewerActivePairWorkflowTest.makeTiledScene());
             testCase.addTeardown(@() delete(app));
             viewer = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             viewer.Position = [100 100 360 300];
             drawnow
             app.configurePreviewTiling(struct(TileSize=64, ...
@@ -323,7 +323,7 @@ classdef ProjectionViewerActivePairWorkflowTest < matlab.uitest.TestCase
 
         function workbench = showWorkbench()
             viewer = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             menuItem = findall(viewer(1), "Tag", ...
                 "ProjectionViewerAlignmentPanelMenuItem");
             menuItem.MenuSelectedFcn(menuItem, struct());
@@ -399,7 +399,7 @@ classdef ProjectionViewerActivePairWorkflowTest < matlab.uitest.TestCase
             delete(findall(groot, "Type", "figure", ...
                 "Name", "Alignment Workbench"));
             delete(findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench"));
+                "Name", "Sightline"));
         end
     end
 end

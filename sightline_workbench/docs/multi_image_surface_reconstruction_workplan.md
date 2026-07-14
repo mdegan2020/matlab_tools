@@ -19,7 +19,7 @@ and public MATLAB/native geometry fixture are complete on macOS; native
 Windows/WSL, Ceres, MATLAB/MEX, and CUDA evidence remain explicitly unclaimed.
 A7 remains research-only; production application is still gated on
 physical local observability and stability. The current grouped fresh-class
-repository suite passes 759/759 tests. This committed file is the consolidated
+repository suite passes 762/762 tests. This committed file is the consolidated
 implementation source of truth; no `/private/tmp` planning copy is
 authoritative. The completed top-priority corrective queue is
 `docs/real_data_validation_followup_workpack.md`; all six ordered July 13
@@ -1542,7 +1542,8 @@ The synthetic, backend-performance, MI-0 through MI-3, S0 audit, and real-data
 corrective queues are complete. The following list is the historical
 implementation record and remaining native/hardware order:
 
-1. Preserve the current grouped fresh-class baseline, now 759/759 after RD-6.
+1. Preserve the current grouped fresh-class baseline, now 762/762 after the
+   viewer-shell enhancement work pack.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.

@@ -94,7 +94,7 @@ end
 
 function [fig, ax] = viewerGraphics()
 fig = findall(groot, "Type", "figure", ...
-    "Name", "Sightline Workbench");
+    "Name", "Sightline");
 if isempty(fig)
     error("viewer_raster_preview_evaluation:missingViewer", ...
         "Unable to locate the projection viewer figure.");

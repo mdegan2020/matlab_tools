@@ -341,8 +341,11 @@ preview planes, or object ownership.
 | FR-VIEW-023 | The initial camera shall support narrow long-range view angles below the historical 0.05-degree floor when required to frame a small footprint. | Core | T, D |
 | FR-VIEW-024 | Closing the main viewer shall idempotently stop its runtime work and close every viewer-owned child while leaving independent caller-owned figures unchanged. | Core | T |
 | FR-VIEW-025 | Changing the active layer or pair shall reconcile preview LOD against the current camera even when a valid stale surface exists; refinement shall converge without another camera event or a visibility toggle and shall not transiently erase the last valid representation. | Core | T, A |
-| FR-VIEW-026 | In View All, the selected visible layer shall have a yellow projected-footprint outline rendered above the image stack without changing radiometry or serialized scientific state. | Core | T, D |
+| FR-VIEW-026 | In View All, the selected visible layer shall have a yellow projected-footprint outline rendered above the image stack without changing radiometry or serialized scientific state. A checked runtime context command shall toggle that outline, and Single/Pair modes shall suppress it. | Core | T, D |
 | FR-VIEW-027 | The context-menu stereo cursor shall represent one physical world point `Pplane + z*VN`, project it independently into the active physical stereo pair, and display signed meters relative to the plane. While enabled, Shift+wheel shall adjust Z and Shift+Up/Down shall remain available for Tip; when disabled, established wheel bindings shall remain unchanged. | Core | T, D |
+| FR-VIEW-028 | The main viewer figure title shall be `Sightline`. | Core | T, D |
+| FR-VIEW-029 | The viewport context menu shall provide a runtime-only command that inverts desired camera up and resets/reframes the camera without changing plane, source, OPK, image, or backend state. | Core | T, D |
+| FR-VIEW-030 | `ProjectionViewerApp.addImage` shall append a compatible image and `SampleFcn`-backed source geometry to an open viewer, preserve existing layer and camera state, refresh layer/pass/view/pair presentation state, include the new view, and extend Reset. It shall reject invalid size/identity and active correction lifecycles before scene mutation. | Core | T, I |
 
 ### 5.3 Pair controls and Alignment Workbench
 
@@ -361,6 +364,7 @@ preview planes, or object ownership.
 | FR-PAIR-011 | ROI changes shall refilter stored observations using projection-plane match coordinates without rerunning detection when the source evidence is unchanged. | Core | T |
 | FR-PAIR-012 | Overlays shall reproject each endpoint through current geometry and shall remain invariant to layer reordering. | Core | T |
 | FR-PAIR-013 | A pair-only solve shall be labeled diagnostic, preview, or warm-start behavior and shall not be the default durable global adjustment. | Approved | T, I |
+| FR-PAIR-014 | The Alignment Workbench shall launch the scene-bound Surface Workbench for dense and 3-D extraction and shall not expose a competing direct selected-pair SGM execution button. | Core | T, D |
 
 ### 5.4 Pair viewpoint
 
@@ -391,7 +395,7 @@ preview planes, or object ownership.
 | FR-MOTION-012 | Single/Pair presentation masks shall not rewrite stored layer visibility, and returning to View All shall display the current stored visible set exactly. | Approved | T |
 | FR-MOTION-013 | A transient or pinnable identity display shall show layer, sequence position, acquisition time when available, pass, and applied-correction status. | Approved | T, D |
 | FR-MOTION-014 | Persistent status shall identify fallback ordering, stale geometry, missing data, or load failure. | Approved | T, D |
-| FR-MOTION-015 | Edge navigation affordances shall update only on hover-state transition and shall fall back to low-cost persistent controls if hover handling degrades interaction. | Approved | A, D |
+| FR-MOTION-015 | Edge navigation affordances shall be available in both Single and Pair views, update only on hover-state transition, and support low-cost persistent controls when hover mode is disabled or degrades interaction. | Approved | T, A, D |
 | FR-MOTION-016 | Playback shall support Play/Pause, 0.5 through 10 frames per second, and a default of 2 frames per second. | Approved | T, D |
 | FR-MOTION-017 | Playback shall not interpolate, crossfade, or silently skip frames and shall use at most one-frame bounded lookahead. | Approved | T, A |
 | FR-MOTION-018 | Space shall toggle playback only in motion mode; outside motion mode it shall retain its existing hold-to-hide behavior. | Approved | T, D |
@@ -559,6 +563,7 @@ and stability have not been demonstrated; research CorrectionSets cannot Apply.
 | FR-SWB-010 | The Surface Workbench shall expose an explicit Run/Cancel lifecycle that orchestrates requested dense-pair, multi-ray, fusion, uncertainty, and supported DEM stages from authoritative full-source inputs. | Approved | T, D |
 | FR-SWB-011 | Before and after Run, the Workbench shall state exactly which views, pairs, matcher, search policy, reconstruction stage, fusion method, execution path, fallbacks, and products were requested and completed. | Approved | T, D |
 | FR-SWB-012 | The Workbench shall expose retained rectification, disparity/score/confidence, consistency/occlusion, ray/conditioning, reconstruction, fusion, rejection, and uncertainty evidence sufficient to distinguish poor science from empty, failed, unsupported, or cancelled execution. | Approved | T, D |
+| FR-SWB-013 | Dense matching, surface reconstruction, fusion, and 3-D extraction initiated from the viewer shall be configured and executed through the Surface Workbench. | Core | T, D |
 
 ### 5.13 Uncertainty
 
@@ -953,7 +958,7 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 759 of 759 grouped
+At the date of this draft, the repository reports 762 of 762 grouped
 fresh-class tests passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the

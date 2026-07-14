@@ -13,9 +13,9 @@ classdef ProjectionViewMetadataTest < matlab.unittest.TestCase
     methods (TestMethodSetup)
         function closeExistingViewer(testCase)
             delete(findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench"));
+                "Name", "Sightline"));
             testCase.addTeardown(@() delete(findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench")));
+                "Name", "Sightline")));
         end
     end
 
@@ -185,7 +185,7 @@ classdef ProjectionViewMetadataTest < matlab.unittest.TestCase
 
             testCase.verifyEqual(state.LayerCount, 2);
             testCase.verifyNumElements(findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench"), 1);
+                "Name", "Sightline"), 1);
         end
 
         function testRealDataDefinitionsAcceptOptionalMetadata(testCase)

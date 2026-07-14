@@ -10,13 +10,19 @@ multi-pair Run/Cancel path, retained diagnostics/provenance, and synthetic
 five-view structural coverage. Representative-imagery usefulness review remains
 external; see `docs/real_data_validation_followup_workpack.md`.
 
+The original direct `Selected-pair SGM` Alignment Workbench button described
+below is historical. The graphics-free extractor remains supported, but live
+viewer execution now enters through **Surface Workbench...** so matcher,
+surface, fusion, uncertainty, evidence, and 3-D controls share one lifecycle.
+
 ## Purpose
 
 Dense Surface Pack 1 adds a deliberately small first-pass dense stereo product
 after two images have been aligned. It is an analysis and visualization tool,
 not a new backend product contract. The operator selects the moving and
 reference layers in the Alignment Workbench, completes the staged alignment
-through Preview or Apply, and presses `Selected-pair SGM`.
+through Preview or Apply, opens **Surface Workbench...**, selects SGM and the
+desired processing product, and presses Run.
 
 The pack opens two runtime windows:
 
@@ -88,10 +94,10 @@ path is CPU. `UseGPU=true` optionally sends only the SGM inputs to a supported
 `gpuArray` device, gathers disparity immediately, and otherwise records a clean
 CPU fallback. The feature creates no parallel pool.
 
-The button remains disabled when `disparitySGM` is unavailable, before a
-preview/apply/manual aligned state exists, or when the selected pair has fewer
-than three accepted observations. Failures remain non-destructive and are
-reported in Alignment Workbench status/diagnostics.
+The Surface Workbench disables or rejects an SGM run when `disparitySGM` is
+unavailable, the requested pair/evidence is not ready, or preflight fails.
+Failures remain non-destructive and are reported in Surface Workbench
+status/diagnostics.
 
 ## Invariants
 
@@ -153,6 +159,6 @@ results = runTests;
 
 The completed Pack 1 fresh-class run passed all 386 repository tests at that
 milestone. A later MI-1 checkpoint reached 477/477. The current grouped
-fresh-class repository baseline is 719/719; the Pack 1 exploratory contract
+fresh-class repository baseline is 762/762; the Pack 1 exploratory contract
 remains unchanged while later dense, uncertainty, fusion, Workbench, and DEM
 products are documented in the consolidated workplan and focused SDK records.

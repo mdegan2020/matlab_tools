@@ -263,7 +263,7 @@ classdef ProjectionViewerMotionPlaybackWorkflowTest < matlab.uitest.TestCase
 
         function figureHandle = viewer()
             figures = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             figureHandle = figures(1);
         end
 
@@ -284,7 +284,7 @@ classdef ProjectionViewerMotionPlaybackWorkflowTest < matlab.uitest.TestCase
 
         function closeRuntime()
             delete(findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench"));
+                "Name", "Sightline"));
             delete(findall(groot, "Tag", ...
                 "ProjectionViewerLayerManagerFigure"));
             timers = timerfindall("Tag", ...

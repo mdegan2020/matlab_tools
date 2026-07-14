@@ -8,8 +8,8 @@ should not be mistaken for unfinished implementation.
 
 As of July 14, 2026:
 
-- The project directory and main application title are `sightline_workbench`
-  and **Sightline Workbench**.
+- The project directory is `sightline_workbench`; the main application title is
+  **Sightline**.
 - The public `PlanarProjection` and `Projection*` MATLAB APIs retain their
   existing names for compatibility.
 - CPU execution is the required and tested path.
@@ -21,7 +21,7 @@ As of July 14, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 759/759 tests with
+- The latest grouped fresh-class repository suite passes 762/762 tests with
   zero failures and zero incomplete tests.
 - `docs/real_data_validation_followup_workpack.md` is the completed top-priority
   corrective queue. RD-2, RD-3, RD-1, and RD-4 are complete: the default network
@@ -31,9 +31,9 @@ As of July 14, 2026:
   real-data cameras use the side-invariant explicit-plane presentation
   convention, and the default-open Layer Manager now owns selection,
   visibility, runtime View All/Single/Pair presentation, playback, and pair
-  camera tracking. RD-5 now supplies an explicit selected-pair action plus a
-  scene-bound Surface Workbench Run/Cancel, retained evidence, exact pair/method
-  provenance, multi-ray/fusion orchestration, and MAT/JSON export. RD-6 adds a
+  camera tracking. RD-5 now supplies a scene-bound Surface Workbench Run/Cancel,
+  retained evidence, exact pair/method provenance, multi-ray/fusion
+  orchestration, and MAT/JSON export. RD-6 adds a
   runtime-only world-space stereo cursor with stable-pair projection, signed
   plane-normal height, physical-eye marks, bounded controls, and explicit
   invalid states. Independent D2 native CPU work is next.
@@ -148,12 +148,16 @@ selection/order, stored individual and bulk visibility, sequence filtering,
 playback, and runtime-only View All, Single View, and overlapping Pair View
 masks. Pair View owns absolute no-drift camera tracking and re-runs physical-eye
 red/cyan assignment after pair turnover. View All draws a clipped yellow
-selected-footprint outline above the image stack without radiometric rerender.
+selected-footprint outline above the image stack without radiometric rerender;
+the checked viewport command can hide it, and Single/Pair modes suppress it
+automatically. Both Single and Pair modes retain hover or persistent edge
+navigation controls. The main figure title is now `Sightline`.
 The main viewer retains only a compact Tip/Tilt/Twist/Alpha strip and a disabled
 bottom-right OPK overlay so ordinary viewport input passes through.
 
-RD-5 relabels the immediate path as **Selected-pair SGM** and adds a distinct
-one-instance **Surface Workbench...** action. The scene-bound runner uses the
+The Alignment Workbench now exposes only the one-instance **Surface
+Workbench...** launch for dense and 3-D extraction; the former direct
+Selected-pair SGM action has been retired. The scene-bound runner uses the
 existing dense-matcher SDK, stable observation association, multi-ray
 reconstruction, fusion SDK, uncertainty, catalog, and 3-D viewer. Its explicit
 Run/Cancel lifecycle preflights exact stable pairs, matcher/search policies,
@@ -164,6 +168,12 @@ the complete evidence and compact JSON omits only image-sized arrays. The
 deterministic five-image fixture names and processes all ten pairs before
 multi-ray/fusion. No smoothing, hole filling, or forced DEM is used, and
 representative private imagery remains an external usefulness gate.
+
+The viewport context menu also provides a runtime-only **Invert desired up and
+reset camera** safeguard. `ProjectionViewerApp.addImage` appends compatible
+image/source-geometry inputs to an open viewer, regenerates view/pair and Layer
+Manager state, preserves existing scientific layer state and camera pose, and
+extends Reset. Addition is rejected while a correction lifecycle is active.
 
 RD-6 adds checked **Stereo cursor** and **Reposition stereo cursor here**
 viewport commands. A plane anchor and signed `z` define exactly one world point

@@ -116,7 +116,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 759 tests;
+- the latest grouped fresh-class repository validation passes all 762 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate;
@@ -249,7 +249,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 759 passing tests with no failures or incomplete
+fresh-class baseline is 762 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -327,11 +327,13 @@ B6 adds a strict graphics-independent surface-product catalog and selection
 model plus a separate floating Surface Workbench. RD-5 connects it directly to
 accepted active-scene pair evidence with explicit Run/Cancel processing over
 the existing matcher, multi-ray, fusion, uncertainty, and catalog SDKs. The
-viewer distinguishes one-click **Selected-pair SGM** from the planned
-**Surface Workbench...** path; preflight and retained evidence state exact
-pairs, methods, search/execution/fallback policy, counts, rejection states, and
-provenance. The lazy runtime-only 3-D viewer and MAT/compact-JSON export retain
-the complete scientific product without serializing graphics. See
+Alignment Workbench launches **Surface Workbench...**; dense matching,
+reconstruction, fusion, and 3-D extraction are configured and run there rather
+than through a competing one-click alignment action. Preflight and retained
+evidence state exact pairs, methods, search/execution/fallback policy, counts,
+rejection states, and provenance. The lazy runtime-only 3-D viewer and
+MAT/compact-JSON export retain the complete scientific product without
+serializing graphics. See
 `docs/surface_workbench.md`.
 
 S7/B7 adds strict WGS84/DTED2 DEM ingestion with explicit HAE or MSL/EGM96
@@ -632,10 +634,10 @@ use the exact singular tags below. `findall` is intentional because pooled
 surfaces are hidden:
 
 ```matlab
-fig = findall(groot, Type="figure", Name="Sightline Workbench");
-assert(~isempty(fig), "Sightline Workbench figure not found.");
+fig = findall(groot, Type="figure", Name="Sightline");
+assert(~isempty(fig), "Sightline figure not found.");
 ax = findall(fig(1), Type="axes");
-assert(~isempty(ax), "Sightline Workbench axes not found.");
+assert(~isempty(ax), "Sightline axes not found.");
 
 surfaces = findall(ax(1), Type="surface");
 wantedTags = ["ProjectionViewerPreviewTileSurface", ...
@@ -914,11 +916,10 @@ Core controls:
   revert updates. Alignment-panel overlay toggles show accepted lines and
   feature points by default, with optional faint rejected matches and post-solve
   worst-residual highlights.
-  After Preview or Apply, the selected pair's `Dense surface` action renders
-  fresh bounded alignment working images, estimates dense correspondences with
-  CPU `disparitySGM`, and triangulates the corresponding corrected source rays.
-  It opens a masked intensity image and a metric 3-D surface whose Z coordinate
-  is height above the current projection plane. The result and its graphics are
+  After Preview or Apply, **Surface Workbench...** opens the scene-bound dense
+  and 3-D workflow. The operator chooses the pair schedule, matcher, search,
+  reconstruction, fusion, and output there; the Alignment Workbench no longer
+  exposes a competing direct selected-pair SGM action. Results and graphics are
   runtime analysis products only; they are not stored in scene/viewer state and
   never enter backend rendering. See `docs/dense_surface_feature_pack.md` for
   the initial rectification assumptions and quality limitations.
@@ -1230,7 +1231,9 @@ The default-open nonmodal `Layer Manager` owns layer selection, stack ordering,
 individual and bulk visibility, pass/per-view sequence inclusion, playback,
 loop/rate, and Pair View camera tracking. `View All` shows the exact stored
 visible set and outlines the selected visible footprint in yellow above the
-image stack. `Single View` shows one eligible frame and `Pair View` shows an
+image stack. The viewport context command **Active layer outline** can hide or
+restore that runtime-only overlay; Single and Pair views suppress it
+automatically. `Single View` shows one eligible frame and `Pair View` shows an
 overlapping adjacent pair, regardless of stored visibility; both masks are
 runtime-only. Returning to View All restores the current stored visible set.
 Caller order is preserved when supplied programmatically; otherwise frames
@@ -1238,8 +1241,9 @@ remain grouped by pass and are ordered by comparable acquisition time, with
 visible stable-order warnings. Plain Left/Right selects layers in View All,
 steps frames in Single View, and steps exactly reversible overlapping pairs in
 Pair View. Shift+Arrows retains Tip/Tilt and Loop is off by default. Edge
-buttons can be hover-activated or persistently visible; identity is transient
-or pinnable. Escape returns to View All and restores the pre-presentation
+buttons are available in both Single and Pair views and can be hover-activated
+or persistently visible; identity is transient or pinnable. Escape returns to
+View All and restores the pre-presentation
 camera and selection without closing the Layer Manager.
 Play/Pause adds operator-selected 0.5-10 fps playback with a 2 fps default;
 acquisition time continues to control ordering and labels, not playback delay.
@@ -1255,7 +1259,23 @@ boundary. Playback remains direct single-frame presentation: no interpolation,
 crossfade, or display-only cache product can enter viewer serialization or a
 backend/scientific input.
 
-Closing the main Sightline Workbench window uses the same idempotent cleanup as
+An open viewer can append another compatible image without reconstructing the
+app shell:
+
+```matlab
+result = app.addImage(imageData, sourceGeometry, struct( ...
+    Name="Image 3", ViewId="view-3", PassId="pass-a", ...
+    AcquisitionStartTime=12.5, LineRateHz=250));
+```
+
+`sourceGeometry` uses the same `ImageSize` and `SampleFcn` contract as scene
+layers. The method preserves existing layer state and camera pose, selects and
+includes the new view, refreshes pass and pair schedules, and expands the Reset
+baseline. It rejects image/geometry size mismatch, duplicate identity, and an
+active proposed/accepted/applied correction rather than silently invalidating
+scientific history.
+
+Closing the main `Sightline` window uses the same idempotent cleanup as
 programmatic app deletion. It stops preview, identity, and playback timers,
 detaches callbacks, exits transient presentation modes, and closes its owned
 Alignment Workbench, Layer Manager, help, and dense-result windows. Closing a
@@ -1279,6 +1299,10 @@ ground-corner handedness stable even if an equivalent plane definition reverses
 `VN`; image rows still increase downward, and a distinct caller camera remains
 authoritative. The corrected basis is presentation-only and is not written
 back into the scientific scene.
+Until private-data confirmation is complete, **Invert desired up and reset
+camera** in the viewport context menu flips the presentation-only desired-up
+direction and reframes the current projection. The checked override is
+runtime-only and does not modify plane, source, OPK, image, or backend state.
 The initial view translates the camera position and target together to center
 the visible projected footprint, preserves the configured view direction and
 camera distance, and fits that footprint to half the viewport. This also

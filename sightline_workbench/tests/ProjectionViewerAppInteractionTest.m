@@ -30,13 +30,14 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             viewer = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             manager = findall(groot, "Tag", ...
                 "ProjectionViewerLayerManagerFigure");
             alignmentMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAlignmentPanelMenuItem");
 
             testCase.verifyNumElements(manager, 1);
+            testCase.verifyEqual(string(viewer.Name), "Sightline");
             testCase.verifyEqual(string(manager.Name), "Layer Manager");
             mode = findall(manager, "Tag", ...
                 "ProjectionViewerLayerManagerModeDropDown");
@@ -81,7 +82,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
 
             testCase.verifyEqual(string(ax.Title.String), "");
@@ -102,7 +103,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             surfaceHandle = findall(ax, "Type", "surface");
             saveMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
@@ -117,6 +118,10 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 "ProjectionViewerHelpMenuItem");
             crosshairMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerCrosshairMenuItem");
+            outlineMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerActiveLayerOutlineMenuItem");
+            invertUpMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerInvertCameraUpMenuItem");
             alignmentPanelMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAlignmentPanelMenuItem");
             blendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
@@ -140,11 +145,114 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Cycle"));
             testCase.verifyEmpty(ProjectionViewerAppInteractionTest.findButton(fig, "Reset"));
             testCase.verifyEqual(string(crosshairMenu.Checked), "off");
+            testCase.verifyEqual(string(outlineMenu.Text), ...
+                "Active layer outline");
+            testCase.verifyEqual(string(outlineMenu.Checked), "on");
+            testCase.verifyEqual(string(invertUpMenu.Text), ...
+                "Invert desired up and reset camera");
+            testCase.verifyEqual(string(invertUpMenu.Checked), "off");
             testCase.verifyEqual(string(alignmentPanelMenu.Checked), "off");
             testCase.verifyEqual(alphaBlendMenu.Parent, blendMenu);
             testCase.verifyEqual(anaglyphBlendMenu.Parent, blendMenu);
             testCase.verifyEqual(string(alphaBlendMenu.Checked), "on");
             testCase.verifyEqual(string(anaglyphBlendMenu.Checked), "off");
+        end
+
+        function testInvertDesiredUpResetsCameraWithoutScientificMutation(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerAppInteractionTest.makeTwoImageScene());
+            testCase.addTeardown(@() delete(app));
+            drawnow
+
+            fig = findall(groot, "Type", "figure", "Name", "Sightline");
+            ax = findall(fig, "Type", "axes");
+            invertUpMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerInvertCameraUpMenuItem");
+            initialState = app.exportState();
+            initialUp = initialState.Camera.UpVector / ...
+                norm(initialState.Camera.UpVector);
+            ax.CameraPosition = ax.CameraPosition + [13 -7 5];
+            ax.CameraTarget = ax.CameraTarget + [2 3 -4];
+
+            invertUpMenu.MenuSelectedFcn(invertUpMenu, struct());
+            drawnow
+            invertedState = app.exportState();
+            invertedUp = invertedState.Camera.UpVector / ...
+                norm(invertedState.Camera.UpVector);
+
+            testCase.verifyEqual(string(invertUpMenu.Checked), "on");
+            testCase.verifyEqual(dot(invertedUp, initialUp), -1, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+            testCase.verifyEqual(invertedState.View.TwistDegrees, 0);
+            testCase.verifyEqual(invertedState.Layers, initialState.Layers);
+            testCase.verifyEqual(invertedState.Projection, ...
+                initialState.Projection);
+            testCase.verifyFalse(isfield(invertedState, "CameraUpInverted"));
+
+            invertUpMenu.MenuSelectedFcn(invertUpMenu, struct());
+            drawnow
+            restoredState = app.exportState();
+            restoredUp = restoredState.Camera.UpVector / ...
+                norm(restoredState.Camera.UpVector);
+            testCase.verifyEqual(string(invertUpMenu.Checked), "off");
+            testCase.verifyEqual(dot(restoredUp, initialUp), 1, ...
+                AbsTol=ProjectionViewerAppInteractionTest.Tol);
+        end
+
+        function testAddImageExpandsLiveSceneAndResetBaseline(testCase)
+            scene = ProjectionViewerAppInteractionTest.makeTwoImageScene();
+            originalViewId = scene.layers(1).ViewId;
+            app = ProjectionViewerApp(scene);
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            stateBefore = app.exportState();
+            imageData = uint8(reshape(1:90, 5, 6, 3));
+            sourceGeometry = ...
+                ProjectionViewerHarness.createSyntheticSourceGeometry([5 6]);
+            wrongGeometry = ...
+                ProjectionViewerHarness.createSyntheticSourceGeometry([4 6]);
+
+            testCase.verifyError(@() app.addImage( ...
+                imageData, wrongGeometry), ...
+                "ProjectionViewerHarness:imageGeometrySizeMismatch");
+            testCase.verifyEqual(app.exportState(), stateBefore);
+            testCase.verifyError(@() app.addImage( ...
+                imageData, sourceGeometry, ...
+                struct(ViewId=originalViewId)), ...
+                "ProjectionViewMetadata:duplicateViewId");
+            testCase.verifyEqual(app.exportState(), stateBefore);
+            options = struct(Name="Added image", ViewId="added-view", ...
+                PassId="added-pass", AcquisitionStartTime=3, ...
+                LineRateHz=2);
+            result = app.addImage(imageData, sourceGeometry, options);
+            drawnow
+            stateAfter = app.exportState();
+            diagnostics = app.performanceDiagnostics();
+            manager = findall(groot, "Tag", ...
+                "ProjectionViewerLayerManagerFigure");
+            tableControl = findall(manager, "Tag", ...
+                "ProjectionViewerMotionTable");
+            passControl = findall(manager, "Tag", ...
+                "ProjectionViewerMotionPassDropDown");
+            addedRow = string(tableControl.Data.ViewId) == "added-view";
+
+            testCase.verifyEqual(result.LayerIndex, 3);
+            testCase.verifyEqual(result.LayerCount, 3);
+            testCase.verifyEqual(result.PairCount, 3);
+            testCase.verifyEqual(result.ViewId, "added-view");
+            testCase.verifyEqual(stateAfter.LayerCount, 3);
+            testCase.verifyEqual(stateAfter.Layers(1:2), ...
+                stateBefore.Layers);
+            testCase.verifyEqual(stateAfter.Camera, stateBefore.Camera);
+            testCase.verifyEqual(diagnostics.Viewer.LayerCount, 3);
+            testCase.verifyTrue(tableControl.Data.Include(addedRow));
+            testCase.verifyTrue(ismember("added-pass", ...
+                string(passControl.ItemsData)));
+            resetMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
+                "ProjectionViewerResetMenuItem");
+            resetMenu.MenuSelectedFcn(resetMenu, struct());
+            drawnow
+            testCase.verifyEqual(app.exportState().LayerCount, 3);
         end
 
         function testAlignmentContextMenuFocusesOneWorkbench(testCase)
@@ -154,7 +262,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             alignmentPanelMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAlignmentPanelMenuItem");
 
@@ -209,7 +317,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             helpMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerHelpMenuItem");
 
@@ -240,7 +348,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(callerFigure));
             drawnow
             viewer = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
 
             alignmentMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAlignmentPanelMenuItem");
@@ -280,7 +388,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             app = ProjectionViewerApp( ...
                 ProjectionViewerAppInteractionTest.makeTwoImageScene());
             viewer = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             alignmentMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAlignmentPanelMenuItem");
             alignmentMenu.MenuSelectedFcn(alignmentMenu, struct());
@@ -316,7 +424,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             crosshairMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerCrosshairMenuItem");
@@ -366,7 +474,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
 
             testCase.verifyEqual(string(layerDropDown.Tag), ...
@@ -383,7 +491,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
             tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
             twistSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 4);
@@ -403,7 +511,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
             tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
@@ -434,7 +542,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
 
             testCase.verifyNotEmpty(ax);
@@ -454,7 +562,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             fillFraction = ProjectionViewerAppInteractionTest.surfaceViewportFill(ax);
 
@@ -471,7 +579,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
 
@@ -497,7 +605,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             visibleCheckBox = findall(groot, "Tag", ...
                 "ProjectionViewerLayerManagerVisibleCheckBox");
@@ -530,7 +638,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             visibleCheckBox = findall(groot, "Tag", ...
                 "ProjectionViewerLayerManagerVisibleCheckBox");
             moveUpButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
@@ -557,7 +665,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
                 ax, scene);
@@ -628,7 +736,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             twistSlider = ...
                 ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 4);
@@ -668,7 +776,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             anaglyphBlendMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerAnaglyphBlendMenuItem");
@@ -718,7 +826,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
             moveUpButton = ProjectionViewerAppInteractionTest.findTaggedComponent( ...
                 fig, "ProjectionViewerMoveLayerUpButton");
@@ -753,7 +861,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             twistSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 4);
             surfaceHandle = findall(ax, "Type", "surface");
@@ -798,7 +906,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
             surfaceHandle = findall(ax, "Type", "surface");
@@ -837,7 +945,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
             surfaceHandle = findall(ax, "Type", "surface");
@@ -876,7 +984,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
             tiltSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 3);
@@ -938,7 +1046,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             visibilityBefore = [app.exportState().Layers.Visible];
             fig.CurrentObject = ax;
@@ -963,7 +1071,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             initial = app.exportState();
             fig.CurrentObject = ax;
@@ -995,7 +1103,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             tipSlider = ...
                 ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
             initial = app.exportState();
@@ -1022,7 +1130,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
             alphaSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 5);
@@ -1060,7 +1168,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
             alphaSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 5);
@@ -1086,7 +1194,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
                 ax, scene);
@@ -1119,7 +1227,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             initialCameraPosition = campos(ax);
             initialCameraTarget = camtarget(ax);
@@ -1168,7 +1276,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             alphaSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 5);
 
@@ -1219,7 +1327,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             opkLabel = ProjectionViewerAppInteractionTest.findOpkLabel(fig);
             ifovDegrees = ProjectionViewerAppInteractionTest.layerIfovDegrees( ...
@@ -1316,7 +1424,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             opkLabel = ProjectionViewerAppInteractionTest.findOpkLabel(fig);
             initialCameraPosition = campos(ax);
@@ -1373,7 +1481,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
 
             fig.WindowKeyPressFcn(fig, ...
@@ -1484,7 +1592,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
             tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
@@ -1591,7 +1699,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
             tileSurfaces = findall(ax, "Type", "surface", ...
@@ -1636,7 +1744,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.addTeardown(@() delete(app));
             drawnow
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             tileSurfaces = findall(ax, "Type", "surface", ...
                 "Tag", "ProjectionViewerPreviewTileSurface");
@@ -1692,7 +1800,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             layerDropDown = ProjectionViewerAppInteractionTest.findLayerDropDown(fig);
             tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
@@ -1734,7 +1842,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             layerSurfaces = ProjectionViewerAppInteractionTest.findLayerSurfaces( ...
                 ax, scene);
@@ -1756,7 +1864,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             drawnow
 
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig, "Type", "axes");
             tipSlider = ProjectionViewerAppInteractionTest.findSliderInColumn(fig, 2);
             initialCameraViewAngle = ax.CameraViewAngle;
@@ -1792,7 +1900,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 end
                 delete(timerObject);
             end
-            figureNames = ["Sightline Workbench" "Alignment Workbench" ...
+            figureNames = ["Sightline" "Alignment Workbench" ...
                 "Projection Viewer Help" "Layer Manager"];
             for figureName = figureNames
                 delete(findall(groot, "Type", "figure", ...

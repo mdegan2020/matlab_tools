@@ -233,7 +233,7 @@ classdef ProjectionViewerStereoCursorWorkflowTest < matlab.uitest.TestCase
 
         function viewer = viewer()
             viewer = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             viewer = viewer(1);
         end
 

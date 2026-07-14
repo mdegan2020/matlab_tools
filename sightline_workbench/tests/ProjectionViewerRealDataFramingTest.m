@@ -363,7 +363,7 @@ classdef ProjectionViewerRealDataFramingTest < matlab.unittest.TestCase
 
         function ax = viewerAxes()
             fig = findall(groot, "Type", "figure", ...
-                "Name", "Sightline Workbench");
+                "Name", "Sightline");
             ax = findall(fig(1), "Type", "axes");
             ax = ax(1);
         end

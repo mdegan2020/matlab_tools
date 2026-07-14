@@ -625,9 +625,9 @@ evidence.
 
 #### RD-5 implementation evidence
 
-The Alignment Workbench action is now explicitly **Selected-pair SGM**, and a
-separate **Surface Workbench...** action opens or focuses one scene-bound
-Workbench with the active stable pair selected. The new
+Post-pack shell consolidation retired the direct **Selected-pair SGM** action.
+**Surface Workbench...** now opens or focuses the sole scene-bound dense and
+3-D extraction workflow with the active stable pair selected. The
 `ProjectionSurfaceWorkbenchRunner` binds the existing matcher, association,
 multi-ray, fusion, uncertainty, catalog, and viewer components. The Workbench
 now owns an explicit Run/Cancel lifecycle; catalog-only construction remains
@@ -721,9 +721,9 @@ framing now waits for the resolved UIAxes viewport through a guarded one-shot
 post-layout graphics event and refreshes tiles only for tiled layers.
 
 Fresh-class acceptance passes `coreGeometryState` 147/147, `alignment`
-185/185, `backendSurface` 246/246, `viewerAlignmentUi` 75/75,
-`viewerPresentationWorkflows` 72/72, and `viewerPerformancePrecision` 34/34,
-totaling 759/759 with zero failures or incomplete tests. MATLAB Code Analyzer
+185/185, `backendSurface` 246/246, `viewerAlignmentUi` 77/77,
+`viewerPresentationWorkflows` 73/73, and `viewerPerformancePrecision` 34/34,
+totaling 762/762 with zero failures or incomplete tests. MATLAB Code Analyzer
 reports zero issues for every changed MATLAB source, test, and manifest file.
 
 ## Likely Code And Test Touchpoints
