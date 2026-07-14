@@ -330,15 +330,19 @@ preview planes, or object ownership.
 | FR-VIEW-012 | Alpha changes shall not rebuild source geometry or select tiles solely because alpha changed. | Core | T |
 | FR-VIEW-013 | A camera-only interaction shall not alter serializable scientific geometry. | Core | T |
 | FR-VIEW-014 | The viewer shall expose bounded runtime performance diagnostics without adding those diagnostics to serializable scene state. | Core | T, I |
-| FR-VIEW-015 | Mouse-wheel and drag interactions shall provide zoom and pan; documented modifier-wheel interactions shall provide plane Tip, plane Tilt, and camera Twist. | Core | T, D |
+| FR-VIEW-015 | Mouse-wheel and drag interactions shall provide zoom and pan; documented modifier-wheel interactions shall provide plane Tip, plane Tilt, and camera Twist except for the explicit stereo-cursor override in FR-VIEW-027. | Core | T, D |
 | FR-VIEW-016 | The viewer shall support projection-plane layer translation through W/A/S/D and the documented modifier-drag interaction. | Core | T, D |
 | FR-VIEW-017 | The viewer shall support selected-layer omega, phi, and kappa adjustment through the documented keyboard and modifier-drag interactions. | Core | T, D |
 | FR-VIEW-018 | The viewer shall support active-layer selection, stack reordering, visibility, alpha, single-layer cycling, temporary hold-to-hide, and complete Reset behavior. | Core | T, D |
-| FR-VIEW-019 | The viewport context menu shall provide state Save/Load, Reset, Help, Crosshair, workbench visibility, layer cycling, and supported blend-mode commands. | Core | T, D |
+| FR-VIEW-019 | The viewport context menu shall provide state Save/Load, Reset, Help, Crosshair, direct open/focus actions for supported workbenches, stereo-cursor state, layer presentation, and supported blend-mode commands. | Core | T, D |
 | FR-VIEW-020 | Save and Load shall round-trip the documented viewer state, including selection/order, plane Tip/Tilt, camera Twist/pose, visibility, alpha, blend, projection offsets, and applied angular offsets. | Core | T |
 | FR-VIEW-021 | Camera Twist shall support the approved orientation range through at least plus or minus 85 degrees. | Core | T, D |
 | FR-VIEW-022 | When an oblique explicit plane is supplied without a caller camera pose, the initial camera shall orient the plane naturally upright and fit the projected footprint. | Core | T, D |
 | FR-VIEW-023 | The initial camera shall support narrow long-range view angles below the historical 0.05-degree floor when required to frame a small footprint. | Core | T, D |
+| FR-VIEW-024 | Closing the main viewer shall idempotently stop its runtime work and close every viewer-owned child while leaving independent caller-owned figures unchanged. | Approved | T |
+| FR-VIEW-025 | Changing the active layer or pair shall reconcile preview LOD against the current camera even when a valid stale surface exists; refinement shall converge without another camera event or a visibility toggle and shall not transiently erase the last valid representation. | Approved | T, A |
+| FR-VIEW-026 | In View All, the selected visible layer shall have a yellow projected-footprint outline rendered above the image stack without changing radiometry or serialized scientific state. | Approved | T, D |
+| FR-VIEW-027 | The context-menu stereo cursor shall represent one physical world point `Pplane + z*VN`, project it independently into the active physical stereo pair, and display signed meters relative to the plane. While enabled, Shift+wheel shall adjust Z and Shift+Up/Down shall remain available for Tip; when disabled, established wheel bindings shall remain unchanged. | Approved | T, D |
 
 ### 5.3 Pair controls and Alignment Workbench
 
@@ -362,10 +366,10 @@ preview planes, or object ownership.
 
 | ID | Requirement | Class | Verify |
 | --- | --- | --- | --- |
-| FR-PVIEW-001 | The workbench shall provide a pair-viewpoint command and a one-step restore-camera command. | Approved | T, D |
+| FR-PVIEW-001 | The viewer and Layer Manager shall provide a pair-viewpoint command and a one-step restore-camera command. | Approved | T, D |
 | FR-PVIEW-002 | Pair viewpoint shall use representative origins over shared overlap where available and shall fall back to the documented representative-origin rule. | Approved | T |
 | FR-PVIEW-003 | Pair viewpoint shall place the camera at the origin midpoint, aim at the common-footprint centroid, derive stable up from the current plane, and fit the footprint with padding. | Approved | T, D |
-| FR-PVIEW-004 | Follow active pair shall be optional, runtime-only, and disabled by default. | Approved | T |
+| FR-PVIEW-004 | Track camera shall be owned by Pair View in the Layer Manager, shall be optional and runtime-only, and shall be disabled by default. | Approved | T |
 | FR-PVIEW-005 | Manual camera movement shall suspend following for the current pair; subsequent pair navigation shall resume following when enabled. | Approved | T, D |
 | FR-PVIEW-006 | Pair viewpoint shall disable with an explanation when required overlap or geometry is unavailable. | Approved | T, D |
 
@@ -376,23 +380,27 @@ preview planes, or object ownership.
 | FR-MOTION-001 | Shift+Up/Down shall adjust Tip and Shift+Left/Right shall adjust Tilt by the configured existing increment. | Approved | T, D |
 | FR-MOTION-002 | In normal mode, Left/Right shall select the previous/next layer without changing visibility. | Approved | T, D |
 | FR-MOTION-003 | In normal mode, Up/Down shall perform the documented vertical layer nudge while existing W/A/S/D controls remain available. | Approved | T, D |
-| FR-MOTION-004 | Motion-imagery mode shall be launched contextually and shall not add permanent controls to the main viewer. | Approved | D, I |
-| FR-MOTION-005 | Motion-imagery mode shall present one aligned, currently applied image geometry at a time with a fixed viewer camera and physical plane. | Approved | T, D |
+| FR-MOTION-004 | The separate nonmodal Layer Manager shall replace the Motion Imagery window, open by default as a viewer-owned child, and keep layer/presentation controls off the main viewer bar. | Approved | T, D |
+| FR-MOTION-005 | Single View shall present one aligned, currently applied image geometry at a time with a fixed viewer camera and physical plane unless Track camera is explicitly enabled for Pair View. | Approved | T, D |
 | FR-MOTION-006 | Motion sequence membership shall be explicit and independent of current visibility, shall default to all eligible views, and shall permit pass and per-view filtering. | Approved | T |
-| FR-MOTION-007 | Motion mode shall require at least two eligible frames and shall explain why it is unavailable otherwise. | Approved | T, D |
+| FR-MOTION-007 | Single View shall require at least one eligible frame and Pair View at least two; unavailable states shall explain the missing requirement. | Approved | T, D |
 | FR-MOTION-008 | Caller-supplied order shall be authoritative; otherwise the sequence shall use comparable acquisition time within pass followed by a stable documented fallback. | Approved | T |
 | FR-MOTION-009 | The sequence shall not interleave incomparable absolute and relative clocks as if they shared one time basis. | Approved | T |
-| FR-MOTION-010 | Left/Right shall step frames in motion mode; Up/Down shall not mutate layers in motion mode; Shift+Arrows shall retain Tip/Tilt behavior. | Approved | T, D |
+| FR-MOTION-010 | In View All, Left/Right shall select layers and Up/Down shall retain the normal nudge; in Single View, Left/Right shall step frames; in Pair View, Left/Right shall step overlapping pairs; Shift+Arrows shall retain Tip/Tilt throughout. | Approved | T, D |
 | FR-MOTION-011 | Motion stepping shall not wrap by default; a runtime Loop option shall enable wrapping. | Approved | T |
-| FR-MOTION-012 | Entry shall snapshot visibility, active layer, blend/anaglyph, stereo, and presentation state, and exit/close shall restore that state exactly for surviving layers. | Approved | T |
+| FR-MOTION-012 | Single/Pair presentation masks shall not rewrite stored layer visibility, and returning to View All shall display the current stored visible set exactly. | Approved | T |
 | FR-MOTION-013 | A transient or pinnable identity display shall show layer, sequence position, acquisition time when available, pass, and applied-correction status. | Approved | T, D |
 | FR-MOTION-014 | Persistent status shall identify fallback ordering, stale geometry, missing data, or load failure. | Approved | T, D |
 | FR-MOTION-015 | Edge navigation affordances shall update only on hover-state transition and shall fall back to low-cost persistent controls if hover handling degrades interaction. | Approved | A, D |
 | FR-MOTION-016 | Playback shall support Play/Pause, 0.5 through 10 frames per second, and a default of 2 frames per second. | Approved | T, D |
 | FR-MOTION-017 | Playback shall not interpolate, crossfade, or silently skip frames and shall use at most one-frame bounded lookahead. | Approved | T, A |
 | FR-MOTION-018 | Space shall toggle playback only in motion mode; outside motion mode it shall retain its existing hold-to-hide behavior. | Approved | T, D |
-| FR-MOTION-019 | Escape shall stop and exit motion mode, and manual stepping shall pause playback before moving once. | Approved | T |
+| FR-MOTION-019 | Escape shall stop playback and return presentation to View All without closing the default-open Layer Manager; manual stepping shall pause playback before moving once. | Approved | T |
 | FR-MOTION-020 | Playback shall pause with an explicit reason on focus loss, sequence/layer mutation, missing data, or load failure. | Approved | T, D |
+| FR-MOTION-021 | View All shall display exactly the layers whose stored `Visible` state is true and shall provide individual visibility plus All visible and None visible bulk actions. | Approved | T, D |
+| FR-MOTION-022 | Single View and Pair View shall temporarily present their scheduled layer or pair regardless of stored visibility without mutating that stored visibility. | Approved | T |
+| FR-MOTION-023 | Pair stepping shall choose the adjacent scheduled pair and then assign red/left and cyan/right from physical-eye geometry, independent of temporal order, layer order, and moving/reference role. | Approved | T |
+| FR-MOTION-024 | View All, Single View, and Pair View shall be runtime-only presentation modes, with View All as the Layer Manager default. | Approved | T, D |
 
 ### 5.6 Sparse alignment and filtering
 
@@ -547,6 +555,10 @@ and stability have not been demonstrated; research CorrectionSets cannot Apply.
 | FR-SWB-006 | Uncertainty ellipsoids or principal-axis glyphs shall be limited to selected or bounded subsets to preserve responsiveness. | Approved | T, A |
 | FR-SWB-007 | Interactive decimation shall not discard or overwrite the complete authoritative result. | Approved | T |
 | FR-SWB-008 | Graphics state for surface visualization shall remain runtime-only. | Approved | T, I |
+| FR-SWB-009 | The active viewer shall directly open or focus one scene-bound Surface Workbench and preselect the active pair without implying that a product has already been computed. | Approved | T, D |
+| FR-SWB-010 | The Surface Workbench shall expose an explicit Run/Cancel lifecycle that orchestrates requested dense-pair, multi-ray, fusion, uncertainty, and supported DEM stages from authoritative full-source inputs. | Approved | T, D |
+| FR-SWB-011 | Before and after Run, the Workbench shall state exactly which views, pairs, matcher, search policy, reconstruction stage, fusion method, execution path, fallbacks, and products were requested and completed. | Approved | T, D |
+| FR-SWB-012 | The Workbench shall expose retained rectification, disparity/score/confidence, consistency/occlusion, ray/conditioning, reconstruction, fusion, rejection, and uncertainty evidence sufficient to distinguish poor science from empty, failed, unsupported, or cancelled execution. | Approved | T, D |
 
 ### 5.13 Uncertainty
 
@@ -971,6 +983,8 @@ macOS; Windows/WSL/Ceres/MEX/CUDA evidence remains gated.
 This snapshot is informative and may become stale. project_status.md is the
 authoritative implementation-status record. The July 13 corrective queue is
 `docs/real_data_validation_followup_workpack.md`; it tracks an open
-`FR-VIEW-022` explicit-plane initial-camera orientation regression and bounded
-multi-image network-solve performance/progress work while reserving its first
-pack for additional operator findings.
+`FR-VIEW-022` explicit-plane initial-camera orientation regression, bounded
+multi-image network-solve performance/progress, frame-change LOD and lifecycle
+correctness, Layer Manager/viewer-shell changes, dense-surface quality and
+evidence recovery, and a stereo cursor. Its presentation decisions are resolved
+and its ordered implementation queue is ready.

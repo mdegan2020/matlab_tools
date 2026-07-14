@@ -24,9 +24,11 @@ As of July 13, 2026:
 - The latest grouped fresh-class repository suite passes 719/719 tests with zero
   failures and zero incomplete tests.
 - `docs/real_data_validation_followup_workpack.md` is the active top-priority
-  corrective queue. It reserves its first pack for the user's July 13 real-data
-  test findings and already records the explicit-plane initial-camera
-  orientation regression and unbounded five-image network-solve cost.
+  corrective queue. The July 13 real-data findings are incorporated as six
+  ordered packs: network-solve performance, frame-change LOD and window
+  lifecycle, explicit-plane camera orientation, Layer Manager/viewer-shell
+  revision, dense-surface quality/diagnostics, and a stereo cursor. The
+  presentation decisions are resolved and RD-2 is ready to begin.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
   existing viewer launch signature and legacy `LayerId` contracts.
@@ -202,9 +204,10 @@ consolidated product roadmap remains
 `docs/multi_image_surface_reconstruction_workplan.md`; its completed and gated
 items are preserved there. The active corrective queue is now
 `docs/real_data_validation_followup_workpack.md`, ahead of independent D2 work.
-Its RD-0 slot awaits the user's July 13 test findings; RD-1 records the
-explicit-plane camera-up regression and RD-2 records bounded network-solve
-performance/progress work. MI-0 through MI-3, A2
+Its July 13 operator findings are incorporated, with RD-2 network-solve
+optimization first, followed by RD-3 LOD/lifecycle correctness, RD-1 camera-up
+orientation, RD-4 Layer Manager/viewer shell, RD-5 dense-surface recovery, and
+RD-6 stereo cursor. MI-0 through MI-3, A2
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
 A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are

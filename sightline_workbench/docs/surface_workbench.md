@@ -4,6 +4,13 @@ B6 provides a separate floating Surface Workbench for inspecting B5 multi-ray
 and S6 fusion products. It does not add controls to the main projection viewer,
 and it does not make graphics state part of any scientific value.
 
+Current boundary: B6 is a programmatic, post-computation inspector. The main
+viewer does not currently launch it, and its processing selectors do not run
+the dense/multi-ray/fusion pipeline. A caller must first construct a completed
+`ProjectionSurfaceProductCatalog` and pass it to the app. Viewer launch wiring,
+scene-bound requests, and an explicit Run/Cancel processing lifecycle are open
+RD-5 corrective work in `real_data_validation_followup_workpack.md`.
+
 ## Product boundary
 
 `ProjectionSurfaceProductCatalog.create` adapts one authoritative
@@ -75,7 +82,9 @@ settings, processing/uncertainty/fusion/DEM/output controls, a product table,
 diagnostics, relative cost and memory estimates, progress, cooperative cancel,
 and a lazy **Open 3-D viewer** action. `setProgress`, `requestCancel`, and
 `isCancellationRequested` are runtime hooks suitable for the S6 callback
-contract; they are absent from `modelState`.
+contract; they are absent from `modelState`. These controls select and inspect
+catalog/model state; there is currently no GUI Run action or automatic scene
+pipeline orchestration.
 
 `ProjectionSurface3DViewer` renders point-cloud, voxel, triangle-mesh, and grid
 representations. It can compare any two available products and color by source

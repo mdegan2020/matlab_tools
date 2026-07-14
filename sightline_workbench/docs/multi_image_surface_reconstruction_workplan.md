@@ -23,8 +23,8 @@ repository suite passes 719/719 tests. This committed file is the consolidated
 implementation source of truth; no `/private/tmp` planning copy is
 authoritative. The active top-priority corrective queue is
 `docs/real_data_validation_followup_workpack.md`, which precedes independent D2
-work and reserves its first pack for the current operator findings.
-Hardware/evidence gates remain explicit.
+work and now contains the resolved July 13 operator findings as six ordered
+corrective packs. Hardware/evidence gates remain explicit.
 
 ## 1. Purpose
 
@@ -1615,9 +1615,10 @@ waiting for the user to run Git.
 ## 20. Remaining Evidence, Hardware, And Later-Parameter Gates
 
 No unresolved design question blocks independent D2 CPU work. The active
-corrective queue intentionally awaits the user's July 13 operator findings so
-they can be ordered at its top before implementation. Other remaining gates are
-deliberately resolved by implementation evidence or later user input:
+corrective queue now incorporates the user's July 13 operator findings and its
+presentation decisions; it precedes D2 in the active implementation order.
+Other remaining gates are deliberately resolved by implementation evidence or
+later user input:
 
 1. Final numerical thresholds after the recorded precision and truth studies.
 2. Which dense matcher(s) and pair policies survive truth-aware audit.

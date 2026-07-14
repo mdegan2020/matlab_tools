@@ -1177,11 +1177,11 @@ role/order-independent stereo-eye assignment with hysteresis and manual reset.
 The dense-surface synthetic expansion, MATLAB multi-image/SDK/dense work through
 A7/B8/S7, mathematical reference C0-C3, precision P0/P1, and native D0
 foundation are also complete. The active top-priority corrective queue is
-`docs/real_data_validation_followup_workpack.md`; it awaits the current operator
-findings and already records the explicit-plane initial-camera orientation
-regression and bounded five-image network-solve work. Independent native D2 is
-the next roadmap stage after that corrective queue. Target-Windows viewer/GPU
-work remains hardware-gated.
+`docs/real_data_validation_followup_workpack.md`; its July 13 operator findings
+are incorporated as ordered solve-performance, viewer-correctness,
+camera-orientation, Layer Manager, dense-surface, and stereo-cursor packs.
+Independent native D2 is the next roadmap stage after that corrective queue.
+Target-Windows viewer/GPU work remains hardware-gated.
 
 The items below remain broader design topics to prioritize with user guidance.
 
@@ -1204,17 +1204,20 @@ contract and should not require mesh-builder special cases.
 Alignment Reliability Packs 0-8 and Dense Surface Pack 1 are complete. The
 approved truth-aware synthetic expansion is the primary systematic alignment
 acceptance fixture. Later air-gapped real-data findings may refine individual
-metrics. Dense-surface improvements such as
-calibrated/spatially varying rectification, confidence and consistency
-filtering, cleanup, uncertainty, and export are decision-gated follow-up rather
-than an approved pack queue. See
+metrics. The July 13 evaluation found the selected-pair SGM result unusable and
+its one-button workflow scientifically opaque. Controls, retained evidence,
+quality localization, method choice, and multi-view policy are now approved as
+RD-5 corrective work; broader algorithmic changes still require evidence from
+that diagnosis. See
 `docs/alignment_workflow_hardening_plan.md`,
 `docs/alignment_reliability_validation_report.md`, and
 `docs/dense_surface_feature_pack.md`.
 
 Current real-data testing has additionally exposed an implicit-camera up-vector
-sign regression for some explicit oblique planes and unbounded cost/progress in
-large all-visible global solves. These are corrective implementation items in
+sign regression for some explicit oblique planes, unbounded cost/progress in
+large all-visible global solves, stale frame-change LOD state, incomplete child-
+window cleanup, and Layer Manager/stereo-cursor workflow needs. These are
+corrective implementation items in
 `docs/real_data_validation_followup_workpack.md`, not a reopening of the
 completed reliability tree.
 

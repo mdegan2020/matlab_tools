@@ -122,9 +122,9 @@ The current implementation baseline is summarized in
 - the MATLAB multi-image/dense/SDK workstream is complete through A7, B8, S7,
   P1, and C3, and the portable native D0 foundation is complete on macOS;
 - the active top-priority corrective queue is
-  `docs/real_data_validation_followup_workpack.md`, which is awaiting the
-  current operator-test findings and already records the explicit-plane camera
-  orientation regression and bounded network-solve work; and
+  `docs/real_data_validation_followup_workpack.md`, which incorporates the
+  July 13 operator findings as ordered network-solve, viewer correctness,
+  orientation, Layer Manager, dense-surface, and stereo-cursor packs; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -323,7 +323,9 @@ model plus a separate floating Surface Workbench. Its lazy runtime-only 3-D
 viewer renders and compares point, voxel, mesh, and grid products; colors by
 scientific/provenance fields; links selected points to full-source
 observations; bounds uncertainty glyphs and display decimation; and retains the
-complete authoritative product. See `docs/surface_workbench.md`.
+complete authoritative product. It is currently launched programmatically with
+an already-computed catalog; viewer launch and GUI pipeline execution are open
+RD-5 corrective work. See `docs/surface_workbench.md`.
 
 S7/B7 adds strict WGS84/DTED2 DEM ingestion with explicit HAE or MSL/EGM96
 datum handling, accuracy precedence, shared-dataset uncertainty, and reversible
