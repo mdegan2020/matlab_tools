@@ -115,7 +115,7 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 719 tests;
+- the latest grouped fresh-class repository validation passes all 723 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate;
@@ -124,7 +124,8 @@ The current implementation baseline is summarized in
 - the active top-priority corrective queue is
   `docs/real_data_validation_followup_workpack.md`, which incorporates the
   July 13 operator findings as ordered network-solve, viewer correctness,
-  orientation, Layer Manager, dense-surface, and stereo-cursor packs; and
+  orientation, Layer Manager, dense-surface, and stereo-cursor packs; RD-2's
+  bounded, observable network solve is complete and RD-3 is next; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine

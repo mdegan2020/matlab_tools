@@ -13,12 +13,14 @@ retain full source imagery and the ordinary source-ray inverse warp.
   convention-level fix is queued in
   `docs/real_data_validation_followup_workpack.md`; a caller-supplied camera pose
   remains the non-mutating workaround when available.
-- A visible-layer, all-plausible network can run one primary optimization plus
-  one leave-one-pair-out child solve per retained pair, with limited progress
-  feedback. Until the queued bounded-diagnostic fix is complete, prefer a
-  smaller explainable pair budget for interactive review and reserve exhaustive
-  sensitivity evidence for an unattended run. Cancellation must be treated as
-  leaving the prior scene/correction state authoritative.
+- Visible-layer network solving now reports stage, iteration/function count,
+  elapsed time, sensitivity-child progress, and cancellation state. Fast runs
+  no sensitivity children, Balanced returns the primary result with sensitivity
+  deferred, and Quality runs no more than three leave-one-pair-out children
+  within 15 seconds. Exhaustive sensitivity remains an explicit SDK choice.
+  Cancelling primary optimization leaves the prior scene/correction state
+  authoritative; cancelling optional diagnostics preserves the completed
+  primary result for separate review and apply.
 
 ## Recommended workflow
 

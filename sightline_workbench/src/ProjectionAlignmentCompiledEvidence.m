@@ -1,0 +1,289 @@
+classdef ProjectionAlignmentCompiledEvidence
+    %ProjectionAlignmentCompiledEvidence Immutable rays for constant-OPK solves.
+
+    methods (Static)
+        function evidence = compile(scene, matchResult, parameterModel, monitor)
+            %compile Sample nominal geometry once for the current solve.
+            if nargin < 4
+                monitor = [];
+            end
+            options = parameterModel.Options;
+            evidence = struct(Enabled=false, Mode="reference", ...
+                FallbackReason="reference requested", ...
+                GeometryFingerprints=strings(1, 0), ...
+                ObservationIds=strings(0, 1), TrackIndices=zeros(0, 1), ...
+                Pairs=struct("MovingOrigins", {}, "MovingVectors", {}, ...
+                "ReferenceOrigins", {}, "ReferenceVectors", {}, ...
+                "MovingLayerPosition", {}, "ReferenceLayerPosition", {}, ...
+                "BaselineMeters", {}, "ObservationIds", {}, ...
+                "TrackIndices", {}));
+            if options.Network.EvidenceMode ~= "compiled"
+                return
+            end
+            if parameterModel.SharedScaleIndex > 0
+                evidence.FallbackReason = ...
+                    "shared-scale row resampling requires the reference path";
+                return
+            end
+
+            layerCount = parameterModel.LayerCount;
+            sampledMeshes = cell(1, layerCount);
+            fingerprints = strings(1, layerCount);
+            for position = 1:layerCount
+                layer = scene.layers(parameterModel.LayerIndices(position));
+                revision = ProjectionGeometryFingerprint.sourceRevisionStatus( ...
+                    layer.SourceGeometry);
+                if ~revision.Verifiable
+                    evidence.FallbackReason = revision.Explanation;
+                    return
+                end
+                fingerprints(position) = ...
+                    ProjectionGeometryFingerprint.layer(layer);
+                if ~ProjectionAlignmentCompiledEvidence.hasExactSampler(layer)
+                    sampledMeshes{position} = ...
+                        ProjectionMeshBuilder.sampleLayerGeometry(layer);
+                    ProjectionAlignmentCompiledEvidence.countSampling( ...
+                        monitor, 1, numel(sampledMeshes{position}.RowIndices) * ...
+                        numel(sampledMeshes{position}.ColumnIndices));
+                end
+            end
+
+            pairs = evidence.Pairs;
+            observationIds = strings(0, 1);
+            trackIndices = zeros(0, 1);
+            for pairIndex = 1:numel(matchResult.Matches)
+                match = matchResult.Matches(pairIndex);
+                movingPosition = find(parameterModel.LayerIndices == ...
+                    match.Pair(1), 1, "first");
+                referencePosition = find(parameterModel.LayerIndices == ...
+                    match.Pair(2), 1, "first");
+                [movingOrigins, movingVectors] = ...
+                    ProjectionAlignmentCompiledEvidence.compileSide( ...
+                    scene.layers(match.Pair(1)), ...
+                    sampledMeshes{movingPosition}, match.MovingSourceRows, ...
+                    match.MovingSourceColumns, monitor);
+                [referenceOrigins, referenceVectors] = ...
+                    ProjectionAlignmentCompiledEvidence.compileSide( ...
+                    scene.layers(match.Pair(2)), ...
+                    sampledMeshes{referencePosition}, ...
+                    match.ReferenceSourceRows, ...
+                    match.ReferenceSourceColumns, monitor);
+                ids = ProjectionAlignmentCompiledEvidence.observationIds( ...
+                    match, pairIndex);
+                tracks = ProjectionAlignmentCompiledEvidence.trackIndices( ...
+                    match);
+                pairs(pairIndex) = struct( ...
+                    MovingOrigins=movingOrigins, ...
+                    MovingVectors=movingVectors, ...
+                    ReferenceOrigins=referenceOrigins, ...
+                    ReferenceVectors=referenceVectors, ...
+                    MovingLayerPosition=movingPosition, ...
+                    ReferenceLayerPosition=referencePosition, ...
+                    BaselineMeters=vecnorm( ...
+                    referenceOrigins - movingOrigins, 2, 1).', ...
+                    ObservationIds=ids, TrackIndices=tracks);
+                observationIds = [observationIds; ids]; %#ok<AGROW>
+                trackIndices = [trackIndices; tracks]; %#ok<AGROW>
+            end
+            evidence.Enabled = true;
+            evidence.Mode = "compiled";
+            evidence.FallbackReason = "";
+            evidence.GeometryFingerprints = fingerprints;
+            evidence.ObservationIds = observationIds;
+            evidence.TrackIndices = trackIndices;
+            evidence.Pairs = pairs;
+            if ~isempty(monitor)
+                monitor.increment("CompiledEvidenceBuildCount", 1);
+            end
+        end
+
+        function [residuals, diagnostics] = evaluate(evidence, scene, matchResult, ...
+                parameterModel, x, commonPlane, lossMode)
+            %evaluate Apply candidate corrections to precompiled nominal rays.
+            if ~evidence.Enabled
+                error("ProjectionAlignmentCompiledEvidence:notCompiled", ...
+                    "Compiled evidence is not available for this solve.");
+            end
+            [corrections, ~] = ...
+                ProjectionAlignmentParameterModel.corrections(parameterModel, x);
+            rotations = cell(1, parameterModel.LayerCount);
+            for position = 1:parameterModel.LayerCount
+                layer = scene.layers(parameterModel.LayerIndices(position));
+                layer.ViewVectorAngularOffsetsDegrees = ...
+                    corrections(position).ViewVectorAngularOffsetsDegrees(:);
+                rotations{position} = ProjectionMeshBuilder. ...
+                    viewVectorRotationMatrix( ...
+                    layer, layer.CurrentProjectionPlane);
+            end
+            residuals = cell(1, numel(evidence.Pairs));
+            diagnostics = cell(1, numel(evidence.Pairs));
+            for pairIndex = 1:numel(evidence.Pairs)
+                compiled = evidence.Pairs(pairIndex);
+                match = matchResult.Matches(pairIndex);
+                movingVectors = rotations{compiled.MovingLayerPosition} * ...
+                    compiled.MovingVectors;
+                referenceVectors = ...
+                    rotations{compiled.ReferenceLayerPosition} * ...
+                    compiled.ReferenceVectors;
+                movingCorrection = corrections( ...
+                    compiled.MovingLayerPosition);
+                referenceCorrection = corrections( ...
+                    compiled.ReferenceLayerPosition);
+                if lossMode == "epipolarCoplanarity"
+                    diagnostic = ProjectionAlignmentCoplanarity.evaluateRays( ...
+                        compiled.MovingOrigins, movingVectors, ...
+                        compiled.ReferenceOrigins, referenceVectors);
+                    values = diagnostic.Residuals;
+                    values(~diagnostic.ValidMask) = 1;
+                    residuals{pairIndex} = values;
+                    diagnostics{pairIndex} = diagnostic;
+                elseif lossMode == "rayToRay3D"
+                    residuals{pairIndex} = ...
+                        ProjectionAlignmentCompiledEvidence.closestApproach( ...
+                        compiled.MovingOrigins, movingVectors, ...
+                        compiled.ReferenceOrigins, referenceVectors).';
+                else
+                    movingCoordinates = ...
+                        ProjectionAlignmentCompiledEvidence.project( ...
+                        compiled.MovingOrigins, movingVectors, ...
+                        scene.layers(match.Pair(1)).CurrentProjectionPlane, ...
+                        movingCorrection.ProjectionOffsetMeters, commonPlane);
+                    referenceCoordinates = ...
+                        ProjectionAlignmentCompiledEvidence.project( ...
+                        compiled.ReferenceOrigins, referenceVectors, ...
+                        scene.layers(match.Pair(2)).CurrentProjectionPlane, ...
+                        referenceCorrection.ProjectionOffsetMeters, commonPlane);
+                    residuals{pairIndex} = ...
+                        movingCoordinates - referenceCoordinates;
+                end
+            end
+        end
+    end
+
+    methods (Static, Access = private)
+        function tf = hasExactSampler(layer)
+            tf = isfield(layer.SourceGeometry, "SampleRayFcn") && ...
+                isa(layer.SourceGeometry.SampleRayFcn, "function_handle");
+        end
+
+        function [origins, vectors] = compileSide( ...
+                layer, sampledMesh, rows, columns, monitor)
+            rows = double(rows(:).');
+            columns = double(columns(:).');
+            if ProjectionAlignmentCompiledEvidence.hasExactSampler(layer)
+                [origins, vectors] = ...
+                    layer.SourceGeometry.SampleRayFcn(rows, columns);
+                ProjectionAlignmentCompiledEvidence.validateRays( ...
+                    origins, vectors, numel(rows));
+                ProjectionAlignmentCompiledEvidence.countSampling( ...
+                    monitor, 1, numel(rows));
+            else
+                origins = zeros(3, numel(columns));
+                vectors = zeros(3, numel(rows));
+                for component = 1:3
+                    origins(component, :) = interp1( ...
+                        sampledMesh.ColumnIndices, ...
+                        sampledMesh.SampledOrigins(component, :), columns, ...
+                        "linear");
+                    vectorGrid = squeeze( ...
+                        sampledMesh.SampledVectors(component, :, :));
+                    vectors(component, :) = interp2( ...
+                        sampledMesh.ColumnIndices, sampledMesh.RowIndices, ...
+                        vectorGrid, columns, rows, "linear");
+                end
+                ProjectionAlignmentCompiledEvidence.validateRays( ...
+                    origins, vectors, numel(rows));
+            end
+            vectors = ProjectionAlignmentCompiledEvidence.normalize(vectors);
+        end
+
+        function validateRays(origins, vectors, count)
+            if ~isnumeric(origins) || ~isequal(size(origins), [3 count]) || ...
+                    any(~isfinite(origins), "all") || ...
+                    ~isnumeric(vectors) || ...
+                    ~isequal(size(vectors), [3 count]) || ...
+                    any(~isfinite(vectors), "all")
+                error("ProjectionAlignmentCompiledEvidence:invalidRays", ...
+                    "Compiled observation rays must be finite 3-by-N arrays.");
+            end
+        end
+
+        function vectors = normalize(vectors)
+            norms = vecnorm(vectors, 2, 1);
+            if any(norms <= 1e-12)
+                error("ProjectionAlignmentCompiledEvidence:invalidRays", ...
+                    "Compiled directions must have nonzero length.");
+            end
+            vectors = double(vectors) ./ norms;
+        end
+
+        function coordinates = project( ...
+                origins, vectors, plane, offsetMeters, commonPlane)
+            denominator = plane.VN.' * vectors;
+            if any(abs(denominator) <= 1e-10)
+                error("ProjectionAlignmentOpkSolver:parallelRay", ...
+                    "One or more matched rays are parallel to the projection plane.");
+            end
+            ranges = (plane.VN.' * (plane.P0 - origins)) ./ denominator;
+            if any(ranges <= 1e-10)
+                error("ProjectionAlignmentOpkSolver:behindSource", ...
+                    "One or more matched intersections are behind the source origin.");
+            end
+            world = origins + vectors .* ranges + ...
+                plane.basis * double(offsetMeters(:));
+            coordinates = PlanarProjection.worldToPlane(world, commonPlane).';
+        end
+
+        function residuals = closestApproach(G1, V1, G2, V2)
+            delta = G1 - G2;
+            a = sum(V1 .* V1, 1);
+            b = sum(V1 .* V2, 1);
+            c = sum(V2 .* V2, 1);
+            d = sum(V1 .* delta, 1);
+            e = sum(V2 .* delta, 1);
+            denominator = a .* c - b.^2;
+            parallel = abs(denominator) <= 1e-10;
+            denominator(parallel) = 1;
+            movingRange = (b .* e - c .* d) ./ denominator;
+            referenceRange = (a .* e - b .* d) ./ denominator;
+            residuals = delta + V1 .* movingRange - V2 .* referenceRange;
+            if any(parallel)
+                projection = sum(delta(:, parallel) .* V1(:, parallel), 1) ./ ...
+                    a(parallel);
+                residuals(:, parallel) = delta(:, parallel) - ...
+                    V1(:, parallel) .* projection;
+            end
+        end
+
+        function ids = observationIds(match, pairIndex)
+            count = double(match.Count);
+            candidates = ["RecordIds", "ObservationIds"];
+            for name = candidates
+                if isfield(match, name) && numel(match.(name)) == count
+                    ids = string(match.(name)(:));
+                    return
+                end
+            end
+            ids = "pair-" + string(pairIndex) + "-observation-" + ...
+                string((1:count).');
+        end
+
+        function tracks = trackIndices(match)
+            count = double(match.Count);
+            if isfield(match, "TrackIndices") && ...
+                    numel(match.TrackIndices) == count
+                tracks = double(match.TrackIndices(:));
+            else
+                tracks = zeros(count, 1);
+            end
+        end
+
+        function countSampling(monitor, calls, observations)
+            if isempty(monitor)
+                return
+            end
+            monitor.increment("ObservationSamplingCalls", calls);
+            monitor.increment("SampledObservationCount", observations);
+        end
+    end
+end

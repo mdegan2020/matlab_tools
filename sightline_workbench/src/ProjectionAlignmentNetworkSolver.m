@@ -15,6 +15,26 @@ classdef ProjectionAlignmentNetworkSolver
             if nargin < 4
                 runtimeControl = struct();
             end
+            if ~isstruct(runtimeControl) || ~isscalar(runtimeControl)
+                error("ProjectionAlignmentNetworkSolver:invalidRuntimeControl", ...
+                    "Runtime control must be a scalar struct.");
+            end
+            if isfield(runtimeControl, "ProgressMonitor") && ...
+                    ~isempty(runtimeControl.ProgressMonitor)
+                monitor = runtimeControl.ProgressMonitor;
+                if ~isa(monitor, "ProjectionAlignmentSolveMonitor")
+                    error("ProjectionAlignmentNetworkSolver:invalidRuntimeControl", ...
+                        "ProgressMonitor must be a ProjectionAlignmentSolveMonitor.");
+                end
+            else
+                monitor = ProjectionAlignmentSolveMonitor(runtimeControl);
+                runtimeControl.ProgressMonitor = monitor;
+            end
+            rootStage = "primaryOptimization";
+            if isfield(runtimeControl, "Stage")
+                rootStage = string(runtimeControl.Stage);
+            end
+            monitor.setStage("preparingNetwork", struct());
             explicitLoss = isstruct(options) && isfield(options, "LossMode");
             if ~isstruct(options) || ~isscalar(options)
                 error("ProjectionAlignmentNetworkSolver:invalidOptions", ...
@@ -47,13 +67,25 @@ classdef ProjectionAlignmentNetworkSolver
                     invalid.ComponentId, options.Network.GaugePolicy, ...
                     invalid.Reason);
             end
+            runtimeControl.Stage = rootStage;
             result = ProjectionAlignmentOpkSolver.solve( ...
                 scene, evidence.MatchResult, options, runtimeControl);
+            monitor.setStage("primaryComplete", struct());
             result.RequestSummary.SolverMode = "globalConstantOpkNetwork";
             result.RequestSummary.GaugePolicy = options.Network.GaugePolicy;
             result.Diagnostics.Network = ...
                 ProjectionAlignmentNetworkSolver.networkDiagnostics( ...
-                scene, result, evidence, components, gauge, options);
+                scene, result, evidence, components, gauge, options, ...
+                runtimeControl, monitor);
+            work = monitor.snapshot();
+            work.ViewCount = numel(unique(reshape( ...
+                [evidence.MatchResult.Matches.Pair], 1, [])));
+            work.PairCount = numel(evidence.MatchResult.Matches);
+            work.ObservationCount = sum([evidence.MatchResult.Matches.Count]);
+            work.TrackCount = evidence.Diagnostics.TrackCount;
+            work.ActiveParameterCount = ...
+                result.Diagnostics.WorkAccounting.ActiveParameterCount;
+            result.Diagnostics.WorkAccounting = work;
         end
 
         function correctionSet = solveCorrectionSet( ...
@@ -170,7 +202,8 @@ classdef ProjectionAlignmentNetworkSolver
         end
 
         function diagnostics = networkDiagnostics( ...
-                scene, result, evidence, components, gauge, options)
+                scene, result, evidence, components, gauge, options, ...
+                runtimeControl, monitor)
             diagnostics = struct( ...
                 Format=ProjectionAlignmentNetworkSolver.Format, ...
                 Version=ProjectionAlignmentNetworkSolver.Version, ...
@@ -204,9 +237,10 @@ classdef ProjectionAlignmentNetworkSolver
                 ProjectionAlignmentNetworkSolver.conflictConcentration( ...
                 diagnostics.ResidualsByPass, ...
                 diagnostics.ResidualsByTimeInterval);
-            diagnostics.LeaveOnePairOut = ...
+            [diagnostics.LeaveOnePairOut, ...
+                diagnostics.LeaveOnePairOutSummary] = ...
                 ProjectionAlignmentNetworkSolver.leaveOnePairOut( ...
-                scene, result, evidence, options);
+                scene, result, evidence, options, runtimeControl, monitor);
         end
 
         function weak = weakViews(scene, result)
@@ -477,23 +511,67 @@ classdef ProjectionAlignmentNetworkSolver
             value.Concentrated = numel(summaries) > 1 && ratio >= 2;
         end
 
-        function diagnostics = leaveOnePairOut( ...
-                scene, baseline, evidence, options)
+        function [diagnostics, summary] = leaveOnePairOut( ...
+                scene, baseline, evidence, options, runtimeControl, monitor)
             diagnostics = struct("PairId", {}, "Status", {}, ...
                 "MaxAttitudeChangeDegrees", {}, ...
                 "RmsAttitudeChangeDegrees", {}, "MissingViewIds", {}, ...
                 "Explanation", {});
-            if ~options.Network.ComputeLeaveOnePairOut || ...
-                    numel(evidence.MatchResult.Matches) < 2
+            pairCount = numel(evidence.MatchResult.Matches);
+            policy = options.Network.LeaveOnePairOutPolicy;
+            summary = struct(Policy=policy, State="notRequested", ...
+                AvailablePairCount=pairCount, RequestedChildCount=0, ...
+                StartedChildCount=0, CompletedChildCount=0, ...
+                SuccessfulChildCount=0, FailedChildCount=0, ...
+                CancelledChildCount=0, OmittedChildCount=pairCount, ...
+                MaximumChildCount= ...
+                options.Network.MaximumLeaveOnePairOutChildren, ...
+                TimeBudgetSeconds= ...
+                options.Network.LeaveOnePairOutTimeBudgetSeconds, ...
+                ElapsedSeconds=0, Explanation="not requested");
+            if pairCount < 2
+                summary.Explanation = "fewer than two retained pairs";
                 return
             end
+            if policy == "notRequested"
+                return
+            end
+            if policy == "deferred"
+                summary.State = "deferred";
+                summary.Explanation = ...
+                    "primary solution returned before optional sensitivity work";
+                return
+            end
+            requestedCount = pairCount;
+            if policy == "bounded"
+                requestedCount = min(pairCount, ...
+                    options.Network.MaximumLeaveOnePairOutChildren);
+            end
+            summary.RequestedChildCount = requestedCount;
+            summary.OmittedChildCount = pairCount - requestedCount;
+            monitor.setChildProgress(requestedCount, 0, 0);
+            monitor.setStage("sensitivityDiagnostics", struct( ...
+                DiagnosticChildrenRequested=requestedCount, ...
+                DiagnosticChildrenCompleted=0, DiagnosticChildIndex=0));
+            diagnosticTimer = tic;
             childOptions = options;
+            childOptions.Network.LeaveOnePairOutPolicy = "notRequested";
             childOptions.Network.ComputeLeaveOnePairOut = false;
             baselineIds = string({baseline.SolvedCorrections.LayerId});
             baselineOpk = reshape([baseline.SolvedCorrections. ...
                 ViewVectorAngularOffsetsDegrees], 3, []).';
             viewIds = ProjectionViewMetadata.ids(scene);
-            for pairIndex = 1:numel(evidence.MatchResult.Matches)
+            cancelled = false;
+            for pairIndex = 1:requestedCount
+                if monitor.cancellationRequested()
+                    cancelled = true;
+                    break
+                end
+                if policy == "bounded" && pairIndex > 1 && ...
+                        toc(diagnosticTimer) >= ...
+                        options.Network.LeaveOnePairOutTimeBudgetSeconds
+                    break
+                end
                 iterationOptions = childOptions;
                 omitted = evidence.MatchResult.Matches(pairIndex);
                 pairViewIds = viewIds(omitted.Pair);
@@ -515,9 +593,22 @@ classdef ProjectionAlignmentNetworkSolver
                     MaxAttitudeChangeDegrees=NaN, ...
                     RmsAttitudeChangeDegrees=NaN, ...
                     MissingViewIds=strings(1, 0), Explanation="");
+                summary.StartedChildCount = summary.StartedChildCount + 1;
+                monitor.increment("SensitivityChildSolvesStarted", 1);
+                monitor.setChildProgress(requestedCount, ...
+                    summary.CompletedChildCount, pairIndex);
+                monitor.setStage("sensitivityChild", struct( ...
+                    DiagnosticChildrenRequested=requestedCount, ...
+                    DiagnosticChildrenCompleted=summary.CompletedChildCount, ...
+                    DiagnosticChildIndex=pairIndex, PairId=identity.PairId));
                 try
+                    childRuntime = runtimeControl;
+                    childRuntime.ProgressMonitor = monitor;
+                    childRuntime.InitialCorrections = ...
+                        baseline.SolvedCorrections;
+                    childRuntime.Stage = "sensitivityChild";
                     child = ProjectionAlignmentNetworkSolver.solve( ...
-                        scene, reduced, iterationOptions);
+                        scene, reduced, iterationOptions, childRuntime);
                     if child.Status ~= "solved" || ...
                             ~child.Convergence.Success
                         error("ProjectionAlignmentNetworkSolver:looSolveFailed", ...
@@ -544,16 +635,65 @@ classdef ProjectionAlignmentNetworkSolver
                         missingViewIds(missingIndex) = ...
                             string(scene.layers(layerIndex).ViewId);
                     end
-                    diagnostic.Status = "solved";
+                    diagnostic.Status = "complete";
                     diagnostic.MaxAttitudeChangeDegrees = max(changes);
                     diagnostic.RmsAttitudeChangeDegrees = rms(changes);
                     diagnostic.MissingViewIds = missingViewIds;
                     diagnostic.Explanation = "none";
                 catch ME
-                    diagnostic.Explanation = string(ME.message);
+                    if strcmp(ME.identifier, ...
+                            "ProjectionAlignmentOpkSolver:cancelled")
+                        diagnostic.Status = "cancelled";
+                        diagnostic.Explanation = "operator cancellation";
+                        cancelled = true;
+                    else
+                        diagnostic.Explanation = string(ME.message);
+                    end
                 end
                 diagnostics(end + 1) = diagnostic; %#ok<AGROW>
+                summary.CompletedChildCount = ...
+                    summary.CompletedChildCount + 1;
+                monitor.increment("SensitivityChildSolvesCompleted", 1);
+                monitor.setChildProgress(requestedCount, ...
+                    summary.CompletedChildCount, pairIndex);
+                if diagnostic.Status == "complete"
+                    summary.SuccessfulChildCount = ...
+                        summary.SuccessfulChildCount + 1;
+                elseif diagnostic.Status == "cancelled"
+                    summary.CancelledChildCount = ...
+                        summary.CancelledChildCount + 1;
+                else
+                    summary.FailedChildCount = summary.FailedChildCount + 1;
+                end
+                if cancelled
+                    break
+                end
             end
+            summary.ElapsedSeconds = toc(diagnosticTimer);
+            monitor.recordTiming("SensitivityDiagnostics", ...
+                summary.ElapsedSeconds);
+            summary.OmittedChildCount = pairCount - ...
+                summary.CompletedChildCount;
+            if cancelled
+                summary.State = "cancelled";
+                summary.Explanation = ...
+                    "cancelled after preserving the completed primary solution";
+            elseif summary.FailedChildCount > 0 && ...
+                    summary.OmittedChildCount == 0
+                summary.State = "failed";
+                summary.Explanation = "one or more sensitivity children failed";
+            elseif summary.OmittedChildCount > 0
+                summary.State = "partial";
+                summary.Explanation = ...
+                    "bounded child count or elapsed-time budget reached";
+            else
+                summary.State = "complete";
+                summary.Explanation = "all requested sensitivity children completed";
+            end
+            monitor.setStage("sensitivityComplete", struct( ...
+                DiagnosticChildrenRequested=requestedCount, ...
+                DiagnosticChildrenCompleted=summary.CompletedChildCount, ...
+                DiagnosticChildIndex=0, SensitivityState=summary.State));
         end
 
         function indices = recordLayerIndices(scene, record)

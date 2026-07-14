@@ -6,7 +6,7 @@ should not be mistaken for unfinished implementation.
 
 ## Current Baseline
 
-As of July 13, 2026:
+As of July 14, 2026:
 
 - The project directory and main application title are `sightline_workbench`
   and **Sightline Workbench**.
@@ -21,14 +21,14 @@ As of July 13, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 719/719 tests with zero
+- The latest grouped fresh-class repository suite passes 723/723 tests with zero
   failures and zero incomplete tests.
 - `docs/real_data_validation_followup_workpack.md` is the active top-priority
-  corrective queue. The July 13 real-data findings are incorporated as six
-  ordered packs: network-solve performance, frame-change LOD and window
-  lifecycle, explicit-plane camera orientation, Layer Manager/viewer-shell
-  revision, dense-surface quality/diagnostics, and a stereo cursor. The
-  presentation decisions are resolved and RD-2 is ready to begin.
+  corrective queue. RD-2 is complete: the default network path uses one global
+  optimization, setup-bounded compiled evidence, a supplied stable
+  semi-analytic Jacobian, reused diagnostics, bounded progress/cancellation,
+  and explicit sensitivity states. RD-3 frame-change LOD and viewer-owned
+  child-window lifecycle is next.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
   existing viewer launch signature and legacy `LayerId` contracts.
@@ -92,6 +92,7 @@ As of July 13, 2026:
 | C2 procedural two-image/anaglyph oracle and golden parity | Complete |
 | C3 multi-image/dense mathematical appendices | Complete |
 | D0 portable native CPU/C ABI/CMake foundation | Complete on macOS; Windows/WSL/Ceres evidence gated |
+| Real-data follow-up RD-2 bounded network solve | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,

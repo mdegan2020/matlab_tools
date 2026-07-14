@@ -151,7 +151,27 @@ documented claim that an explicit oblique plane launches naturally upright.
 
 ### RD-2 — Bounded, Observable Multi-Image Network Solve
 
-Status: confirmed scalability defect; implementation not started.
+Status: complete July 14, 2026.
+
+Completion evidence: the deterministic structural proxy retains five views,
+ten nonsequential pairs, and 2,000 observations. The default interactive path
+performs one global optimization, builds one immutable evidence bundle, samples
+the 20 pair sides only during setup, and starts no sensitivity children. It
+completed in 13.941 seconds in the fresh-class alignment test run; that elapsed
+time is evidence, not a portable acceptance threshold. Compiled/reference
+parity is asserted at `1e-9` for solved OPK and after residuals, `1e-12` for
+before residuals, and `2e-4` relative for the condition-sensitive covariance
+pseudoinverse. Robust weights and gauge decisions also agree.
+
+The solver now reports bounded runtime-only work/timing and progress records,
+uses compiled nominal origins/directions plus a supplied stable semi-analytic
+Jacobian for the default constant-OPK coplanarity path, and reuses active-family
+residuals and accepted linearizations for diagnostics. Direct sampling and
+optimizer finite differences remain selectable reference oracles. A bounded
+ten-pair/2,000-observation kernel benchmark on a 14-worker thread pool measured
+0.029242 seconds serial and 2.852848 seconds with `parfor` (97.559x slower), so
+thread batching is truthfully recorded as evaluated and disabled at this
+workload. CPU serial remains the default.
 
 #### Observed evidence
 
@@ -302,6 +322,14 @@ Begin only after RD-2A through RD-2C are measured.
   unless the operator separately accepts and applies a completed primary result.
 - CPU-only execution remains complete. Optional GPU availability does not
   affect this workflow.
+
+Acceptance is complete. Fast requests no sensitivity work, Balanced returns
+the primary result with sensitivity deferred, and Quality permits at most
+three children within a 15-second diagnostic budget. SDK callers may explicitly
+request exhaustive deterministic leave-one-pair-out evidence. Partial,
+cancelled, failed, deferred, and complete diagnostic states are distinct, and
+child solves warm-start from the authoritative primary solution without
+changing their gauge or priors.
 
 ### RD-3 — Frame-Change LOD Correctness And Child-Window Lifecycle
 
