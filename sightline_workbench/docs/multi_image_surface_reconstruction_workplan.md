@@ -19,12 +19,12 @@ and public MATLAB/native geometry fixture are complete on macOS; native
 Windows/WSL, Ceres, MATLAB/MEX, and CUDA evidence remain explicitly unclaimed.
 A7 remains research-only; production application is still gated on
 physical local observability and stability. The current grouped fresh-class
-repository suite passes 719/719 tests. This committed file is the consolidated
+repository suite passes 759/759 tests. This committed file is the consolidated
 implementation source of truth; no `/private/tmp` planning copy is
-authoritative. The active top-priority corrective queue is
-`docs/real_data_validation_followup_workpack.md`, which precedes independent D2
-work and now contains the resolved July 13 operator findings as six ordered
-corrective packs. Hardware/evidence gates remain explicit.
+authoritative. The completed top-priority corrective queue is
+`docs/real_data_validation_followup_workpack.md`; all six ordered July 13
+corrective packs are complete, so independent D2 work is next.
+Hardware/evidence gates remain explicit.
 
 ## 1. Purpose
 
@@ -1538,15 +1538,11 @@ These trees are coordinated but should remain separately reviewable.
 
 ## 19. Dependency And Recommended Order
 
-The synthetic, backend-performance, MI-0 through MI-3, and S0 audit queues are
-complete. The following list is the historical implementation record and
-remaining native/hardware order. Before independent D2 work, complete the
-top-priority corrective queue in
-`docs/real_data_validation_followup_workpack.md` after the pending operator
-findings are incorporated:
+The synthetic, backend-performance, MI-0 through MI-3, S0 audit, and real-data
+corrective queues are complete. The following list is the historical
+implementation record and remaining native/hardware order:
 
-1. Preserve the current grouped fresh-class baseline, now 719/719 after the D0
-   portable native foundation.
+1. Preserve the current grouped fresh-class baseline, now 759/759 after RD-6.
 2. A2 pair viewpoint/follow and presentation-only orientation — complete.
 3. A3a focus-aware keyboard remapping — complete.
 4. A3a manual motion imagery — complete.
@@ -1837,6 +1833,10 @@ same requirements by subsystem.
     edits; never edit numbers and label them solver output or partially apply.
 75. Preserve immutable base/parent geometry; compose rotations exactly, expose
     incremental/effective corrections, reject stale/reapply, and revert exactly.
+76. The runtime stereo cursor is one world point `Pplane + z*VN`, projected
+    independently through the active stable-ID physical pair with signed-meter
+    controls, explicit invalid states, physical-eye marks, and no serialized or
+    scientific-state mutation.
 
 This consolidated workplan is active as the ordered source of truth. A feature
 tree enters implementation only when explicitly dispatched; evidence/hardware

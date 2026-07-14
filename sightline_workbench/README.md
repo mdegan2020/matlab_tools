@@ -43,6 +43,7 @@ src/ProjectionSurfaceRegistration*.m S7 registration SDK, service, and audit
 src/ProjectionDemCorrectionAdapter.m B8 live-scene binding/apply contract
 src/ProjectionTimeVaryingOpk*.m A7 tangent-spline study and held-out audit
 src/ProjectionAnaglyphModel.m Production red/cyan presentation algebra
+src/ProjectionStereoCursorModel.m Graphics-independent world-point/pair projection
 src/ProjectionDenseSurfaceSynthetic*.m Truth-aware fixture configuration and planning
 src/ProjectionBackendJob.m      Backend job contract and serialization helpers
 src/ProjectionGpuSupport.m      Shared optional gpuArray capability checks
@@ -115,20 +116,20 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 752 tests;
+- the latest grouped fresh-class repository validation passes all 759 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate;
 - the MATLAB multi-image/dense/SDK workstream is complete through A7, B8, S7,
   P1, and C3, and the portable native D0 foundation is complete on macOS;
-- the active top-priority corrective queue is
+- the completed top-priority corrective queue is
   `docs/real_data_validation_followup_workpack.md`, which incorporates the
   July 13 operator findings as ordered network-solve, viewer correctness,
   orientation, Layer Manager, dense-surface, and stereo-cursor packs; RD-2's
   bounded network solve, RD-3's LOD/lifecycle correction, RD-1's explicit-plane
-  orientation correction, RD-4's Layer Manager/viewer shell, and RD-5's
-  scene-bound dense-surface controls/evidence/recovery are complete; RD-6
-  world-space stereo cursor is next; and
+  orientation correction, RD-4's Layer Manager/viewer shell, RD-5's
+  scene-bound dense-surface controls/evidence/recovery, and RD-6's world-space
+  stereo cursor are complete; independent D2 native CPU work is next; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -248,7 +249,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 752 passing tests with no failures or incomplete
+fresh-class baseline is 759 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -839,8 +840,13 @@ camera/lookahead completions cannot blank or replace the latest presentation.
 Core controls:
 
 - Mouse wheel zooms the view.
-- Shift + wheel adjusts Tip, Alt/Option + wheel adjusts Tilt, and Control +
-  wheel adjusts Twist camera roll.
+- With the stereo cursor off, Shift + wheel adjusts Tip, Alt/Option + wheel
+  adjusts Tilt, and Control + wheel adjusts Twist camera roll.
+- Right-click the viewport and check **Stereo cursor** to anchor one physical
+  world point to the pointer's projection-plane intersection. While enabled,
+  Shift + wheel adjusts its signed height along positive `VN`; Shift+Control
+  uses the `0.1x` fine step and Shift+Alt/Option uses the `10x` coarse step.
+  Ordinary wheel zoom and Shift+Up/Down Tip remain available.
 - Shift+Up/Down arrows adjust Tip by `0.5` degrees; Shift+Left/Right arrows
   adjust Tilt by `0.5` degrees.
 - With viewport interaction focus, plain Left/Right selects the previous/next
@@ -930,6 +936,26 @@ Core controls:
   lines require two valid endpoints, while valid endpoints of rejected/invalid
   records can still appear as faint diagnostic markers. Pure layer reordering
   preserves overlay world positions and alignment pair identity.
+
+The stereo cursor requires a valid active physical pair from Pair View or the
+Alignment Workbench. Both marks are independent projections of
+`Pcursor = Pplane + z*VN`; they follow stable view IDs and physical-eye colors
+rather than moving/reference role or layer order. The overlay reports signed
+meters relative to the plane and names missing-view, unsupported-geometry,
+outside-footprint, behind-source, sampling, or ray-model failures instead of
+inventing a correspondence. Use **Reposition stereo cursor here** to move the
+plane anchor without changing Z. The default Z step is `1 m`, bounded to
+`[-1e5, 1e5] m`; applications can query or change those runtime settings:
+
+```matlab
+app.stereoCursorOptions(struct( ...
+    HeightStepMeters=0.5, HeightLimitsMeters=[-100 100]));
+diagnostics = app.stereoCursorDiagnostics();
+```
+
+Cursor geometry, handles, pair association, and controls are runtime-only.
+Save, Load, Reset, disable, import, and viewer deletion clean them up without
+changing the scene, OPK, plane, matches, backend job, or saved viewer state.
 
 The graphics-free `ProjectionAlignmentSession` owns working-image cache state,
 raw and filtered matches, curation/undo state, session-only manual-adjustment

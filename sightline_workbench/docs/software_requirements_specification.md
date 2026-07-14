@@ -339,10 +339,10 @@ preview planes, or object ownership.
 | FR-VIEW-021 | Camera Twist shall support the approved orientation range through at least plus or minus 85 degrees. | Core | T, D |
 | FR-VIEW-022 | When an oblique explicit plane is supplied without a caller camera pose, the initial camera shall orient the plane naturally upright and fit the projected footprint. | Core | T, D |
 | FR-VIEW-023 | The initial camera shall support narrow long-range view angles below the historical 0.05-degree floor when required to frame a small footprint. | Core | T, D |
-| FR-VIEW-024 | Closing the main viewer shall idempotently stop its runtime work and close every viewer-owned child while leaving independent caller-owned figures unchanged. | Approved | T |
-| FR-VIEW-025 | Changing the active layer or pair shall reconcile preview LOD against the current camera even when a valid stale surface exists; refinement shall converge without another camera event or a visibility toggle and shall not transiently erase the last valid representation. | Approved | T, A |
-| FR-VIEW-026 | In View All, the selected visible layer shall have a yellow projected-footprint outline rendered above the image stack without changing radiometry or serialized scientific state. | Approved | T, D |
-| FR-VIEW-027 | The context-menu stereo cursor shall represent one physical world point `Pplane + z*VN`, project it independently into the active physical stereo pair, and display signed meters relative to the plane. While enabled, Shift+wheel shall adjust Z and Shift+Up/Down shall remain available for Tip; when disabled, established wheel bindings shall remain unchanged. | Approved | T, D |
+| FR-VIEW-024 | Closing the main viewer shall idempotently stop its runtime work and close every viewer-owned child while leaving independent caller-owned figures unchanged. | Core | T |
+| FR-VIEW-025 | Changing the active layer or pair shall reconcile preview LOD against the current camera even when a valid stale surface exists; refinement shall converge without another camera event or a visibility toggle and shall not transiently erase the last valid representation. | Core | T, A |
+| FR-VIEW-026 | In View All, the selected visible layer shall have a yellow projected-footprint outline rendered above the image stack without changing radiometry or serialized scientific state. | Core | T, D |
+| FR-VIEW-027 | The context-menu stereo cursor shall represent one physical world point `Pplane + z*VN`, project it independently into the active physical stereo pair, and display signed meters relative to the plane. While enabled, Shift+wheel shall adjust Z and Shift+Up/Down shall remain available for Tip; when disabled, established wheel bindings shall remain unchanged. | Core | T, D |
 
 ### 5.3 Pair controls and Alignment Workbench
 
@@ -953,7 +953,7 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 719 of 719 grouped
+At the date of this draft, the repository reports 759 of 759 grouped
 fresh-class tests passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
 Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
@@ -981,10 +981,8 @@ C++17 CPU/C ABI/CMake foundation and public geometry fixture are complete on
 macOS; Windows/WSL/Ceres/MEX/CUDA evidence remains gated.
 
 This snapshot is informative and may become stale. project_status.md is the
-authoritative implementation-status record. The July 13 corrective queue is
-`docs/real_data_validation_followup_workpack.md`; it tracks an open
-`FR-VIEW-022` explicit-plane initial-camera orientation regression, bounded
-multi-image network-solve performance/progress, frame-change LOD and lifecycle
-correctness, Layer Manager/viewer-shell changes, dense-surface quality and
-evidence recovery, and a stereo cursor. Its presentation decisions are resolved
-and its ordered implementation queue is ready.
+authoritative implementation-status record. The July 13 corrective queue in
+`docs/real_data_validation_followup_workpack.md` is complete: bounded network
+solving, LOD/lifecycle correctness, explicit-plane orientation, the Layer
+Manager/viewer shell, scene-bound dense-surface recovery, and the world-space
+stereo cursor are implemented and validated.

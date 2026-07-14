@@ -68,6 +68,10 @@ classdef ProjectionViewerApp < handle
         MaxCameraViewAngle double = 60
         InitialViewportFillFraction double = 0.5
         ModifierWheelStepDegrees double = 1
+        StereoCursorHeightStepMeters double = 1
+        StereoCursorHeightLimitsMeters double = [-1e5 1e5]
+        StereoCursorFineStepFactor double = 0.1
+        StereoCursorCoarseStepFactor double = 10
         ProjectionArrowStepDegrees double = 0.5
         ViewVectorDragProbeDegrees double = 0.01
         MinDragScreenJacobianRcond double = 1e-12
@@ -101,6 +105,8 @@ classdef ProjectionViewerApp < handle
         ResetMenuItem
         HelpMenuItem
         CrosshairMenuItem
+        StereoCursorMenuItem
+        StereoCursorRepositionMenuItem
         AlignmentPanelMenuItem
         ClearAlignmentOverlaysMenuItem
         BlendModeMenu
@@ -114,6 +120,9 @@ classdef ProjectionViewerApp < handle
         AnaglyphResetPresentationMenuItem
         CrosshairHorizontal
         CrosshairVertical
+        StereoCursorMarkers = gobjects(0)
+        StereoCursorConnector = gobjects(0)
+        StereoCursorOverlayLabel
         TipSlider matlab.ui.control.Slider
         TiltSlider matlab.ui.control.Slider
         TwistSlider matlab.ui.control.Slider
@@ -130,6 +139,7 @@ classdef ProjectionViewerApp < handle
         IsCrosshairEnabled logical = false
         IsCrosshairVisible logical = false
         IsPointerMotionBusy logical = false
+        StereoCursorRuntime struct = struct()
         AlignmentGrid matlab.ui.container.GridLayout
         AlignmentWorkbenchFigure matlab.ui.Figure
         AlignmentWorkbenchGrid matlab.ui.container.GridLayout
@@ -296,6 +306,7 @@ classdef ProjectionViewerApp < handle
             end
             app.PairViewpointRuntime = app.defaultPairViewpointRuntime();
             app.MotionRuntime = app.defaultMotionRuntime();
+            app.StereoCursorRuntime = app.defaultStereoCursorRuntime();
             app.DefaultMeshSampling = [app.Scene.layers.MeshSampling];
             app.DragMeshSampling = app.createDragMeshSampling();
             app.initializePreviewPyramids();
@@ -324,7 +335,6 @@ classdef ProjectionViewerApp < handle
             app.updateControlsFromSelectedLayer();
             app.openMotionImagery();
             app.refreshTiledProjectionSurfaces();
-
             if nargout == 0
                 clear app
             end
@@ -354,6 +364,7 @@ classdef ProjectionViewerApp < handle
             app.clearAlignmentRoi(false);
             app.closeDenseSurfaceWindows();
             app.closeSurfaceWorkbench();
+            app.disableStereoCursor();
             app.closeAlignmentWorkbench();
             app.closeHelpDialog();
             if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
@@ -463,7 +474,10 @@ classdef ProjectionViewerApp < handle
 
         function importState(app, state)
             %importState Apply a validated viewer state to the app.
+            app.PendingInitialViewportFrame = false;
+            app.deleteInitialViewportFrameListener();
             app.cancelCameraReconciliation();
+            app.disableStereoCursor();
             [~, state] = ProjectionViewerState.applyToScene(app.Scene, state);
             app.applyViewerStateToScene(state);
             app.PairViewpointRuntime = app.defaultPairViewpointRuntime();
@@ -653,6 +667,98 @@ classdef ProjectionViewerApp < handle
         function workbench = surfaceWorkbenchHandle(app)
             %surfaceWorkbenchHandle Return the separate Workbench, if open.
             workbench = app.SurfaceWorkbench;
+        end
+
+        function diagnostics = placeStereoCursor( ...
+                app, anchorPlaneCoordinates, heightMeters)
+            %placeStereoCursor Place the runtime cursor on the active pair.
+            if nargin < 3
+                heightMeters = 0;
+            end
+            pair = app.activeStereoCursorPair();
+            if ~pair.Available
+                error("ProjectionViewerApp:noStereoCursorPair", ...
+                    "Stereo cursor requires an active pair with two available stable views.");
+            end
+            plane = app.currentProjectionPlane();
+            ProjectionStereoCursorModel.worldPoint( ...
+                plane, anchorPlaneCoordinates, heightMeters);
+            runtime = app.defaultStereoCursorRuntime();
+            runtime.Enabled = true;
+            runtime.PairId = pair.PairId;
+            runtime.ViewIds = pair.ViewIds;
+            runtime.AnchorPlaneCoordinates = ...
+                reshape(double(anchorPlaneCoordinates), 1, 2);
+            runtime.HeightMeters = min(max(double(heightMeters), ...
+                app.StereoCursorHeightLimitsMeters(1)), ...
+                app.StereoCursorHeightLimitsMeters(2));
+            app.StereoCursorRuntime = runtime;
+            app.refreshStereoCursor();
+            diagnostics = app.stereoCursorDiagnostics();
+        end
+
+        function diagnostics = stereoCursorDiagnostics(app)
+            %stereoCursorDiagnostics Return runtime geometry without handles.
+            runtime = app.StereoCursorRuntime;
+            if isempty(fieldnames(runtime))
+                runtime = app.defaultStereoCursorRuntime();
+            end
+            diagnostics = struct(Enabled=runtime.Enabled, ...
+                PairId=runtime.PairId, ViewIds=runtime.ViewIds, ...
+                AnchorPlaneCoordinates=runtime.AnchorPlaneCoordinates, ...
+                HeightMeters=runtime.HeightMeters, ...
+                WorldPoint=runtime.WorldPoint, Status=runtime.Status, ...
+                Projection=runtime.Projection, Eyes=runtime.Eyes, ...
+                HeightStepMeters=app.StereoCursorHeightStepMeters, ...
+                HeightLimitsMeters=app.StereoCursorHeightLimitsMeters, ...
+                RuntimeOnly=true, SavedScientificStateIncluded=false, ...
+                GraphicsStateIncluded=false);
+        end
+
+        function options = stereoCursorOptions(app, options)
+            %stereoCursorOptions Query or configure bounded wheel-height steps.
+            if nargin >= 2
+                if ~isstruct(options) || ~isscalar(options)
+                    error("ProjectionViewerApp:invalidStereoCursorOptions", ...
+                        "Stereo cursor options must be a scalar struct.");
+                end
+                known = ["HeightStepMeters" "HeightLimitsMeters"];
+                if any(~ismember(string(fieldnames(options)), known))
+                    error("ProjectionViewerApp:invalidStereoCursorOptions", ...
+                        "Only HeightStepMeters and HeightLimitsMeters are supported.");
+                end
+                if isfield(options, "HeightStepMeters")
+                    value = options.HeightStepMeters;
+                    if ~isnumeric(value) || ~isscalar(value) || ...
+                            ~isfinite(value) || value <= 0
+                        error("ProjectionViewerApp:invalidStereoCursorOptions", ...
+                            "HeightStepMeters must be a positive finite scalar.");
+                    end
+                    app.StereoCursorHeightStepMeters = double(value);
+                end
+                if isfield(options, "HeightLimitsMeters")
+                    value = options.HeightLimitsMeters;
+                    if ~isnumeric(value) || numel(value) ~= 2 || ...
+                            any(~isfinite(value)) || value(1) >= value(2)
+                        error("ProjectionViewerApp:invalidStereoCursorOptions", ...
+                            "HeightLimitsMeters must be an increasing finite 2-vector.");
+                    end
+                    app.StereoCursorHeightLimitsMeters = ...
+                        reshape(double(value), 1, 2);
+                end
+                if app.StereoCursorRuntime.Enabled
+                    app.StereoCursorRuntime.HeightMeters = min(max( ...
+                        app.StereoCursorRuntime.HeightMeters, ...
+                        app.StereoCursorHeightLimitsMeters(1)), ...
+                        app.StereoCursorHeightLimitsMeters(2));
+                    app.refreshStereoCursor();
+                end
+            end
+            options = struct( ...
+                HeightStepMeters=app.StereoCursorHeightStepMeters, ...
+                HeightLimitsMeters=app.StereoCursorHeightLimitsMeters, ...
+                FineFactor=app.StereoCursorFineStepFactor, ...
+                CoarseFactor=app.StereoCursorCoarseStepFactor);
         end
 
         function diagnostics = performanceDiagnostics(app)
@@ -1039,8 +1145,8 @@ classdef ProjectionViewerApp < handle
             app.Axes.Layout.Column = 1;
             if app.PendingInitialViewportFrame
                 app.InitialViewportFrameListener = addlistener( ...
-                    app.Axes, "InnerPosition", "PostSet", ...
-                    @(~, ~) app.viewerAxesInnerPositionChanged());
+                    app.Axes, "MarkedClean", ...
+                    @(~, ~) app.initialViewportFrameMarkedClean());
             end
             app.Axes.Toolbar.Visible = "off";
             app.Axes.Interactions = [];
@@ -1106,6 +1212,7 @@ classdef ProjectionViewerApp < handle
                 HorizontalAlignment="right", VerticalAlignment="bottom", ...
                 BackgroundColor=[0.05 0.05 0.05], FontColor=[1 1 0.2], ...
                 Enable="off", Tag="ProjectionViewerViewVectorOverlay");
+            app.createStereoCursorOverlay();
             app.positionViewerOverlays();
 
         end
@@ -1835,6 +1942,7 @@ classdef ProjectionViewerApp < handle
             app.refreshAlignmentActivePairControls();
             app.refreshAlignmentOverlays(true);
             app.clearSelectedAlignmentMatchOverlay();
+            app.refreshStereoCursorForActivePair();
         end
 
         function refreshAlignmentActivePairControls(app)
@@ -1907,6 +2015,8 @@ classdef ProjectionViewerApp < handle
                     isempty(fieldnames(runtime.RestoreCamera))
                 runtime.RestoreCamera = app.exportCameraState();
             end
+            app.PendingInitialViewportFrame = false;
+            app.deleteInitialViewportFrameListener();
             app.cancelCameraReconciliation();
             cameraState = struct( ...
                 Position=(plan.Camera.PositionWorld - ...
@@ -2022,6 +2132,8 @@ classdef ProjectionViewerApp < handle
         end
 
         function noteManualCameraMotion(app)
+            app.PendingInitialViewportFrame = false;
+            app.deleteInitialViewportFrameListener();
             runtime = app.PairViewpointRuntime;
             if ~runtime.FollowEnabled
                 return
@@ -2105,6 +2217,7 @@ classdef ProjectionViewerApp < handle
             app.updateAllSurfaceBlendAppearance();
             app.applyAnaglyphPresentationOffsetDelta(oldPresentationOffsets);
             app.refreshAlignmentStereoEyeStatus();
+            app.refreshStereoCursor();
         end
 
         function resetAlignmentStereoEyes(app)
@@ -2118,6 +2231,7 @@ classdef ProjectionViewerApp < handle
             app.updateAllSurfaceBlendAppearance();
             app.applyAnaglyphPresentationOffsetDelta(oldPresentationOffsets);
             app.refreshAlignmentStereoEyeStatus();
+            app.refreshStereoCursor();
         end
 
         function alignmentPairEnabledChanged(app)
@@ -4957,7 +5071,9 @@ classdef ProjectionViewerApp < handle
         end
 
         function createImageContextMenu(app)
-            app.ImageContextMenu = uicontextmenu(app.UIFigure);
+            app.ImageContextMenu = uicontextmenu(app.UIFigure, ...
+                ContextMenuOpeningFcn=@(~, ~) ...
+                app.refreshStereoCursorMenuState());
             app.SaveMenuItem = uimenu(app.ImageContextMenu, Text="Save", ...
                 MenuSelectedFcn=@(~, ~) app.saveStateFromDialog(), ...
                 Tag="ProjectionViewerSaveMenuItem");
@@ -4977,6 +5093,16 @@ classdef ProjectionViewerApp < handle
                 Text="Crosshair", Checked="off", ...
                 MenuSelectedFcn=@(~, ~) app.toggleCrosshair(), ...
                 Tag="ProjectionViewerCrosshairMenuItem");
+            app.StereoCursorMenuItem = uimenu(app.ImageContextMenu, ...
+                Text="Stereo cursor", Checked="off", ...
+                MenuSelectedFcn=@(~, ~) app.toggleStereoCursor(), ...
+                Tag="ProjectionViewerStereoCursorMenuItem");
+            app.StereoCursorRepositionMenuItem = uimenu( ...
+                app.ImageContextMenu, ...
+                Text="Reposition stereo cursor here", Enable="off", ...
+                MenuSelectedFcn=@(~, ~) ...
+                app.repositionStereoCursorAtPointer(), ...
+                Tag="ProjectionViewerStereoCursorRepositionMenuItem");
             app.AlignmentPanelMenuItem = uimenu(app.ImageContextMenu, ...
                 Text="Alignment Workbench...", ...
                 MenuSelectedFcn=@(~, ~) app.openAlignmentWorkbench(), ...
@@ -5648,6 +5774,7 @@ classdef ProjectionViewerApp < handle
             app.updateControlsFromSelectedLayer();
             app.showMotionIdentity();
             app.updateMotionNavigationControls();
+            app.refreshStereoCursorForActivePair();
             app.updateMotionEdgeControls();
             app.refreshMotionStatus();
             success = true;
@@ -6182,6 +6309,14 @@ classdef ProjectionViewerApp < handle
                 Warning="", Snapshot=struct());
         end
 
+        function runtime = defaultStereoCursorRuntime(~)
+            runtime = struct(Enabled=false, PairId="", ...
+                ViewIds=strings(1, 0), ...
+                AnchorPlaneCoordinates=[NaN NaN], HeightMeters=0, ...
+                WorldPoint=nan(3, 1), Status="disabled", ...
+                Projection=struct(), Eyes=struct(), Message="");
+        end
+
         function createCrosshairOverlay(app)
             app.CrosshairHorizontal = line(app.Axes, [NaN NaN], ...
                 [NaN NaN], [NaN NaN], Color=[0 1 1], LineWidth=1, ...
@@ -6191,6 +6326,30 @@ classdef ProjectionViewerApp < handle
                 [NaN NaN], [NaN NaN], Color=[0 1 1], LineWidth=1, ...
                 Visible="off", Clipping="off", HitTest="off", ...
                 PickableParts="none", Tag="ProjectionViewerCrosshairVertical");
+        end
+
+        function createStereoCursorOverlay(app)
+            colors = {[1 0.15 0.15], [0 1 1]};
+            app.StereoCursorMarkers = gobjects(1, 2);
+            for index = 1:2
+                app.StereoCursorMarkers(index) = line(app.Axes, NaN, NaN, NaN, ...
+                    LineStyle="none", Marker="+", MarkerSize=14, ...
+                    LineWidth=2, Color=colors{index}, Visible="off", ...
+                    Clipping="off", HitTest="off", PickableParts="none", ...
+                    Tag="ProjectionViewerStereoCursorMarker" + index);
+            end
+            app.StereoCursorConnector = line(app.Axes, [NaN NaN], ...
+                [NaN NaN], [NaN NaN], LineStyle="--", ...
+                Color=[1 1 0.3], LineWidth=1, Visible="off", ...
+                Clipping="off", HitTest="off", PickableParts="none", ...
+                Tag="ProjectionViewerStereoCursorConnector");
+            app.StereoCursorOverlayLabel = text(app.Axes, 0.02, 0.97, 0, ...
+                "Stereo cursor disabled", Units="normalized", ...
+                HorizontalAlignment="left", VerticalAlignment="top", ...
+                BackgroundColor=[0.05 0.05 0.05], Color=[1 1 0.75], ...
+                Margin=4, Interpreter="none", Visible="off", ...
+                Clipping="off", HitTest="off", PickableParts="none", ...
+                Tag="ProjectionViewerStereoCursorOverlay");
         end
 
         function layerState = exportLayerState(app, layerIndex)
@@ -6404,7 +6563,7 @@ classdef ProjectionViewerApp < handle
                 Name="ProjectionViewerCameraSettleTimer");
         end
 
-        function viewerAxesInnerPositionChanged(app)
+        function initialViewportFrameMarkedClean(app)
             if ~app.PendingInitialViewportFrame || ...
                     ~app.IsPreviewCameraReady || ...
                     app.Axes.InnerPosition(3) <= ...
@@ -6414,7 +6573,9 @@ classdef ProjectionViewerApp < handle
             app.PendingInitialViewportFrame = false;
             app.deleteInitialViewportFrameListener();
             app.frameCurrentProjectionView(app.InitialViewportFillFraction);
-            app.refreshTiledProjectionSurfaces();
+            if any(app.PreviewTiledLayerMask)
+                app.refreshTiledProjectionSurfaces();
+            end
             app.positionViewerOverlays();
         end
 
@@ -7328,7 +7489,9 @@ classdef ProjectionViewerApp < handle
         end
 
         function raiseCrosshairOverlay(app)
-            handles = [app.CrosshairHorizontal app.CrosshairVertical];
+            handles = [app.CrosshairHorizontal app.CrosshairVertical ...
+                app.StereoCursorConnector app.StereoCursorMarkers ...
+                app.StereoCursorOverlayLabel];
             handles = handles(isgraphics(handles));
             if ~isempty(handles)
                 app.PerformanceMonitor.increment("OverlayRestacks");
@@ -7393,6 +7556,7 @@ classdef ProjectionViewerApp < handle
             app.updateLabels(app.ProjectionTipDegrees, ...
                 app.ProjectionTiltDegrees, ...
                 app.ViewTwistDegrees, layer.Alpha);
+            app.refreshStereoCursor();
             drawnow limitrate
             app.finishPerformanceFrame(frameTimer, "TwistSeconds");
             app.scheduleCameraReconciliation();
@@ -7736,6 +7900,12 @@ classdef ProjectionViewerApp < handle
         end
 
         function scrollWheel(app, event)
+            if app.StereoCursorRuntime.Enabled && ...
+                    (app.IsShiftDown || app.eventHasShift(event))
+                app.adjustStereoCursorHeight(event);
+                app.updateCrosshair();
+                return
+            end
             if app.IsControlDown || app.eventHasControl(event)
                 app.scrollTwist(event);
                 app.updateCrosshair();
@@ -8763,6 +8933,7 @@ classdef ProjectionViewerApp < handle
                 app.refreshAlignmentOverlays();
             end
             app.refreshSelectedFootprintOutline();
+            app.refreshStereoCursor();
             drawnow limitrate
             app.finishPerformanceFrame(frameTimer, "ProjectionSeconds");
         end
@@ -8777,6 +8948,7 @@ classdef ProjectionViewerApp < handle
             app.updateLabels(app.ProjectionTipDegrees, ...
                 app.ProjectionTiltDegrees, app.ViewTwistDegrees, layer.Alpha);
             app.refreshSelectedFootprintOutline();
+            app.refreshStereoCursor();
             drawnow limitrate
             app.finishPerformanceFrame(frameTimer, "ProjectionSeconds");
         end
@@ -8788,6 +8960,7 @@ classdef ProjectionViewerApp < handle
 
             app.refreshProjectionLayers( ...
                 1:numel(app.Scene.layers), meshSamplings, true);
+            app.refreshStereoCursor();
         end
 
         function refreshProjectionLayers(app, layerIndices, ...
@@ -9089,6 +9262,9 @@ classdef ProjectionViewerApp < handle
                     surfaceHandle.ZData = surfaceHandle.ZData + delta(3);
                 end
             end
+            if app.StereoCursorRuntime.Enabled
+                app.updateStereoCursorGraphics();
+            end
         end
 
         function origins = layerViewOrigins(app, layerIndices)
@@ -9328,6 +9504,7 @@ classdef ProjectionViewerApp < handle
         function resetView(app)
             app.exitMotionImagery();
             app.exitAlignmentSoloPair();
+            app.disableStereoCursor();
             app.cancelCameraReconciliation();
             app.Scene = app.ResetScene;
             app.AlignmentPairController.regenerate(app.Scene);
@@ -9576,6 +9753,7 @@ classdef ProjectionViewerApp < handle
                 app.applyAlignmentSoloPresentation();
             end
             app.refreshLayerManagerTable();
+            app.refreshStereoCursorForActivePair();
             if app.MotionRuntime.Active
                 app.motionConfigurationChanged();
             end
@@ -10065,6 +10243,256 @@ classdef ProjectionViewerApp < handle
             app.setCrosshairEnabled(~app.IsCrosshairEnabled);
         end
 
+        function toggleStereoCursor(app)
+            if app.StereoCursorRuntime.Enabled
+                app.disableStereoCursor();
+                return
+            end
+            pair = app.activeStereoCursorPair();
+            point = app.currentPointerProjectionPlanePoint();
+            if ~pair.Available || any(~isfinite(point))
+                app.setAlignmentStatus( ...
+                    "Stereo cursor requires a valid active pair and pointer position.");
+                app.refreshStereoCursorMenuState();
+                return
+            end
+            app.placeStereoCursor(point, 0);
+        end
+
+        function repositionStereoCursorAtPointer(app)
+            if ~app.StereoCursorRuntime.Enabled
+                return
+            end
+            point = app.currentPointerProjectionPlanePoint();
+            if any(~isfinite(point))
+                app.setAlignmentStatus( ...
+                    "Stereo cursor was not moved because the pointer ray misses the plane.");
+                return
+            end
+            height = app.StereoCursorRuntime.HeightMeters;
+            app.placeStereoCursor(point, height);
+        end
+
+        function disableStereoCursor(app)
+            app.StereoCursorRuntime = app.defaultStereoCursorRuntime();
+            app.hideStereoCursorGraphics();
+            app.refreshStereoCursorMenuState();
+        end
+
+        function refreshStereoCursorMenuState(app)
+            if isempty(app.StereoCursorMenuItem) || ...
+                    ~isvalid(app.StereoCursorMenuItem)
+                return
+            end
+            pair = app.activeStereoCursorPair();
+            enabled = app.StereoCursorRuntime.Enabled;
+            app.StereoCursorMenuItem.Checked = app.onOff(enabled);
+            app.StereoCursorMenuItem.Enable = app.onOff(enabled || pair.Available);
+            if ~isempty(app.StereoCursorRepositionMenuItem) && ...
+                    isvalid(app.StereoCursorRepositionMenuItem)
+                app.StereoCursorRepositionMenuItem.Enable = ...
+                    app.onOff(enabled && pair.Available);
+            end
+        end
+
+        function pair = activeStereoCursorPair(app)
+            pair = struct(Available=false, PairId="", ...
+                ViewIds=strings(1, 0));
+            current = app.AlignmentPairController.currentPair();
+            if ~isfield(current, "ViewsAvailable") || ...
+                    ~current.ViewsAvailable || ...
+                    ~isfield(current, "ReferenceViewId") || ...
+                    ~isfield(current, "MovingViewId")
+                return
+            end
+            try
+                identity = ProjectionViewMetadata.pairIdentity( ...
+                    current.ReferenceViewId, current.MovingViewId);
+                ProjectionViewMetadata.indexForId(app.Scene, identity.ViewIds(1));
+                ProjectionViewMetadata.indexForId(app.Scene, identity.ViewIds(2));
+            catch
+                return
+            end
+            pair.Available = true;
+            pair.PairId = identity.PairId;
+            pair.ViewIds = identity.ViewIds;
+        end
+
+        function refreshStereoCursorForActivePair(app)
+            if ~app.StereoCursorRuntime.Enabled
+                app.refreshStereoCursorMenuState();
+                return
+            end
+            pair = app.activeStereoCursorPair();
+            if ~pair.Available
+                runtime = app.StereoCursorRuntime;
+                runtime.Status = "unavailablePair";
+                runtime.Message = "Active pair is unavailable.";
+                runtime.Projection = struct();
+                app.StereoCursorRuntime = runtime;
+                app.updateStereoCursorGraphics();
+                return
+            end
+            app.StereoCursorRuntime.PairId = pair.PairId;
+            app.StereoCursorRuntime.ViewIds = pair.ViewIds;
+            app.refreshStereoCursor();
+        end
+
+        function refreshStereoCursor(app)
+            if ~app.StereoCursorRuntime.Enabled
+                app.hideStereoCursorGraphics();
+                app.refreshStereoCursorMenuState();
+                return
+            end
+            runtime = app.StereoCursorRuntime;
+            pair = app.activeStereoCursorPair();
+            if ~pair.Available
+                runtime.Status = "unavailablePair";
+                runtime.Message = "Active pair is unavailable.";
+                runtime.Projection = struct();
+                app.StereoCursorRuntime = runtime;
+                app.updateStereoCursorGraphics();
+                return
+            end
+            runtime.PairId = pair.PairId;
+            runtime.ViewIds = pair.ViewIds;
+            plane = app.currentProjectionPlane();
+            try
+                runtime.WorldPoint = ProjectionStereoCursorModel.worldPoint( ...
+                    plane, runtime.AnchorPlaneCoordinates, runtime.HeightMeters);
+                runtime.Projection = ProjectionStereoCursorModel.projectPair( ...
+                    app.Scene, runtime.ViewIds, runtime.WorldPoint, plane);
+                runtime.Eyes = app.activeStereoEyeAssignment();
+                validCount = runtime.Projection.ValidCount;
+                if validCount == 2
+                    runtime.Status = "valid";
+                    runtime.Message = "Both source projections are valid.";
+                elseif validCount == 1
+                    runtime.Status = "partial";
+                    runtime.Message = "Only one source projection is valid.";
+                else
+                    runtime.Status = "invalid";
+                    runtime.Message = "Neither source projection is valid.";
+                end
+            catch exception
+                runtime.WorldPoint = nan(3, 1);
+                runtime.Status = "failed";
+                runtime.Message = string(exception.message);
+                runtime.Projection = struct();
+                runtime.Eyes = struct();
+            end
+            app.StereoCursorRuntime = runtime;
+            app.updateStereoCursorGraphics();
+            app.refreshStereoCursorMenuState();
+        end
+
+        function updateStereoCursorGraphics(app)
+            runtime = app.StereoCursorRuntime;
+            app.hideStereoCursorMarkers();
+            if ~runtime.Enabled
+                app.hideStereoCursorGraphics();
+                return
+            end
+            statuses = ["unavailable" "unavailable"];
+            if isstruct(runtime.Projection) && ...
+                    isfield(runtime.Projection, "Projections")
+                projections = runtime.Projection.Projections;
+                statuses = string({projections.Status});
+                redViewId = "";
+                cyanViewId = "";
+                if isstruct(runtime.Eyes) && ...
+                        isfield(runtime.Eyes, "RedViewId")
+                    redViewId = string(runtime.Eyes.RedViewId);
+                    cyanViewId = string(runtime.Eyes.CyanViewId);
+                end
+                points = nan(3, 2);
+                for index = 1:min(2, numel(projections))
+                    if ~projections(index).Valid
+                        continue
+                    end
+                    layerIndex = projections(index).LayerIndex;
+                    offset = app.previewLayerDepthOffset(layerIndex) + ...
+                        app.anaglyphPresentationOffset(layerIndex);
+                    point = projections(index).DisplayWorldPoint - ...
+                        app.Scene.renderOrigin + offset;
+                    points(:, index) = point;
+                    marker = app.StereoCursorMarkers(index);
+                    marker.XData = point(1);
+                    marker.YData = point(2);
+                    marker.ZData = point(3);
+                    marker.Visible = "on";
+                    if projections(index).ViewId == redViewId
+                        marker.Color = [1 0.15 0.15];
+                    elseif projections(index).ViewId == cyanViewId
+                        marker.Color = [0 1 1];
+                    else
+                        marker.Color = [1 1 0.3];
+                    end
+                    marker.UserData = struct( ...
+                        ViewId=projections(index).ViewId, ...
+                        SourceCoordinates= ...
+                        projections(index).SourceCoordinates);
+                end
+                if all(isfinite(points), "all")
+                    app.StereoCursorConnector.XData = points(1, :);
+                    app.StereoCursorConnector.YData = points(2, :);
+                    app.StereoCursorConnector.ZData = points(3, :);
+                    app.StereoCursorConnector.Visible = "on";
+                end
+            end
+            if ~isempty(app.StereoCursorOverlayLabel) && ...
+                    isvalid(app.StereoCursorOverlayLabel)
+                app.StereoCursorOverlayLabel.String = sprintf( ...
+                    "Z = %.3f m relative to plane (+ along VN)\n%s | %s", ...
+                    runtime.HeightMeters, statuses(1), statuses(2));
+                app.StereoCursorOverlayLabel.Visible = "on";
+            end
+            app.raiseCrosshairOverlay();
+        end
+
+        function hideStereoCursorMarkers(app)
+            markers = app.StereoCursorMarkers(isgraphics( ...
+                app.StereoCursorMarkers));
+            if ~isempty(markers)
+                set(markers, "Visible", "off");
+            end
+            if ~isempty(app.StereoCursorConnector) && ...
+                    isgraphics(app.StereoCursorConnector)
+                app.StereoCursorConnector.Visible = "off";
+            end
+        end
+
+        function hideStereoCursorGraphics(app)
+            app.hideStereoCursorMarkers();
+            if ~isempty(app.StereoCursorOverlayLabel) && ...
+                    isvalid(app.StereoCursorOverlayLabel)
+                app.StereoCursorOverlayLabel.Visible = "off";
+            end
+        end
+
+        function adjustStereoCursorHeight(app, event)
+            if ~app.StereoCursorRuntime.Enabled
+                return
+            end
+            count = app.eventNumericValue(event, "VerticalScrollCount");
+            if isempty(count) || ~isfinite(count(1)) || count(1) == 0
+                return
+            end
+            factor = 1;
+            if app.IsControlDown || app.eventHasControl(event)
+                factor = app.StereoCursorFineStepFactor;
+            elseif app.IsAltDown || app.eventHasAlt(event)
+                factor = app.StereoCursorCoarseStepFactor;
+            end
+            delta = -double(count(1)) * ...
+                app.StereoCursorHeightStepMeters * factor;
+            limits = app.StereoCursorHeightLimitsMeters;
+            app.StereoCursorRuntime.HeightMeters = min(max( ...
+                app.StereoCursorRuntime.HeightMeters + delta, ...
+                limits(1)), limits(2));
+            app.refreshStereoCursor();
+        end
+
         function setCrosshairEnabled(app, isEnabled)
             app.IsCrosshairEnabled = logical(isEnabled);
             app.CrosshairMenuItem.Checked = app.onOff(app.IsCrosshairEnabled);
@@ -10182,7 +10610,8 @@ classdef ProjectionViewerApp < handle
             text = [
                 "Mouse controls"
                 "Mouse wheel: zoom the view"
-                "Shift + wheel: adjust Tip"
+                "Shift + wheel: adjust Tip; while Stereo cursor is enabled, adjust cursor Z"
+                "Stereo cursor Shift + Control/Alt wheel: fine/coarse Z step"
                 "Alt/Option + wheel: adjust Tilt"
                 "Control + wheel: adjust Twist"
                 "Left drag: pan the camera"
@@ -10208,9 +10637,10 @@ classdef ProjectionViewerApp < handle
                 "Space up: show the selected layer"
                 ""
                 "Context menu"
-                "Right click inside the image for Save, Load, Cycle, Reset, Help, Crosshair, Alignment Workbench...,"
+                "Right click inside the image for Save, Load, Cycle, Reset, Help, Crosshair, Stereo cursor, Alignment Workbench...,"
                 "Layer Manager..., Clear alignment overlays, and Blend mode."
                 "Crosshair overlays cyan screen-space guide lines across the viewport."
+                "Stereo cursor projects one signed-height world point through the active physical pair."
                 "Reset restores neutral tip, tilt, twist, layer order, visibility, alpha, blend mode, offsets, and OPK corrections."
                 "Move up/down in Layer Manager changes the selected layer stack order."
                 ];
@@ -10259,6 +10689,23 @@ classdef ProjectionViewerApp < handle
             end
 
             value = lower(string(rawValue));
+        end
+
+        function value = eventNumericValue(~, event, propertyName)
+            propertyName = char(propertyName);
+            if isstruct(event) && isfield(event, propertyName)
+                rawValue = event.(propertyName);
+            elseif isobject(event) && isprop(event, propertyName)
+                rawValue = event.(propertyName);
+            else
+                value = zeros(1, 0);
+                return
+            end
+            if ~isnumeric(rawValue)
+                value = zeros(1, 0);
+                return
+            end
+            value = double(rawValue(:).');
         end
     end
 

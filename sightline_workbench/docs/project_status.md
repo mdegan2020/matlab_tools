@@ -21,9 +21,9 @@ As of July 14, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 752/752 tests with
+- The latest grouped fresh-class repository suite passes 759/759 tests with
   zero failures and zero incomplete tests.
-- `docs/real_data_validation_followup_workpack.md` is the active top-priority
+- `docs/real_data_validation_followup_workpack.md` is the completed top-priority
   corrective queue. RD-2, RD-3, RD-1, and RD-4 are complete: the default network
   path is bounded and observable, active tiled presentations reconcile against the
   current camera before display, playback lookahead rejects stale requests,
@@ -33,8 +33,10 @@ As of July 14, 2026:
   visibility, runtime View All/Single/Pair presentation, playback, and pair
   camera tracking. RD-5 now supplies an explicit selected-pair action plus a
   scene-bound Surface Workbench Run/Cancel, retained evidence, exact pair/method
-  provenance, multi-ray/fusion orchestration, and MAT/JSON export. RD-6
-  world-space stereo cursor is next.
+  provenance, multi-ray/fusion orchestration, and MAT/JSON export. RD-6 adds a
+  runtime-only world-space stereo cursor with stable-pair projection, signed
+  plane-normal height, physical-eye marks, bounded controls, and explicit
+  invalid states. Independent D2 native CPU work is next.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
   existing viewer launch signature and legacy `LayerId` contracts.
@@ -103,6 +105,7 @@ As of July 14, 2026:
 | Real-data follow-up RD-1 explicit-plane camera orientation | Complete; representative real-data confirmation pending |
 | Real-data follow-up RD-4 Layer Manager/viewer shell | Complete |
 | Real-data follow-up RD-5 dense-surface controls/evidence/recovery | Complete; representative-imagery usefulness review pending |
+| Real-data follow-up RD-6 world-space stereo cursor | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -161,6 +164,19 @@ the complete evidence and compact JSON omits only image-sized arrays. The
 deterministic five-image fixture names and processes all ten pairs before
 multi-ray/fusion. No smoothing, hole filling, or forced DEM is used, and
 representative private imagery remains an external usefulness gate.
+
+RD-6 adds checked **Stereo cursor** and **Reposition stereo cursor here**
+viewport commands. A plane anchor and signed `z` define exactly one world point
+`Pplane + z*VN`, which is inverted independently through both stable-ID source
+models and displayed with physical-eye colors. Pair turnover, role swap, layer
+reorder, OPK refresh, pan, zoom, and twist preserve the physical definition.
+The compact overlay reports signed meters and explicit invalid, behind-source,
+and outside-footprint states. Shift+wheel changes Z only while enabled, with
+fine/coarse modifiers and configurable bounds; Shift+Up/Down still controls
+Tip. Cursor state is omitted from Save/Load/backend products and is cleared by
+disable, import, Reset, and viewer deletion. Its acceptance work also replaced
+the unreliable UIAxes `InnerPosition` listener with a guarded one-shot
+post-layout graphics event so initial framing uses the resolved viewport.
 
 The completed Alignment Workbench usability pack groups controls into Setup,
 Filter/Solve Settings, Staged Workflow/Review, Pair Schedule, Match Ledger, and
@@ -250,12 +266,13 @@ The completed read-only MATLAB SDK entry-point inventory, proposed reuse points,
 and compatibility risks are recorded in `docs/matlab_sdk_audit.md`. The
 consolidated product roadmap remains
 `docs/multi_image_surface_reconstruction_workplan.md`; its completed and gated
-items are preserved there. The active corrective queue is now
-`docs/real_data_validation_followup_workpack.md`, ahead of independent D2 work.
-Its July 13 operator findings are incorporated in the order RD-2 network-solve,
+items are preserved there. The corrective queue in
+`docs/real_data_validation_followup_workpack.md` is complete; independent D2
+work is next. Its July 13 operator findings were completed in the order RD-2
+network-solve,
 RD-3 LOD/lifecycle correctness, RD-1 camera-up orientation, RD-4 Layer
 Manager/viewer shell, RD-5 dense-surface recovery, and RD-6 stereo cursor.
-RD-2, RD-3, RD-1, RD-4, and RD-5 are complete; RD-6 is the next active pack. MI-0 through MI-3, A2
+RD-2, RD-3, RD-1, RD-4, RD-5, and RD-6 are complete. MI-0 through MI-3, A2
 pair viewpoint, A3a-1 focus-aware keyboard mapping, A3a-2 manual motion imagery,
 A3b motion playback, S1 immutable CorrectionSet, S2 correction lifecycle, the
 SDK audit, and both A4 track/path and explainable pair-graph packs are

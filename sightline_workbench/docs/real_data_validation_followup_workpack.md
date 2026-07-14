@@ -1,9 +1,8 @@
 # Real-Data Validation Follow-Up Workpack
 
-Status: active implementation. RD-2, RD-3, RD-1, RD-4, and RD-5 are complete;
-RD-6 is next in the recorded execution order. This workpack remains the highest-priority
-implementation queue and temporarily precedes independent D2 native CPU work
-and all hardware-gated GPU work.
+Status: implementation complete July 14, 2026. RD-2, RD-3, RD-1, RD-4, RD-5,
+and RD-6 are complete in the recorded execution order. Independent D2 native
+CPU work is next; hardware-gated GPU work remains external.
 
 ## Purpose
 
@@ -56,8 +55,7 @@ completed feature trees except where a regression is demonstrated.
 
 ### RD-0 — July 13 Operator Findings And Execution Order
 
-Status: intake and presentation decisions complete; RD-2, RD-3, RD-1, RD-4,
-and RD-5 complete.
+Status: complete; all six corrective packs are implemented and validated.
 
 The implementation order is deliberately independent of the historical pack
 numbers retained below:
@@ -672,7 +670,7 @@ practical-usefulness claims.
 
 ### RD-6 — World-Space Stereo Cursor
 
-Status: geometry and binding approved; implementation not started.
+Status: implementation complete July 14, 2026.
 
 Add `Stereo cursor` to the viewport context menu with an explicit checked state.
 The cursor represents one confirmed physical 3-D point, not an arbitrary screen
@@ -702,6 +700,32 @@ oblique planes, swapped temporal order, physical eye assignment, out-of-bounds
 projection, active-pair turnover, zoom/pan/rotate, and enable/disable cleanup.
 The cursor and overlay are runtime-only and never enter saved scientific state.
 
+Implementation evidence: the pre-change reproduction found no stereo-cursor
+context command despite a valid active pair. `ProjectionStereoCursorModel`
+now owns graphics-independent world-point construction and deterministic
+bounded source-model inversion. `ProjectionViewerApp` owns the checked menu,
+reposition action, two physical-eye markers, connector, compact status overlay,
+active-pair refresh, cleanup, and the public `placeStereoCursor`,
+`stereoCursorDiagnostics`, and `stereoCursorOptions` entry points. Default Z
+steps are `1 m`, `0.1x` fine, and `10x` coarse within configurable finite
+bounds. Explicit statuses cover missing views, unsupported geometry,
+outside-source footprint, behind source, sampling failure, ray-model mismatch,
+and projection-plane failures.
+
+Focused acceptance covers zero and signed height, oblique planes, signed
+disparity reversal, stable IDs through role/order changes, physical-eye color,
+pair turnover from Alignment and Pair View, pan/zoom/twist, invalid states,
+runtime-only import/reset/delete cleanup, and unchanged Shift-arrow behavior.
+The UI run also exposed and corrected a deterministic initial-framing race:
+framing now waits for the resolved UIAxes viewport through a guarded one-shot
+post-layout graphics event and refreshes tiles only for tiled layers.
+
+Fresh-class acceptance passes `coreGeometryState` 147/147, `alignment`
+185/185, `backendSurface` 246/246, `viewerAlignmentUi` 75/75,
+`viewerPresentationWorkflows` 72/72, and `viewerPerformancePrecision` 34/34,
+totaling 759/759 with zero failures or incomplete tests. MATLAB Code Analyzer
+reports zero issues for every changed MATLAB source, test, and manifest file.
+
 ## Likely Code And Test Touchpoints
 
 Inspect rather than assume the final edit set:
@@ -709,6 +733,7 @@ Inspect rather than assume the final edit set:
 ```text
 src/ProjectionViewerHarness.m
 src/ProjectionPairViewpoint.m
+src/ProjectionStereoCursorModel.m
 src/ProjectionViewerApp.m
 src/ProjectionAlignmentOptions.m
 src/ProjectionAlignmentNetworkSolver.m
@@ -725,6 +750,8 @@ tests/ProjectionViewerAlignmentWorkflowTest.m
 tests/ProjectionViewerMotionWorkflowTest.m
 tests/ProjectionViewerMotionPlaybackWorkflowTest.m
 tests/ProjectionViewerAppInteractionTest.m
+tests/ProjectionStereoCursorModelTest.m
+tests/ProjectionViewerStereoCursorWorkflowTest.m
 tests/ProjectionDenseSurfaceExtractorTest.m
 tests/ProjectionSurfaceWorkbenchWorkflowTest.m
 scripts/alignment_reliability_validation.m
