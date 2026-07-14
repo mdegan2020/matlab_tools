@@ -89,6 +89,49 @@ classdef ProjectionAlignmentSessionTest < matlab.unittest.TestCase
             testCase.verifyEqual(session.Stage, "setup");
         end
 
+        function testExplicitResetClearsOperatorAndRuntimeState(testCase)
+            session = ProjectionAlignmentSession();
+            session.RoiBounds = [1 2 3 4];
+            session.WorkingImageCacheKey = struct(Id="key");
+            session.WorkingImageCacheValue = struct(Id="value");
+            session.WorkingImageCacheHits = 2;
+            session.ControlState = struct(Preset="quality");
+            session.beginStage("filtering", "Filtering evidence...");
+
+            session.reset();
+
+            state = session.diagnostics();
+            testCase.verifyEmpty(session.RoiBounds);
+            testCase.verifyEmpty(fieldnames(session.WorkingImageCacheKey));
+            testCase.verifyEmpty(fieldnames(session.WorkingImageCacheValue));
+            testCase.verifyEqual(session.WorkingImageCacheHits, 0);
+            testCase.verifyEmpty(fieldnames(session.ControlState));
+            testCase.verifyEqual(state.Stage, "setup");
+            testCase.verifyEqual(state.StatusText, "Alignment reset.");
+            testCase.verifyEqual(state.ActiveStage, "");
+        end
+
+        function testActiveAndCompletedStageMessagesRemainDistinct(testCase)
+            session = ProjectionAlignmentSession();
+            session.beginStage("matching", "Matching pair 1 of 2...");
+
+            active = session.diagnostics();
+            session.completeStage("matching", "Matched 24 observations.");
+            completed = session.diagnostics();
+            session.beginStage("filtering", "Filtering evidence...");
+            nextActive = session.diagnostics();
+
+            testCase.verifyEqual(active.ActiveStage, "matching");
+            testCase.verifyEqual(active.ActiveStatus, ...
+                "Matching pair 1 of 2...");
+            testCase.verifyEqual(completed.ActiveStage, "");
+            testCase.verifyEqual(completed.LastCompletedStage, "matching");
+            testCase.verifyEqual(completed.LastCompletedStatus, ...
+                "Matched 24 observations.");
+            testCase.verifyEqual(nextActive.ActiveStage, "filtering");
+            testCase.verifyEqual(nextActive.LastCompletedStage, "matching");
+        end
+
         function testManualAdjustmentIsSessionOnlyUndoableState(testCase)
             session = ProjectionAlignmentSession();
             session.storeMatches(struct(Id="request"), struct(Id="working"), ...

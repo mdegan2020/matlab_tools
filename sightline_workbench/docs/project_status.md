@@ -21,9 +21,9 @@ As of July 14, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 762/762 tests with
+- The latest grouped fresh-class repository suite passes 765/765 tests with
   zero failures and zero incomplete tests.
-- `docs/real_data_validation_followup_workpack.md` is the completed top-priority
+- `docs/real_data_validation_followup_workpack.md` is the active top-priority
   corrective queue. RD-2, RD-3, RD-1, and RD-4 are complete: the default network
   path is bounded and observable, active tiled presentations reconcile against the
   current camera before display, playback lookahead rejects stale requests,
@@ -36,7 +36,11 @@ As of July 14, 2026:
   orchestration, and MAT/JSON export. RD-6 adds a
   runtime-only world-space stereo cursor with stable-pair projection, signed
   plane-normal height, physical-eye marks, bounded controls, and explicit
-  invalid states. Independent D2 native CPU work is next.
+  invalid states. RD-7A/B/C/G now correct presentation visibility/order,
+  Alignment Workbench persistence/status, multi-image Surface Workbench launch,
+  and reviewable correction actionability. RD-7D/E/F analysis pyramids,
+  full-source refinement/evidence selection, and end-to-end work accounting
+  remain before independent D2 native CPU work resumes.
 - Multi-image foundation MI-0 adds optional stable `ViewId`, explicit `PassId`,
   unordered pair identity, and per-line timing metadata while preserving the
   existing viewer launch signature and legacy `LayerId` contracts.
@@ -106,6 +110,11 @@ As of July 14, 2026:
 | Real-data follow-up RD-4 Layer Manager/viewer shell | Complete |
 | Real-data follow-up RD-5 dense-surface controls/evidence/recovery | Complete; representative-imagery usefulness review pending |
 | Real-data follow-up RD-6 world-space stereo cursor | Complete |
+| Real-data follow-up RD-7A presentation correctness | Complete |
+| Real-data follow-up RD-7B persistent Alignment Workbench | Complete |
+| Real-data follow-up RD-7C multi-image Surface Workbench launch | Complete |
+| Real-data follow-up RD-7D through RD-7F measurement/performance path | In progress |
+| Real-data follow-up RD-7G correction actionability | Complete |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,

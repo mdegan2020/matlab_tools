@@ -57,8 +57,23 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
                 {'fit', 'fit'});
             overlay = findall(viewer, "Tag", ...
                 "ProjectionViewerViewVectorOverlay");
-            testCase.verifyEqual(overlay.Parent, viewer);
+            testCase.verifyEqual(overlay.Parent, sliders(1).Parent);
+            testCase.verifyEqual(overlay.Layout.Column, 5);
+            testCase.verifyEqual(overlay.Layout.Row, [1 2]);
             testCase.verifyEqual(string(overlay.Enable), "off");
+            viewer.Position = [100 100 640 480];
+            drawnow
+            compactPosition = overlay.Position;
+            testCase.verifyGreaterThanOrEqual(compactPosition(1:2), [0 0]);
+            testCase.verifyLessThanOrEqual( ...
+                compactPosition(1) + compactPosition(3) - 1, ...
+                overlay.Parent.Position(3));
+            viewer.Position = [100 100 1500 950];
+            drawnow
+            largePosition = overlay.Position;
+            testCase.verifyLessThanOrEqual( ...
+                largePosition(1) + largePosition(3) - 1, ...
+                overlay.Parent.Position(3));
 
             managerMenu = ProjectionViewerAppInteractionTest.findMenuItem( ...
                 "ProjectionViewerLayerManagerMenuItem");
@@ -298,6 +313,7 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
 
             workbench.CloseRequestFcn(workbench, struct());
             drawnow
+            testCase.verifyEqual(string(workbench.Visible), "off");
             alignmentPanelMenu.MenuSelectedFcn(alignmentPanelMenu, struct());
             drawnow
             reopenedWorkbench = findall(groot, "Type", "figure", ...
@@ -305,7 +321,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyNumElements(reopenedWorkbench, 1);
             diagnosticsAfterReopen = app.performanceDiagnostics();
             testCase.verifyEqual( ...
-                diagnosticsAfterReopen.Counters.AlignmentWorkbenchCreations, 2);
+                diagnosticsAfterReopen.Counters.AlignmentWorkbenchCreations, 1);
+            testCase.verifyEqual(reopenedWorkbench, workbench);
             testCase.verifyEmpty(findall(fig, "Tag", ...
                 "ProjectionViewerAlignmentGrid"));
         end
@@ -400,14 +417,16 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             children = [findall(groot, "Name", "Alignment Workbench"); ...
                 findall(groot, "Name", "Projection Viewer Help"); ...
                 findall(groot, "Tag", "ProjectionViewerLayerManagerFigure")];
+            alignmentWorkbench = findall(groot, "Name", ...
+                "Alignment Workbench");
             for child = reshape(children, 1, [])
                 child.CloseRequestFcn(child, struct());
             end
             drawnow
 
             testCase.verifyTrue(isvalid(viewer));
-            testCase.verifyEmpty(findall(groot, "Name", ...
-                "Alignment Workbench"));
+            testCase.verifyTrue(isvalid(alignmentWorkbench));
+            testCase.verifyEqual(string(alignmentWorkbench.Visible), "off");
             testCase.verifyEmpty(findall(groot, "Name", ...
                 "Projection Viewer Help"));
             testCase.verifyEmpty(findall(groot, "Tag", ...
@@ -415,6 +434,8 @@ classdef ProjectionViewerAppInteractionTest < matlab.unittest.TestCase
             testCase.verifyWarningFree(@() delete(app));
             testCase.verifyWarningFree(@() delete(app));
             testCase.verifyFalse(isvalid(viewer));
+            testCase.verifyEmpty(findall(groot, "Name", ...
+                "Alignment Workbench"));
         end
 
         function testCrosshairContextMenuToggleTracksPointer(testCase)

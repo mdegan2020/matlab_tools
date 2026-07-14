@@ -20,6 +20,12 @@ classdef ProjectionAlignmentSession < handle
         WorkingImageCacheValue struct = struct()
         WorkingImageCacheHits double = 0
         WorkingImageCacheMisses double = 0
+        ControlState struct = struct()
+        StatusText string = "Alignment not run"
+        ActiveStage string = ""
+        ActiveStatus string = ""
+        LastCompletedStage string = ""
+        LastCompletedStatus string = ""
     end
 
     properties (SetAccess = private)
@@ -33,6 +39,14 @@ classdef ProjectionAlignmentSession < handle
     end
 
     methods
+        function reset(session)
+            session.clearComputation();
+            session.RoiBounds = [];
+            session.clearWorkingImageCache();
+            session.ControlState = struct();
+            session.StatusText = "Alignment reset.";
+        end
+
         function clearComputation(session)
             session.Request = struct();
             session.WorkingImages = struct();
@@ -47,6 +61,11 @@ classdef ProjectionAlignmentSession < handle
             session.SelectedMatchRows = [];
             session.Result = struct();
             session.CancelRequested = false;
+            session.ActiveStage = "";
+            session.ActiveStatus = "";
+            session.LastCompletedStage = "";
+            session.LastCompletedStatus = "";
+            session.StatusText = "Alignment reset.";
             session.bumpRevision();
             session.Stage = "setup";
             session.MatchRevision = uint64(0);
@@ -228,6 +247,26 @@ classdef ProjectionAlignmentSession < handle
             session.CancelRequested = false;
         end
 
+        function beginStage(session, stage, status)
+            session.ActiveStage = string(stage);
+            session.ActiveStatus = string(status);
+            session.StatusText = string(status);
+        end
+
+        function completeStage(session, stage, status)
+            session.LastCompletedStage = string(stage);
+            session.LastCompletedStatus = string(status);
+            session.ActiveStage = "";
+            session.ActiveStatus = "";
+            session.StatusText = string(status);
+        end
+
+        function stopStage(session, status)
+            session.ActiveStage = "";
+            session.ActiveStatus = "";
+            session.StatusText = string(status);
+        end
+
         function clearWorkingImageCache(session)
             session.WorkingImageCacheKey = struct();
             session.WorkingImageCacheValue = struct();
@@ -254,6 +293,11 @@ classdef ProjectionAlignmentSession < handle
                 numel(session.ManualAdjustmentHistory);
             state.ManualAdjustmentUndoCount = ...
                 numel(session.ManualAdjustmentUndoStack);
+            state.StatusText = session.StatusText;
+            state.ActiveStage = session.ActiveStage;
+            state.ActiveStatus = session.ActiveStatus;
+            state.LastCompletedStage = session.LastCompletedStage;
+            state.LastCompletedStatus = session.LastCompletedStatus;
         end
     end
 

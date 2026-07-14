@@ -4,7 +4,11 @@ B6 provides a separate floating Surface Workbench for inspecting B5 multi-ray
 and S6 fusion products. RD-5 connects that existing product viewer to the
 active scene without making graphics state part of any scientific value. The
 Alignment Workbench exposes **Surface Workbench...**, which opens or focuses
-one scene-bound Workbench and preselects the active physical pair. The former
+one scene-bound Workbench from any eligible accepted physical pair. Viewer
+launch initially selects every eligible view, pass, and pair, uses the Quality
+pair schedule, and requests robust multi-view reconstruction. The active pair
+remains highlighted and available through the explicit Selected-pair schedule.
+The former
 direct Selected-pair SGM button has been retired so dense matching, surface
 reconstruction, fusion, and 3-D extraction all start in the appropriate bench.
 
@@ -77,7 +81,10 @@ intact.
 The usual operator path is **Alignment Workbench > Surface Workbench...** after
 accepted alignment evidence has been previewed, applied, or manually adjusted.
 The viewer builds one request per accepted physical pair and binds a runner.
-Programmatic catalog inspection remains available:
+Pair direction does not change physical-pair eligibility. Selected pass IDs
+filter scheduling, and preflight names the exact views, passes, stable pairs,
+observation cap, matcher, stages, and inclusion/omission reasons. Programmatic
+catalog inspection remains available:
 
 ```matlab
 catalog = ProjectionSurfaceProductCatalog.create( ...

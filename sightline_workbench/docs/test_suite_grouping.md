@@ -9,13 +9,13 @@ to exactly one group.
 | Group | Scope | Current tests |
 | --- | --- | ---: |
 | `coreGeometryState` | Geometry, identities, state, metadata, caches, native golden-fixture parity, and non-UI controllers | 147 |
-| `alignment` | Sparse matching/filtering, track and graph logic, global network solving, synthetic acceptance, correction SDK, A7 research, and atomic DEM position apply | 185 |
-| `backendSurface` | Backend jobs/rendering, dense matchers/search/audit, pair covariance, procedural anaglyph parity, robust multi-ray, surface-fusion SDK/audit, DEM registration SDK/audit, Surface Workbench model/runner, dense surface, synthetic truth, inverse warp, and raster paths | 246 |
+| `alignment` | Sparse matching/filtering, track and graph logic, global network solving, synthetic acceptance, correction SDK, A7 research, and atomic DEM position apply | 186 |
+| `backendSurface` | Backend jobs/rendering, dense matchers/search/audit, pair covariance, procedural anaglyph parity, robust multi-ray, surface-fusion SDK/audit, DEM registration SDK/audit, Surface Workbench model/runner, dense surface, synthetic truth, inverse warp, and raster paths | 248 |
 | `viewerAlignmentUi` | Viewer alignment, active-pair, DEM-correction invalidation, and general app interaction | 77 |
 | `viewerPresentationWorkflows` | Viewer motion, framing, harness, stereo cursor/eyes, and Surface Workbench/3-D/DEM-preview workflows | 73 |
 | `viewerPerformancePrecision` | Viewer performance evidence and long-range precision | 34 |
 
-The validated July 14, 2026 baseline is 762/762 with zero failures and zero
+The validated July 14, 2026 baseline is 765/765 with zero failures and zero
 incomplete tests.
 
 The viewer suite is intentionally subdivided. A combined viewer/UI/

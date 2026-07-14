@@ -22,6 +22,14 @@ retain full source imagery and the ordinary source-ray inverse warp.
   Cancelling primary optimization leaves the prior scene/correction state
   authoritative; cancelling optional diagnostics preserves the completed
   primary result for separate review and apply.
+- Closing the Alignment Workbench hides it without clearing controls, matches,
+  ROI, caches, solve state, or action availability. Reopen to resume the same
+  session; use **Reset** only when that state should be discarded.
+- A converged correction is classified separately as `passed`, `review`, or
+  `rejected`. A marginal improvement or preferred-count warning is reviewable,
+  not a failed solve. Review results remain previewable and applicable after a
+  confirmation summarizing RMS/objective change, OPK, evidence coverage,
+  conditioning/uncertainty, and bounds. Hard-invalid results remain rejected.
 
 ### Explicit-plane presentation convention
 
@@ -59,8 +67,10 @@ plane geometry, OPK, saved scene data, and backend products remain unchanged.
    observed rank, and weak modes. Fewer than three matches per enabled pair is
    a hard stop. Three through nine is a visible warning; ten or more is the
    current preferred count. Every parameter-bound hit is a hard failure.
-6. Use **Preview** before **Apply**. If residuals or overlays identify a bad
-   correspondence, select its overlay or table row, disable/delete it, and
+6. Use **Preview** before **Apply**. Preview, Apply, and Revert are independent:
+   Revert becomes available only after this result is previewed or applied. If
+   residuals or overlays identify a bad correspondence, select its overlay or
+   table row, disable/delete it, and
    solve again. The source observations and curation state are retained.
 7. If both images appear coherently displaced despite good relative stereo,
    select an accepted correspondence and use **Shift+left drag** in the main
@@ -73,11 +83,12 @@ plane geometry, OPK, saved scene data, and backend products remain unchanged.
    OPK is serialized normally and is therefore available to background jobs.
    Match history, filter provenance, and manual-drag history remain session
    diagnostics and are not serialized.
-9. For an exploratory dense product, keep the desired pair selected after
-   Preview or Apply and press **Dense surface**. The CPU SGM path opens a
-   masked intensity view and a metric surface whose height is measured along
-   the current projection-plane normal. Treat this as runtime analysis only:
-   it is not serialized, exported as a DEM, or used by backend rendering.
+9. For an exploratory dense or multi-view product after Preview or Apply, open
+   **Surface Workbench...**. Any enabled accepted pair with the hard-minimum
+   evidence can enable the action. The default selects all eligible views,
+   passes, and pairs, **All quality pairs**, and robust multi-view processing;
+   **Selected pair** remains an explicit fast diagnostic. Treat products as
+   runtime analysis only: they are not serialized or used by backend rendering.
 
 The Workbench is organized from top to bottom as Setup and matching inputs,
 Filter and Solve settings, the left-to-right staged workflow, Pair Schedule,

@@ -81,38 +81,23 @@ classdef ProjectionSurfaceWorkbenchRunner < handle
             catalog = ProjectionSurfaceProductCatalog.create(pointSet, {});
         end
 
-        function configuration = initialConfiguration(runner, catalog)
-            %initialConfiguration Select the active physical pair by default.
+        function configuration = initialConfiguration(~, catalog)
+            %initialConfiguration Select all eligible multi-view evidence.
             catalog = ProjectionSurfaceProductCatalog.validate(catalog);
-            active = runner.entryForPair(runner.Context.ActivePairId);
             configuration = struct( ...
-                SelectedViewIds=active.ViewIds, ...
-                SelectedPassIds=unique(active.PassIds, "stable"), ...
-                SelectedPairIds=active.PairId, PairSchedule="fast", ...
+                SelectedViewIds=catalog.ViewIds, ...
+                SelectedPassIds=catalog.PassIds, ...
+                SelectedPairIds=catalog.PairIds, PairSchedule="quality", ...
                 DenseMethod="currentSgm", GeometrySearch="sparseSeeded", ...
                 ExecutionPath="cpu", ConsistencyPolicy="balanced", ...
                 MaximumObservations=5000, ...
-                FusionAlgorithm="robustMultiRay");
-            configuration.SelectedViewIds = intersect( ...
-                configuration.SelectedViewIds, catalog.ViewIds, "stable");
-            configuration.SelectedPassIds = intersect( ...
-                configuration.SelectedPassIds, catalog.PassIds, "stable");
-            configuration.SelectedPairIds = intersect( ...
-                configuration.SelectedPairIds, catalog.PairIds, "stable");
-            if isempty(configuration.SelectedViewIds)
-                configuration.SelectedViewIds = catalog.ViewIds;
-            end
-            if isempty(configuration.SelectedPassIds)
-                configuration.SelectedPassIds = catalog.PassIds;
-            end
-            if isempty(configuration.SelectedPairIds)
-                configuration.SelectedPairIds = catalog.PairIds(1);
-            end
+                FusionAlgorithm="robustMultiRay", ...
+                ProcessingStage="robustMultiView");
         end
 
         function report = preflight(runner, state)
             %preflight Describe exact pair, matcher, search, and resource work.
-            entries = runner.scheduledEntries(state);
+            [entries, pairDecisions] = runner.schedulePlan(state);
             [matcher, matcherId, supported, reason, fallback] = ...
                 runner.resolveMatcher(state);
             metadata = struct();
@@ -128,11 +113,21 @@ classdef ProjectionSurfaceWorkbenchRunner < handle
                 pixels(index) = numel(request.AnalysisImages{1});
                 overlaps(index) = nnz(request.OverlapMask);
             end
+            scheduledViewIds = strings(1, 0);
+            scheduledPassIds = strings(1, 0);
+            if ~isempty(entries)
+                scheduledViewIds = unique([entries.ViewIds], "stable");
+                scheduledPassIds = unique([entries.PassIds], "stable");
+            end
             report = struct(Format="ProjectionSurfaceWorkbenchPreflight", ...
                 Version=1, Supported=supported, Reason=reason, ...
                 PairSchedule=string(state.PairSchedule), ...
                 SelectedPairIds=string({entries.PairId}), ...
                 SelectedViewIds=reshape(string(state.SelectedViewIds), 1, []), ...
+                SelectedPassIds=reshape(string(state.SelectedPassIds), 1, []), ...
+                ScheduledViewIds=scheduledViewIds, ...
+                ScheduledPassIds=scheduledPassIds, ...
+                PairDecisions=pairDecisions, ...
                 MatcherAlgorithmId=matcherId, MatcherMetadata=metadata, ...
                 MatcherOptions=options, ...
                 GeometrySearch=string(state.GeometrySearch), ...
@@ -144,10 +139,17 @@ classdef ProjectionSurfaceWorkbenchRunner < handle
                 FallbackReason=fallback, ...
                 ProcessingStage=string(state.ProcessingStage), ...
                 FusionAlgorithm=string(state.FusionAlgorithm), ...
+                ReconstructionStages=["pairwise" "association" ...
+                "robustMultiRay" string(state.ProcessingStage)], ...
+                EvidenceExplanation=[ ...
+                "All scheduled pair evidence is offered to stable-observation association. " ...
+                "Validity, confidence, occlusion, consistency, connectivity, residual, and conditioning gates select contributing rays."], ...
                 ResourceEstimate=struct(PairCount=numel(entries), ...
                 AnalysisPixelCount=sum(pixels), ...
                 OverlapPixelCount=sum(overlaps), ...
                 MaximumObservations=double(state.MaximumObservations), ...
+                MaximumObservationsPerPair= ...
+                double(state.MaximumObservations), ...
                 ApproximateInputBytes=8 * 8 * sum(pixels), ...
                 Bounded=true, IsWallClockPrediction=false));
         end
@@ -344,34 +346,86 @@ classdef ProjectionSurfaceWorkbenchRunner < handle
 
     methods (Access = private)
         function entries = scheduledEntries(runner, state)
+            [entries, ~] = runner.schedulePlan(state);
+        end
+
+        function [entries, decisions] = schedulePlan(runner, state)
             candidates = runner.Context.PairEntries;
+            count = numel(candidates);
             selectedViews = reshape(string(state.SelectedViewIds), 1, []);
-            containsViews = arrayfun(@(entry) ...
+            selectedPasses = reshape(string(state.SelectedPassIds), 1, []);
+            selectedPairs = reshape(string(state.SelectedPairIds), 1, []);
+            viewEligible = arrayfun(@(entry) ...
                 all(ismember(entry.ViewIds, selectedViews)), candidates);
-            candidates = candidates(containsViews);
-            if isempty(candidates)
-                entries = candidates;
-                return
+            passEligible = arrayfun(@(entry) ...
+                all(ismember(entry.PassIds, selectedPasses)), candidates);
+            plausible = arrayfun(@(entry) nnz(entry.Request.OverlapMask) > 0, ...
+                candidates);
+            quality = arrayfun(@(entry) ...
+                runner.qualityEvidenceCount(entry) >= 3, candidates) & ...
+                plausible;
+            base = viewEligible & passEligible;
+            schedule = string(state.PairSchedule);
+            included = false(1, count);
+            if schedule == "fast"
+                included = base & plausible & ...
+                    string({candidates.PairId}) == runner.Context.ActivePairId;
+            elseif schedule == "balanced"
+                eligible = find(base & quality);
+                planned = runner.plannedSubset(candidates(eligible));
+                included(eligible(planned)) = true;
+            elseif schedule == "quality"
+                included = base & quality;
+            elseif schedule == "allPlausible"
+                included = base & plausible;
+            else
+                included = base & plausible & ...
+                    ismember(string({candidates.PairId}), selectedPairs);
             end
-            switch string(state.PairSchedule)
-                case "fast"
-                    match = string({candidates.PairId}) == ...
-                        runner.Context.ActivePairId;
-                    if any(match)
-                        candidates = candidates(find(match, 1, "first"));
-                    else
-                        candidates = candidates(1);
-                    end
-                case "balanced"
-                    candidates = candidates(1:2:end);
-                case "operator"
-                    selected = reshape(string(state.SelectedPairIds), 1, []);
-                    candidates = candidates(ismember( ...
-                        string({candidates.PairId}), selected));
-                otherwise
-                    % quality and allPlausible use every selected-view pair.
+            decisions = repmat(struct(PairId="", Included=false, ...
+                Reason=""), 1, count);
+            for index = 1:count
+                reason = "scheduled";
+                if ~viewEligible(index)
+                    reason = "omitted: one or both views are not selected";
+                elseif ~passEligible(index)
+                    reason = "omitted: one or both passes are not selected";
+                elseif ~plausible(index)
+                    reason = "omitted: no valid overlap";
+                elseif schedule == "quality" && ~quality(index)
+                    reason = "omitted: fewer than three accepted sparse seeds";
+                elseif ~included(index)
+                    reason = "omitted by " + schedule + " schedule";
+                end
+                decisions(index) = struct(PairId=candidates(index).PairId, ...
+                    Included=included(index), Reason=reason);
             end
-            entries = candidates;
+            entries = candidates(included);
+        end
+
+        function count = qualityEvidenceCount(~, entry)
+            count = Inf;
+            prediction = entry.Request.SearchPrediction;
+            if isfield(prediction, "SparsePairMatch") && ...
+                    isstruct(prediction.SparsePairMatch) && ...
+                    isfield(prediction.SparsePairMatch, "Count")
+                count = double(prediction.SparsePairMatch.Count);
+            end
+        end
+
+        function selected = plannedSubset(~, candidates)
+            selected = false(1, numel(candidates));
+            connected = strings(1, 0);
+            for index = 1:numel(candidates)
+                views = candidates(index).ViewIds;
+                if isempty(connected) || any(~ismember(views, connected))
+                    selected(index) = true;
+                    connected = unique([connected views], "stable");
+                end
+            end
+            if ~any(selected) && ~isempty(candidates)
+                selected(1) = true;
+            end
         end
 
         function entry = entryForPair(runner, pairId)

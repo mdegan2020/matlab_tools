@@ -100,6 +100,11 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             layer.ValueChangedFcn(layer, struct(Value=1));
             before = app.exportState();
             ProjectionViewerMotionWorkflowTest.openAndStartMotion(testCase);
+            loop = ProjectionViewerMotionWorkflowTest.tagged( ...
+                ProjectionViewerMotionWorkflowTest.motionWindow(), ...
+                "ProjectionViewerMotionLoopCheckBox");
+            loop.Value = false;
+            loop.ValueChangedFcn(loop, struct());
             first = app.motionDiagnostics();
 
             testCase.verifyTrue(first.Active);
@@ -145,6 +150,8 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             pin = ProjectionViewerMotionWorkflowTest.tagged( ...
                 window, "ProjectionViewerMotionPinCheckBox");
 
+            testCase.verifyTrue(loop.Value);
+            testCase.verifyTrue(app.motionDiagnostics().Loop);
             testCase.verifyEqual(string(identity.Visible), "on");
             testCase.verifySubstring(string(identity.Text), "1/3");
             pin.Value = true;
@@ -171,7 +178,7 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             testCase.verifyEqual(string(identity.Visible), "on");
         end
 
-        function testFallbackWarningRemainsVisible(testCase)
+        function testLayerManagerOrderSupersedesMetadataFallback(testCase)
             scene = ProjectionViewerMotionWorkflowTest.makeScene();
             scene.layers(1).AcquisitionStartTime = 1;
             scene.layers(2).AcquisitionStartTime = ...
@@ -185,9 +192,11 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
                 ProjectionViewerMotionWorkflowTest.motionWindow(), ...
                 "ProjectionViewerMotionStatusLabel");
 
-            testCase.verifyNotEmpty(diagnostics.Warning);
-            testCase.verifySubstring(string(status.Text), "Warning:");
-            testCase.verifyTrue(diagnostics.Sequence.UsedStableFallback);
+            testCase.verifyEqual(diagnostics.Warning, "");
+            testCase.verifyFalse(contains(string(status.Text), "Warning:"));
+            testCase.verifyFalse(diagnostics.Sequence.UsedStableFallback);
+            testCase.verifyEqual( ...
+                [diagnostics.Sequence.Frames.LayerIndex], 1:3);
         end
 
         function testHoverUpdatesAvoidGeometryAndTileWork(testCase)
@@ -223,7 +232,7 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
 
         function testZoomedTiledFrameChangeReconcilesLodWithoutBlank(testCase)
             app = ProjectionViewerApp( ...
-                ProjectionViewerMotionWorkflowTest.makeTiledScene());
+                ProjectionViewerMotionWorkflowTest.makeFiveTiledScene());
             testCase.addTeardown(@() delete(app));
             viewer = ProjectionViewerMotionWorkflowTest.viewer();
             viewer.Position = [100 100 360 300];
@@ -285,10 +294,10 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             loop.ValueChangedFcn(loop, struct());
             testCase.press(previous);
             loopedReverse = app.performanceDiagnostics();
-            testCase.verifyEqual(app.motionDiagnostics().Position, 3);
+            testCase.verifyEqual(app.motionDiagnostics().Position, 5);
             testCase.verifyEqual( ...
-                loopedReverse.Viewer.CurrentLevelIndices(3), ...
-                loopedReverse.Viewer.DesiredLevelIndices(3));
+                loopedReverse.Viewer.CurrentLevelIndices(5), ...
+                loopedReverse.Viewer.DesiredLevelIndices(5));
             testCase.press(next);
             loopedForward = app.performanceDiagnostics();
             testCase.verifyEqual(app.motionDiagnostics().Position, 1);
@@ -297,6 +306,62 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
                 loopedForward.Viewer.DesiredLevelIndices(1));
             testCase.verifyEqual( ...
                 loopedForward.Counters.BlankPreviewTransitions, 0);
+
+            window = ProjectionViewerMotionWorkflowTest.motionWindow();
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            app.flushPreviewUpdates();
+            pairFirst = app.motionDiagnostics();
+            pairFirstPerformance = app.performanceDiagnostics();
+            testCase.verifyEqual( ...
+                pairFirstPerformance.Viewer.SurfaceVisibilityByLayer, ...
+                pairFirst.EffectiveVisibility);
+            testCase.press(next);
+            app.flushPreviewUpdates();
+            pairSecond = app.motionDiagnostics();
+            pairSecondPerformance = app.performanceDiagnostics();
+            testCase.verifyEqual( ...
+                pairSecondPerformance.Viewer.SurfaceVisibilityByLayer, ...
+                pairSecond.EffectiveVisibility);
+            testCase.verifyEqual(find(pairFirst.EffectiveVisibility), [1 2]);
+            testCase.verifyEqual(find(pairSecond.EffectiveVisibility), [2 3]);
+
+            tableControl = ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerMotionTable");
+            tableData = tableControl.Data;
+            tableData.Visible(4) = false;
+            tableControl.Data = tableData;
+            tableControl.CellEditCallback(tableControl, struct());
+
+            ProjectionViewerMotionWorkflowTest.setMode(window, "viewAll");
+            app.flushPreviewUpdates();
+            viewAll = app.performanceDiagnostics();
+            testCase.verifyEqual( ...
+                [app.exportState().Layers.Visible], ...
+                [true true true false true]);
+            testCase.verifyEqual( ...
+                viewAll.Viewer.SurfaceVisibilityByLayer, ...
+                [true true true false true]);
+
+            outline = findall(viewer, "Tag", ...
+                "ProjectionViewerSelectedFootprintOutline");
+            outlineMenu = findall(groot, "Tag", ...
+                "ProjectionViewerActiveLayerOutlineMenuItem");
+            outlineMenu.MenuSelectedFcn(outlineMenu, struct());
+            for index = 1:16
+                viewer.WindowScrollWheelFcn( ...
+                    viewer, struct(VerticalScrollCount=-1));
+            end
+            app.flushPreviewUpdates();
+            testCase.verifyEqual(string(outlineMenu.Checked), "off");
+            testCase.verifyEqual(string(outline.Visible), "off");
+            outlineMenu.MenuSelectedFcn(outlineMenu, struct());
+            for index = 1:16
+                viewer.WindowScrollWheelFcn( ...
+                    viewer, struct(VerticalScrollCount=1));
+            end
+            app.flushPreviewUpdates();
+            testCase.verifyEqual(string(outlineMenu.Checked), "on");
+            testCase.verifyEqual(string(outline.Visible), "on");
         end
 
         function testPlaybackRejectsStaleLookaheadAfterCameraChange(testCase)
@@ -507,7 +572,7 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             testCase.verifyEqual(returnedCamera, firstCamera, AbsTol=1e-10);
         end
 
-        function testLayerReorderKeepsActivePairViewIdsStable(testCase)
+        function testLayerReorderRebuildsConsecutiveStackPairs(testCase)
             app = ProjectionViewerApp( ...
                 ProjectionViewerMotionWorkflowTest.makeFourFrameScene());
             testCase.addTeardown(@() delete(app));
@@ -516,21 +581,21 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             layer.Value = 1;
             layer.ValueChangedFcn(layer, struct(Value=1));
             ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
-            before = app.motionDiagnostics();
-            beforeIds = string({before.Sequence.Frames(1:2).ViewId});
-
             testCase.press(ProjectionViewerMotionWorkflowTest.tagged( ...
                 window, "ProjectionViewerMoveLayerUpButton"));
             after = app.motionDiagnostics();
-            currentOrderIds = strings(1, 4);
-            for frame = after.Sequence.Frames
-                currentOrderIds(frame.LayerIndex) = string(frame.ViewId);
-            end
-            visibleIds = currentOrderIds(after.EffectiveVisibility);
+            pairPositions = after.Position + (0:1);
+            pairFrames = after.Sequence.Frames(pairPositions);
+            visibleLayerIndices = find(after.EffectiveVisibility);
+            activePair = app.alignmentDiagnostics().ActivePair;
 
-            testCase.verifyEqual(string({after.Sequence.Frames(1:2).ViewId}), ...
-                beforeIds);
-            testCase.verifyEqual(sort(visibleIds), sort(beforeIds));
+            testCase.verifyEqual([after.Sequence.Frames.LayerIndex], 1:4);
+            testCase.verifyEqual([pairFrames.LayerIndex], ...
+                visibleLayerIndices);
+            testCase.verifyEqual( ...
+                [string(activePair.ReferenceViewId) ...
+                string(activePair.MovingViewId)], ...
+                string({pairFrames.ViewId}));
             testCase.verifyEqual(numel(unique( ...
                 string(after.Sequence.ViewIds))), 4);
         end
@@ -680,6 +745,24 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
                 scene.layers(index).ViewId = "lod-view-" + string(index);
                 scene.layers(index).PassId = "lod-pass";
                 scene.layers(index).AcquisitionStartTime = index;
+            end
+            scene = ProjectionViewMetadata.ensureScene(scene);
+        end
+
+        function scene = makeFiveTiledScene()
+            images = {zeros(512, 512, "uint8"), ...
+                ones(512, 512, "uint8"), ...
+                2 * ones(512, 512, "uint8"), ...
+                3 * ones(512, 512, "uint8"), ...
+                4 * ones(512, 512, "uint8")};
+            scene = ProjectionViewerHarness.createSceneFromImages( ...
+                images, "five-lod-" + string(1:5) + ".tif", ...
+                struct(RowStride=32, ColumnStride=32));
+            for index = 1:5
+                scene.layers(index).ViewId = ...
+                    "five-lod-view-" + string(index);
+                scene.layers(index).PassId = "five-lod-pass";
+                scene.layers(index).AcquisitionStartTime = 6 - index;
             end
             scene = ProjectionViewMetadata.ensureScene(scene);
         end

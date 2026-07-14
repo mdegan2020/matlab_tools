@@ -116,20 +116,23 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 762 tests;
+- the latest grouped fresh-class repository validation passes all 765 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate;
 - the MATLAB multi-image/dense/SDK workstream is complete through A7, B8, S7,
   P1, and C3, and the portable native D0 foundation is complete on macOS;
-- the completed top-priority corrective queue is
+- the active top-priority corrective queue is
   `docs/real_data_validation_followup_workpack.md`, which incorporates the
   July 13 operator findings as ordered network-solve, viewer correctness,
   orientation, Layer Manager, dense-surface, and stereo-cursor packs; RD-2's
   bounded network solve, RD-3's LOD/lifecycle correction, RD-1's explicit-plane
   orientation correction, RD-4's Layer Manager/viewer shell, RD-5's
   scene-bound dense-surface controls/evidence/recovery, and RD-6's world-space
-  stereo cursor are complete; independent D2 native CPU work is next; and
+  stereo cursor are complete; RD-7A/B/C/G presentation, persistent alignment
+  session, multi-image Surface Workbench launch, and correction actionability
+  are complete, while RD-7D/E/F measurement and performance work remains
+  before independent D2 native CPU work; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -249,7 +252,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 762 passing tests with no failures or incomplete
+fresh-class baseline is 765 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -904,9 +907,12 @@ Core controls:
   Completed solves report residual/OPK summaries in the status text, including
   warnings when corrections hit OPK bounds. Fewer than three observations in
   any enabled pair is a hard failure;
-  three through nine is a visible low-confidence warning but remains
-  previewable; ten is preferred. Bound hits and insufficient forward-ray 3D
-  residual improvement are hard failures with Preview/Apply/Revert disabled.
+  three through nine is a visible low-confidence review warning but remains
+  previewable and applicable after confirmation; ten is preferred. Bound hits,
+  nonconvergence, nonfinite state, deficient observability, and material
+  forward-ray degradation remain hard rejections. Solver convergence truth is
+  retained separately from `passed`/`review`/`rejected` actionability, and
+  Preview, Apply, and Revert have independent enablement.
   Solver diagnostics also include max residuals, worst residual match
   references, per-pair residual summaries, and table-ready match records for
   follow-up review workflows. The match table can sort residuals, highlight a
@@ -916,8 +922,13 @@ Core controls:
   revert updates. Alignment-panel overlay toggles show accepted lines and
   feature points by default, with optional faint rejected matches and post-solve
   worst-residual highlights.
-  After Preview or Apply, **Surface Workbench...** opens the scene-bound dense
-  and 3-D workflow. The operator chooses the pair schedule, matcher, search,
+  Closing the Alignment Workbench hides it while retaining its controls,
+  tables, ROI, caches, matches, solution, and actions; **Reset** intentionally
+  clears that session. After Preview or Apply, **Surface Workbench...** opens
+  the scene-bound dense and 3-D workflow from any eligible accepted pair. Its
+  viewer-launched default selects all eligible views, passes, and pairs with
+  the Quality schedule and robust multi-view processing. The operator can then
+  choose another pair schedule, matcher, search,
   reconstruction, fusion, and output there; the Alignment Workbench no longer
   exposes a competing direct selected-pair SGM action. Results and graphics are
   runtime analysis products only; they are not stored in scene/viewer state and
@@ -1240,7 +1251,8 @@ Caller order is preserved when supplied programmatically; otherwise frames
 remain grouped by pass and are ordered by comparable acquisition time, with
 visible stable-order warnings. Plain Left/Right selects layers in View All,
 steps frames in Single View, and steps exactly reversible overlapping pairs in
-Pair View. Shift+Arrows retains Tip/Tilt and Loop is off by default. Edge
+Pair View. Shift+Arrows retains Tip/Tilt and Loop is on by default while an
+explicit off choice persists for the viewer session. Edge
 buttons are available in both Single and Pair views and can be hover-activated
 or persistently visible; identity is transient or pinnable. Escape returns to
 View All and restores the pre-presentation

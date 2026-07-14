@@ -228,6 +228,8 @@ classdef ProjectionSurfaceWorkbenchModel < handle
                         numel(model.Configuration.SelectedPairIds));
                 case "quality"
                     scheduledPairCount = eligiblePairCount;
+                case "allPlausible"
+                    scheduledPairCount = eligiblePairCount;
                 otherwise
                     scheduledPairCount = potentialPairCount;
             end

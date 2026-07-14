@@ -1,8 +1,9 @@
 # Real-Data Validation Follow-Up Workpack
 
-Status: implementation complete July 14, 2026. RD-2, RD-3, RD-1, RD-4, RD-5,
-and RD-6 are complete in the recorded execution order. Independent D2 native
-CPU work is next; hardware-gated GPU work remains external.
+Status: active July 14, 2026. RD-2, RD-3, RD-1, RD-4, RD-5, and RD-6 are
+complete in the recorded execution order. RD-7 is the approved next corrective
+release gate and takes priority over independent D2 native CPU work;
+hardware-gated GPU work remains external.
 
 ## Purpose
 
@@ -21,6 +22,30 @@ five-image evaluation is now incorporated. It identified:
    the evaluated real imagery; and
 7. the need for a world-space stereo cursor.
 
+A subsequent five-view operator pass exposed a second corrective set:
+
+8. Single View, Pair View, and View All can diverge from the stored visibility
+   state when tiled surfaces are replaced during zoom or LOD reconciliation;
+9. Pair View does not consistently follow Layer Manager order, Loop defaults
+   off, and the OPK readout can escape the usable viewport during resize;
+10. first-run alignment overlays and active-stage status are unreliable, while
+    closing and reopening the Alignment Workbench loses the operator's visible
+    session even though the underlying session object survives;
+11. Surface Workbench availability is incorrectly tied to one ordered active
+    pair, and its viewer-launched default selects only that pair even though the
+    runner supports multi-image association and robust multi-ray reconstruction;
+12. bounded alignment working images are produced through unnecessarily large
+    full-source reads and conversions rather than an analysis-safe source LOD;
+13. the 512/768 working-image matches are treated as final measurements even
+    though they should be coarse discovery seeds for full-source subpixel
+    refinement;
+14. coarse feature and filtered-observation counts are excessive for a
+    constant-OPK network solve and are selected without a strong spatial-
+    diversity or information-content contract; and
+15. the 10 percent residual-improvement preference is incorrectly implemented
+    as a hard failure, preventing review and application of valid incremental
+    corrections near convergence.
+
 The findings are ordered below. Do not begin a decision-gated behavior until
 its explicit open decision is resolved.
 
@@ -38,18 +63,26 @@ completed feature trees except where a regression is demonstrated.
   process-based pool.
 - Backend radiometry continues to use full source imagery and the configured
   output grid. Viewer previews, alignment working images, and dense products
-  never become backend radiometric inputs.
+  never become backend radiometric inputs. Alignment may share immutable,
+  source-radiometric pyramid infrastructure with display, but it shall never
+  consume normalized, tone-mapped, colorized, composited, or presentation-
+  prepared display textures.
 - Camera presentation fixes must not mutate the physical projection plane,
   source rays, corrections, output grid, or serialized scientific state.
 - Optimization changes must preserve residual definitions, correction signs,
-  robust weighting, gauge policy, safety gates, provenance, and deterministic
-  CPU results within an explicitly tested tolerance.
+  robust weighting, gauge policy, hard scientific validity gates, provenance,
+  and deterministic CPU results within an explicitly tested tolerance.
+  Advisory utility thresholds shall not rewrite a converged scientific result
+  as failed or masquerade as hard safety gates.
 - Graphics handles, optimizers, callbacks, sampled-ray caches, and progress
   state remain runtime-only.
 - Use MATLAB MCP for MATLAB execution and issue each logical test group in a
   separate fresh-class call. Do not launch MATLAB from the shell.
 - Preserve unrelated work and private real-data values. Commit no private
   imagery, geometry, paths, or measurements that identify a protected source.
+- Do not commit operator-specific source-image dimensions or infer them into a
+  durable fixture. Use non-private structural scales and source-to-working
+  sampling ratios instead.
 
 ## Ordered Queue
 
@@ -69,10 +102,11 @@ numbers retained below:
 | 5 | RD-5 | Dense-surface controls, evidence, and quality recovery | The current entry point is too opaque to diagnose scientifically; expose evidence before changing algorithms. |
 | 6 | RD-6 | World-space stereo cursor | The confirmed world-space interaction is bounded and follows the viewer-shell work. |
 
-All six packs are top-priority corrective work relative to independent D2 native
-CPU work and hardware-gated GPU work. Complete, validate, commit, and push each
-coherent pack separately. A later pack may be split further when its tests or
-review surface would otherwise be too broad.
+Those six packs were top-priority corrective work relative to independent D2
+native CPU work and hardware-gated GPU work. RD-7 now owns that priority.
+Complete, validate, commit, and push each coherent implementation slice while
+retaining RD-7 as one integrated release gate. A slice may be split further
+when its tests or review surface would otherwise be too broad.
 
 #### Resolved presentation decisions
 
@@ -726,6 +760,469 @@ Fresh-class acceptance passes `coreGeometryState` 147/147, `alignment`
 totaling 762/762 with zero failures or incomplete tests. MATLAB Code Analyzer
 reports zero issues for every changed MATLAB source, test, and manifest file.
 
+### RD-7 — Real-Data Regression, Alignment Measurement, And Multi-View Surface Corrections
+
+Status: implementation in progress July 14, 2026. RD-7A, RD-7B, RD-7C, and
+RD-7G are implemented and validated as the first coherent slice; RD-7D through
+RD-7F remain before the integrated release claim.
+
+RD-7 incorporates the complete operator report beginning with the July 14
+five-view presentation/alignment regression report and all subsequent design
+decisions. It is one operator-visible corrective release gate. The subpacks
+below are dependency-ordered engineering slices, not independently releasable
+claims of completion. Do not mark RD-7 complete until the integrated workflow
+passes its focused tests, all affected fresh-class groups, Code Analyzer, and
+operator documentation review.
+
+The approved direction is:
+
+1. make runtime presentation masks and tiled graphics agree immediately;
+2. preserve the Alignment Workbench session and make every blocking stage
+   visibly active;
+3. enable Surface Workbench from any valid accepted pair and launch it as a
+   genuine multi-image workflow by default;
+4. replace repeated full-source working-image materialization with an
+   analysis-safe, antialiased source-pyramid path;
+5. use 512/768 working images for coarse discovery only, then refine retained
+   correspondences in full-source patches;
+6. reduce evidence through spatially diverse and information-aware selection
+   rather than globally strongest-score truncation; and
+7. separate solver validity from residual-improvement preference so a valid
+   small second correction remains reviewable and applicable.
+
+#### Observed operator evidence and confirmed structural causes
+
+- Single View can lose its active image after zoom/LOD replacement. Changing
+  frame or zoom can make it reappear. The tile preview path currently derives
+  a new surface's visibility from stored `layer.Visible` instead of the
+  effective runtime presentation mask.
+- Returning to View All can leave stored visibility checkboxes checked while
+  the corresponding tiled surfaces remain hidden. Toggling each stored flag
+  forces the missing graphics to reappear.
+- Pair View is expected to traverse consecutive Layer Manager entries
+  `(1,2)`, `(2,3)`, and so on. The runtime schedule may instead use acquisition
+  metadata or stable-ID fallback ordering, while stale tiled graphics make one
+  apparent eye remain fixed.
+- Loop is currently initialized off in both the Layer Manager control and the
+  motion runtime. The approved default is on.
+- The OPK display is currently an absolute figure overlay. It can rise above
+  the control base or leave the usable viewport during resize. The approved
+  correction is to return it to the bottom control base.
+- A first Match can produce a healthy raw count without visible viewport
+  overlays. Alignment overlays are reconstructed on the image plane and can
+  be occluded or z-fight with image surfaces; they require an explicit
+  top-of-stack presentation offset and immediate refresh.
+- Filter sets a status string before its blocking work, but the UI may continue
+  showing the preceding Match summary. Every blocking stage needs a forced,
+  bounded event flush and an unambiguous active-stage message.
+- Closing the Alignment Workbench destroys its controls. `AlignmentSession`
+  survives, but recreated controls and tables begin empty or disabled, making
+  retained matches and solve state appear deleted.
+- Surface Workbench enablement currently depends on an Alignment Workbench
+  table handle and on the exact ordered active moving/reference pair. This can
+  keep the button disabled even when another enabled physical pair has ample
+  accepted evidence.
+- The Surface Workbench context already contains one request per accepted
+  physical pair, and the runner already associates stable observations into
+  multi-view tracks before robust multi-ray reconstruction. However,
+  viewer-launched initial configuration selects the active pair's two views
+  and the `Selected pair`/`fast` schedule, so the default Run is pairwise.
+- Fast and Quality alignment working grids are bounded by 512 and 768 pixels
+  per axis respectively, but the full-source inverse warp reads or copies the
+  enclosing full-source rectangle for each pair side and converts the selected
+  band to double before resampling. Broad overlap can therefore repeat large
+  source-region work across every pair even though the output is bounded.
+- Feature locations are continuously mapped back into full-source row/column
+  coordinates and the solver samples rays at those coordinates. This avoids
+  hard integer quantization, but it cannot restore spatial information lost in
+  the coarse render. The current path has no full-source local correspondence
+  refinement stage.
+- The working-image inverse warp uses direct bilinear sampling without an
+  explicit reduction prefilter. Large scale changes can therefore expose
+  feature detection to aliasing or systematic localization bias.
+- Fast and Quality currently retain up to 1,000 and 2,000 features per pair
+  image, ordered globally by detector metric. Exhaustive descriptor matching
+  and the later solve can receive many locally redundant observations.
+- The network solver already reduces cyclic edges within a multi-view feature
+  track, but it does not yet select independent tracks for spatial coverage or
+  OPK information gain.
+- A converged second solve near the current solution can produce a small RMS
+  improvement and small finite OPK increments. The present 10 percent policy
+  rewrites that result as failed and disables Preview, Apply, and Revert
+  together. Near convergence, small improvement is expected and is not by
+  itself a scientific-safety failure.
+
+#### RD-7A — Presentation-state and bottom-control correctness
+
+Implementation status: complete July 14, 2026. Effective visibility now gates
+all surface visibility updates, explicit Layer Manager order drives Single and
+Pair presentation, reverse stepping is exact, Loop defaults on while preserving
+an operator-off session choice, and the OPK readout is layout-managed in the
+bottom control base. Five-layer tiled/LOD tests inspect actual surface
+visibility, stored View All visibility, outline state, rollover, and pair
+identity.
+
+1. Make `effectiveLayerVisibilityMask` the single runtime authority for every
+   image-surface creation, replacement, reuse, LOD transition, lookahead
+   completion, and visibility reconciliation path. Stored `layer.Visible`
+   remains the View All preference, not the presentation-mode graphics state.
+2. Entering or stepping Single View and Pair View shall synchronously reconcile
+   every newly active tiled layer. The old valid LOD may remain visible until a
+   coherent replacement is ready; an active image shall never disappear only
+   because refinement was requested.
+3. Returning to View All shall immediately apply the complete stored visibility
+   vector to both tiled and untiled surfaces. It shall not require individual
+   checkbox toggles or another camera event.
+4. Derive Single/Pair navigation from the current Layer Manager stack order and
+   the same eligible-layer filter shown to the operator. Pair View shall present
+   consecutive overlapping pairs in that order, with reverse stepping the
+   exact inverse. Acquisition time, pass metadata, and stable IDs may break a
+   true tie only when no explicit manager order exists.
+5. Initialize Loop on in the Layer Manager control and in the runtime default.
+   Preserve an explicit operator off state for the remainder of that viewer
+   session.
+6. Keep active-layer-outline state runtime-only and ensure its existing on/off
+   control remains respected through presentation changes and LOD replacement.
+7. Move the OPK/view-vector readout back into the bottom control base as a
+   layout-managed element. It shall remain in the bottom corner, inside the
+   figure, at minimum supported window size and through repeated resize. Remove
+   absolute viewport positioning for that readout.
+
+Focused acceptance shall exercise five tiled layers, zoom-driven LOD changes,
+Single and Pair forward/reverse stepping, loop rollover, View All restoration,
+stored visibility edits made in every mode, active-outline off/on, layer
+reorder, and minimum/large window resize. Assertions shall inspect actual
+surface visibility and pair identities, not only the calculated logical mask.
+
+#### RD-7B — Persistent Alignment Workbench and truthful stage feedback
+
+Implementation status: complete July 14, 2026. Close hides the viewer-owned
+Workbench without destroying session controls or computation state, Reset is
+the intentional clearing boundary, and viewer deletion owns final cleanup.
+First-match overlays use a deterministic depth offset, while active and last-
+completed stage status are retained separately and blocking stages visibly
+flush their active message.
+
+1. Treat the Alignment Workbench as a persistent viewer-owned tool window.
+   Its close button shall hide the window and preserve its controls, tables,
+   settings, ROI, working-image cache, raw/filtered matches, solution,
+   correction actions, and diagnostics. Reopening shall focus/show the same
+   session.
+2. Viewer deletion remains the hard ownership boundary and shall delete the
+   hidden workbench and its callbacks. Add or retain an explicit Reset action
+   for intentional state clearing; closing is never Reset.
+3. If controls must be recreated after an exceptional graphics deletion,
+   restore them from `AlignmentSession` rather than initializing an empty
+   operator presentation.
+4. Preserve the exact enabled/disabled state of Match, Filter, Solve, Preview,
+   Apply, Revert, and Surface Workbench actions across hide/show. Recompute only
+   when a real input-generation change invalidates the corresponding stage.
+5. Raise raw, filtered, and solved alignment overlays above the complete image
+   stack with a deterministic camera-depth offset. Refresh them on the first
+   Match, after every filter/solve, after presentation or active-pair changes,
+   and after relevant layer projection changes without modifying scientific
+   coordinates.
+6. Before blocking work, publish and visibly flush bounded messages for working
+   image planning/rendering, pair progress, feature detection/matching,
+   filtering, evidence refinement/selection, network preparation, primary
+   optimization, and optional diagnostics. Filter shall never leave the prior
+   Match result looking like the active status.
+7. Retain completed counts and timings after each stage, but distinguish them
+   from the active-stage message. Cancellation or failure shall leave the last
+   authoritative completed state inspectable.
+
+Focused acceptance shall close/reopen after Match, Filter, Solve, Preview, and
+Apply; verify table rows, settings, cached generations, overlays, status, and
+action controls; confirm explicit Reset clears state; and confirm viewer
+deletion owns hidden-window cleanup.
+
+#### RD-7C — Surface Workbench gate and multi-image launch default
+
+Implementation status: complete July 14, 2026. Eligibility is derived from any
+enabled accepted physical pair independent of direction or table graphics.
+Viewer launch supplies every eligible pair and initially selects all catalog
+views, passes, and pairs with the Quality schedule and `robustMultiView` stage.
+Fast, planned, quality, plausible, and explicit schedules are distinct;
+selected passes filter real execution; preflight explains exact pair inclusion,
+stages, caps, and evidence gates.
+
+1. Enable Surface Workbench when any enabled, curated, accepted physical pair
+   has at least the hard solver minimum of usable evidence and the alignment
+   stage is previewed, applied, or explicitly accepted for manual correction.
+   Do not depend on an Alignment Workbench table graphics handle.
+2. Pair identity checks shall be orientation-independent. Moving/reference
+   direction may choose display roles but shall not make the same physical pair
+   ineligible.
+3. Refresh availability when matches are filtered/curated, pair enablement
+   changes, active roles change, a solve is previewed/applied/reverted, the
+   workbench is shown, or scene/correction generation changes.
+4. Build the launch context from every eligible accepted physical pair. The
+   active pair remains highlighted and available as an explicit anchor or
+   selected-pair schedule; it does not limit the context.
+5. Viewer-launched initial configuration shall select all eligible catalog
+   views, passes, and pairs and shall default to `All quality pairs` with the
+   `robustMultiView` processing stage. Selecting five views must no longer open
+   in a silent two-view execution state.
+6. `Selected pair` remains an explicit fast diagnostic schedule. `Planned
+   subset`, `All quality pairs`, `All plausible pairs`, and `Explicit pairs`
+   shall have distinct, documented scheduling semantics.
+7. Apply selected pass IDs as a real scheduling filter, not presentation-only
+   table state. Quality and plausibility gates shall report why a context pair
+   is included or omitted.
+8. Preflight shall list the exact scheduled view, pass, and pair IDs, pair
+   count, per-pair observation cap, matcher, and reconstruction/fusion stages.
+   It shall explain that all eligible pair evidence is offered to association,
+   while validity, confidence, occlusion, consistency, track connectivity,
+   residual, and conditioning gates decide which rays contribute to each
+   reconstructed point.
+9. Multi-view association shall continue to count one stable source
+   observation as one ray even when it participates in multiple pair records.
+   A five-view run may use all accepted pair evidence without claiming that all
+   five views observe every reconstructed point.
+
+Focused acceptance shall cover activation from a valid non-active pair,
+reversed pair roles, a disabled active pair with another eligible pair,
+hide/show of Alignment Workbench, selected-pass filtering, explicit single-pair
+execution, and a deterministic five-view/all-eligible-pair preflight and
+multi-ray result.
+
+#### RD-7D — Analysis-safe source pyramid and bounded working-image rendering
+
+1. Factor the raw antialiased source-level generator out of the display-only
+   contract into an immutable source-radiometric pyramid/cache service. Display
+   may convert those values into presentation textures; alignment consumes the
+   configured source band and validity only.
+2. An analysis-cache identity shall include source/geometry revision, source
+   path or memory generation, image size/class, band, nodata/validity policy,
+   pyramid level, reduction-filter version, region/tile identity, and any
+   radiometric option that changes scientific analysis pixels.
+3. Never reuse normalized scalar display textures, RGB display conversions,
+   alpha/composite results, contrast stretches, or camera-selected display LOD
+   as alignment input.
+4. Build power-of-two levels with a declared antialiasing reduction filter.
+   Filter validity through normalized convolution or an equivalent explicit
+   policy so invalid pixels do not bleed into valid texture. Use filter-support
+   halos and deterministic edge handling so tile seams cannot create features.
+5. Choose analysis LOD from the local source-to-working-grid sampling Jacobian,
+   independently of viewport zoom. Prefer the cached level immediately finer
+   than the output demand; never use a coarser level merely because it is
+   already on screen.
+6. Support local/tiled LOD choice where projective scale varies materially
+   across a pair. Record the chosen source-pixel footprint and oversampling
+   margin in runtime diagnostics.
+7. Warp the selected analysis level into the pair-specific working grid while
+   retaining authoritative continuous full-source row/column maps and ray
+   sampling. Account explicitly for pyramid level indices and pixel-center
+   conventions.
+8. Avoid reading/copying and converting a broad full-resolution bounding
+   rectangle when a cached antialiased regional level can supply the bounded
+   output. Reuse source regions/levels across pairs and pair directions.
+9. Keep the present 512/768 per-axis working-grid bounds initially as coarse
+   discovery policies. Pair aspect and overlap may produce a smaller dimension;
+   the bounds are not a promise of square output.
+10. Instrument planning, source read, pyramid materialization, inverse-map,
+    resample, validity, and cache time/bytes/hits per source and pair. Runtime
+    evidence may be inspected during private validation, but private source
+    dimensions and identifying values shall not enter repository documents.
+
+Acceptance shall compare the analysis-LOD render against a direct full-source
+oracle for coordinate mapping, valid masks, radiometric error, feature
+repeatability, match/inlier stability, and absence of tile seams or jagged
+reduction artifacts. It shall prove that repeated pairs hit the analysis cache
+and that output work is bounded by selected LOD/region rather than repeated
+full-source materialization.
+
+#### RD-7E — Coarse discovery, full-source refinement, and diverse evidence
+
+1. Declare 512/768 feature matching a coarse correspondence-discovery stage,
+   not the final measurement supplied to the precision OPK solve.
+2. Before descriptor extraction, apply overlap-aware adaptive nonmaximum
+   suppression and aspect-aware spatial quotas. Select several strong,
+   separated candidates per occupied cell rather than the globally strongest
+   detector responses from one textured region.
+3. Use initial engineering caps near 256 candidates per Fast pair image and
+   512 per Quality pair image, subject to synthetic and representative
+   validation. These are performance starting points, not universal scientific
+   thresholds; sparse scenes may return fewer, and an explicit diagnostic mode
+   may request more.
+4. Enforce candidate and post-match coverage in both images. A distribution
+   that is broad in the moving image but collapsed in the reference image is
+   not spatially diverse.
+5. Run cheap overlap, descriptor-ratio/uniqueness, and provisional geometric
+   rejection before expensive source refinement. With bounded candidates,
+   deterministic exhaustive matching may remain the reference path; any
+   approximate search requires explicit parity and reproducibility evidence.
+6. Refine surviving matches in small original-source patches using a declared
+   photometric normalization and subpixel local estimator. Handle masks,
+   borders, scale/orientation, weak texture, ambiguity, and convergence
+   explicitly. Do not refine against display or coarse-pyramid pixels.
+7. Return refined continuous source row/column values plus localization
+   covariance or an equivalent uncertainty/quality record. Recompute plane
+   coordinates, exact sampled rays, coplanarity residuals, and subsequent
+   filters from refined values.
+8. Permit one bounded refinement iteration after the initial OPK estimate when
+   reprojection materially changes the local search center. Prevent drift with
+   source-patch bounds and an explicit acceptance test against the coarse seed.
+9. After physical/geometric filtering, create a spatial-diversity stage that
+   balances occupied cells, image margins/interior, source rows/columns, pair
+   coverage, and multi-view track uniqueness. Keep every raw and accepted
+   record in the ledger; mark unused records with a reason such as
+   `spatialRedundancy` rather than silently deleting them.
+10. Select the final solve subset by network connectivity and incremental OPK
+    information gain, using the solver Jacobian/normal matrix where valid.
+    Prefer observations that improve rank, conditioning, and covariance over
+    additional nearby observations with similar sensitivity.
+11. Initial evaluation targets are roughly 32–64 solve-selected records per
+    useful pair and a few hundred for an ordinary five-view network. Stop
+    adding evidence when marginal information/covariance improvement plateaus,
+    subject to per-pair and per-component hard minima. Do not turn these
+    engineering targets into fixed public acceptance thresholds without
+    measured evidence.
+12. Report raw, descriptor-accepted, geometrically accepted, source-refined,
+    spatially eligible, track-unique, and solve-selected counts separately.
+    Report occupied-cell fraction, normalized convex-hull/extent coverage,
+    conditioning contribution, and rejection reasons per view and pair.
+13. Report the source-pixels-per-working-pixel map and the refined localization
+    uncertainty/angular measurement floor. Evaluate small physical-model
+    approximations, including refraction approximations, against the refined
+    measurement floor rather than the coarse working-image localization floor.
+
+Acceptance shall prove that the refined source observations improve or retain
+known-truth OPK accuracy, that spatial selection cannot collapse into one
+region, that all required network components remain observable, and that a
+smaller solve subset reproduces the full eligible solution within a declared
+uncertainty-based tolerance while materially reducing work.
+
+#### RD-7F — End-to-end alignment performance and work accounting
+
+1. Add an instrumented non-private five-view workflow that covers working-image
+   planning/rendering, feature preparation/detection/description, matching,
+   filtering, source refinement, track construction, solve selection, evidence
+   compilation, optimization, comparison, covariance, and optional sensitivity
+   diagnostics.
+2. Count source reads/pixels/bytes, pyramid/cache work, pair-side renders,
+   detected/described/matched/refined/selected observations, ray sampling,
+   residual/Jacobian evaluations, iterations, and optional child solves.
+3. Verify that the RD-2 compiled evidence and semi-analytic Jacobian path is
+   actually selected for the representative constant-OPK network. A custom
+   real-data ray sampler shall not reintroduce per-iteration source sampling.
+4. Supply only the diverse solve-selected evidence to optimization while
+   retaining the complete ledger, refined observations, and diagnostics for
+   audit and alternate selection.
+5. Keep Fast sensitivity work `notRequested`, Balanced `deferred`, and Quality
+   explicitly bounded unless the operator requests exhaustive diagnostics.
+6. Present active stage and elapsed/work counts at bounded cadence before and
+   during every blocking stage. Do not use a machine-specific wall-clock value
+   as a correctness threshold.
+7. Profile first; do not reduce numerical precision, weaken physical residuals,
+   or change robust weighting merely to meet a timing target. Optimize repeated
+   source work, redundant evidence, allocation, and equivalent diagnostic
+   evaluations first.
+
+Acceptance shall demonstrate bounded work scaling with scheduled pairs,
+selected LOD regions, refined candidates, and solve-selected observations. It
+shall retain reference-path correction/residual/weight/gauge/covariance parity
+within declared tolerances and keep Cancel responsive throughout.
+
+#### RD-7G — Passed, review, and rejected correction actionability
+
+Implementation status: complete July 14, 2026. The compatibility migration now
+maps the old minimum-improvement option to an advisory preferred-improvement
+setting. Solver convergence remains scientific truth while a separate
+`passed`/`review`/`rejected` decision controls Preview, Apply, confirmation, and
+Revert independently. Review confirmation reports physical RMS, active
+objective change, maximum OPK, observation/track/coverage evidence,
+conditioning/uncertainty, and bounds. Correction-store generation parenting
+retains exact second-generation apply/revert lineage, and applied review
+results enable Surface Workbench.
+
+First-slice validation evidence: MATLAB Code Analyzer reports zero issues in
+all 17 changed MATLAB source/test files. Fresh-class groups pass
+`coreGeometryState` 147/147, `alignment` 186/186, `backendSurface` 248/248,
+`viewerAlignmentUi` 77/77, `viewerPresentationWorkflows` 73/73, and
+`viewerPerformancePrecision` 34/34, totaling 765/765 with zero failures or
+incomplete tests.
+
+1. Replace `MinResidualImprovementFraction` with a compatibility-migrated
+   `PreferredResidualImprovementFraction`. Retain 10 percent as the default
+   advisory preference unless later measured evidence supports another value.
+2. Classify a completed result independently of solver convergence:
+   `passed`, `review`, or `rejected`. Expose at least `PreviewAllowed`,
+   `ApplyAllowed`, `ConfirmationRequired`, `Warnings`, and
+   `HardRejectionReasons`.
+3. A result is `passed` when it satisfies the hard gates and the preferred
+   improvement/significance checks without advisory findings.
+4. A result is `review` when it satisfies all hard gates but has a marginal
+   residual improvement, fewer than the preferred (but not hard-minimum)
+   observations, a correction small relative to estimated uncertainty, or
+   another declared quality warning. `review` results remain previewable and
+   applicable.
+5. A result is `rejected` only for a hard reason such as nonconvergence,
+   nonfinite correction/residual state, deficient gauge/observability,
+   fewer than the hard-minimum usable observations, material degradation of
+   the authoritative objective or validation metric beyond numerical/model
+   tolerance, an unacceptable condition/covariance state, or a configured
+   parameter-bound hit.
+6. Do not rewrite a converged solver result or `Convergence.Success` as failed
+   merely because actionability is `review` or `rejected`. Preserve the
+   scientific result and attach the separate policy decision.
+7. Decouple Preview, Apply, and Revert enablement. Preview is available for a
+   finite solved correction; Apply is available for `passed` and `review`;
+   Revert is available only after this result has been previewed or applied.
+8. Applying a `review` result shall show one concise confirmation containing
+   before/after RMS and percentage, active-objective change, maximum incremental
+   omega/phi/kappa, observation/track and spatial-coverage summaries,
+   condition/covariance/significance, and bound state.
+9. A finite nonzero incremental correction near convergence shall not be
+   disabled merely because its relative RMS improvement is small. An exactly
+   state-equivalent correction may be reported as a no-op.
+10. A second accepted correction shall use the current applied correction
+    generation as its parent, apply exactly once, remain reversible, and not
+    confuse Revert with the prior generation.
+11. Surface Workbench eligibility shall recognize an applied `review`
+    correction exactly as it recognizes an applied `passed` correction.
+
+Focused acceptance shall cover preferred improvement exceeded, small positive
+improvement, zero/no-op, statistically insignificant finite correction,
+material degradation, hard-minimum evidence failure, preferred-count warning,
+bound hit, observability failure, confirmation accept/cancel, Preview without
+Apply, second-generation Apply, and exact Revert lineage.
+
+#### RD-7 integrated acceptance and delivery
+
+- Five tiled layers remain visible as required through zoom, LOD replacement,
+  Single/Pair stepping, loop rollover, and View All restoration. Pair identity
+  follows Layer Manager order and actual graphics agree with stored/effective
+  state.
+- Alignment Match overlays are visible on the first run; Filter and Solve show
+  the active stage before blocking; closing/reopening preserves the complete
+  operator session; explicit Reset alone clears it.
+- The OPK readout remains in the bottom control base at every supported size.
+- Surface Workbench enables from any valid accepted pair and opens with all
+  eligible views/passes/pairs selected, `All quality pairs`, and robust
+  multi-view reconstruction. Preflight exactly names the work. Explicit
+  selected-pair execution remains available.
+- Working-image generation uses an analysis-safe antialiased LOD and reusable
+  source cache, retains authoritative full-source coordinate maps, and avoids
+  repeated broad full-source materialization for bounded outputs.
+- Coarse matching uses fewer spatially distributed candidates. Full-source
+  patch refinement supplies continuous source observations and uncertainty.
+  Filtering and final solve selection remain spatially diverse, connected,
+  track-aware, and information-bearing.
+- The constant-OPK solve receives a bounded evidence subset, reports complete
+  work accounting, and matches the full/reference solution within declared
+  scientific tolerances.
+- A valid marginal second solve is classified `review`, can be previewed, and
+  can be applied after explicit confirmation. Hard-invalid results remain
+  non-applicable with exact reasons.
+- No display-normalized pixels enter alignment or backend scientific products;
+  no private imagery, geometry, paths, source dimensions, or identifying
+  measurements enter the repository.
+- Run Code Analyzer on every changed MATLAB file and run each affected logical
+  test group in a separate fresh-class MATLAB MCP call. Complete all six groups
+  before the final RD-7 completion claim, then update operator/reference docs,
+  commit, push, and confirm a clean worktree.
+
 ## Likely Code And Test Touchpoints
 
 Inspect rather than assume the final edit set:
@@ -735,24 +1232,46 @@ src/ProjectionViewerHarness.m
 src/ProjectionPairViewpoint.m
 src/ProjectionStereoCursorModel.m
 src/ProjectionViewerApp.m
+src/ProjectionAlignmentSession.m
 src/ProjectionAlignmentOptions.m
+src/ProjectionAlignmentWorkingGrid.m
+src/ProjectionAlignmentWorkingImageRenderer.m
+src/ProjectionAlignmentFeatureMatcher.m
+src/ProjectionAlignmentMatchFilter.m
+src/ProjectionAlignmentTrackBuilder.m
+src/ProjectionAlignmentNetworkEvidence.m
 src/ProjectionAlignmentNetworkSolver.m
 src/ProjectionAlignmentOpkSolver.m
 src/ProjectionAlignmentParameterModel.m
+src/ProjectionAlignmentSafeSolvePolicy.m
+src/ProjectionPreviewPyramid.m
+src/ProjectionBackendSourceProvider.m
+src/ProjectionFullSourceInverseWarp.m
+src/ProjectionViewerLruCache.m
 src/ProjectionDenseSurfaceExtractor.m
 src/ProjectionSurfaceWorkbenchApp.m
+src/ProjectionSurfaceWorkbenchModel.m
+src/ProjectionSurfaceWorkbenchRunner.m
 src/ProjectionSurface3DViewer.m
 tests/ProjectionViewerHarnessTest.m
 tests/ProjectionPairViewpointTest.m
+tests/ProjectionAlignmentSessionTest.m
+tests/ProjectionAlignmentWorkingImageRendererTest.m
+tests/ProjectionAlignmentFeatureMatcherTest.m
+tests/ProjectionAlignmentMatchFilterTest.m
+tests/ProjectionAlignmentTrackBuilderTest.m
 tests/ProjectionAlignmentNetworkSolverTest.m
 tests/ProjectionAlignmentOpkSolverTest.m
+tests/ProjectionAlignmentSafeSolvePolicyTest.m
 tests/ProjectionViewerAlignmentWorkflowTest.m
 tests/ProjectionViewerMotionWorkflowTest.m
 tests/ProjectionViewerMotionPlaybackWorkflowTest.m
 tests/ProjectionViewerAppInteractionTest.m
 tests/ProjectionStereoCursorModelTest.m
 tests/ProjectionViewerStereoCursorWorkflowTest.m
+tests/ProjectionPreviewPyramidTest.m
 tests/ProjectionDenseSurfaceExtractorTest.m
+tests/ProjectionSurfaceWorkbenchRunnerTest.m
 tests/ProjectionSurfaceWorkbenchWorkflowTest.m
 scripts/alignment_reliability_validation.m
 ```

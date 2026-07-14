@@ -182,6 +182,7 @@ classdef ProjectionViewerApp < handle
         AlignmentApplyButton matlab.ui.control.Button
         AlignmentRevertButton matlab.ui.control.Button
         AlignmentClearOverlaysButton matlab.ui.control.Button
+        AlignmentResetButton matlab.ui.control.Button
         AlignmentAcceptedOverlayCheckBox matlab.ui.control.StateButton
         AlignmentRejectedOverlayCheckBox matlab.ui.control.StateButton
         AlignmentWorstOverlayCheckBox matlab.ui.control.StateButton
@@ -198,6 +199,7 @@ classdef ProjectionViewerApp < handle
         AlignmentSoloState struct = struct()
         PairViewpointRuntime struct = struct()
         MotionRuntime struct = struct()
+        MotionLoopPreference logical = true
         MotionFigure matlab.ui.Figure
         LayerManagerModeDropDown matlab.ui.control.DropDown
         LayerManagerTrackCameraCheckBox matlab.ui.control.CheckBox
@@ -237,6 +239,7 @@ classdef ProjectionViewerApp < handle
         IsClosing logical = false
         CorrectionStore
         AlignmentAppliedGenerationId string = ""
+        AlignmentReviewConfirmationFcn = []
     end
 
     properties (Access = private, Dependent)
@@ -367,7 +370,7 @@ classdef ProjectionViewerApp < handle
             app.closeDenseSurfaceWindows();
             app.closeSurfaceWorkbench();
             app.disableStereoCursor();
-            app.closeAlignmentWorkbench();
+            app.deleteAlignmentWorkbench();
             app.closeHelpDialog();
             if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
                 delete(app.UIFigure);
@@ -688,8 +691,9 @@ classdef ProjectionViewerApp < handle
                     request.Options.SafeSolvePolicy.MinPreferredObservationsPerPair, ...
                     SafeFailOnBoundHit= ...
                     request.Options.SafeSolvePolicy.FailOnBoundHit, ...
-                    SafeMinResidualImprovementFraction= ...
-                    request.Options.SafeSolvePolicy.MinResidualImprovementFraction);
+                    SafePreferredResidualImprovementFraction= ...
+                    request.Options.SafeSolvePolicy. ...
+                    PreferredResidualImprovementFraction);
                 diagnostics.Schedule = schedule;
                 diagnostics.EnabledPairs = enabledPairs;
                 diagnostics.EnabledPairCount = size(enabledPairs, 1);
@@ -751,6 +755,16 @@ classdef ProjectionViewerApp < handle
         function workbench = surfaceWorkbenchHandle(app)
             %surfaceWorkbenchHandle Return the separate Workbench, if open.
             workbench = app.SurfaceWorkbench;
+        end
+
+        function setAlignmentReviewConfirmationFcn(app, confirmationFcn)
+            %setAlignmentReviewConfirmationFcn Set an optional runtime decision hook.
+            if ~(isempty(confirmationFcn) || isa(confirmationFcn, ...
+                    "function_handle"))
+                error("ProjectionViewerApp:invalidConfirmationFcn", ...
+                    "Confirmation function must be empty or a function handle.");
+            end
+            app.AlignmentReviewConfirmationFcn = confirmationFcn;
         end
 
         function diagnostics = placeStereoCursor( ...
@@ -1272,11 +1286,11 @@ classdef ProjectionViewerApp < handle
             app.createImageContextMenu();
             app.createCrosshairOverlay();
 
-            app.ControlGrid = uigridlayout(app.GridLayout, [2 4]);
+            app.ControlGrid = uigridlayout(app.GridLayout, [2 5]);
             app.ControlGrid.Layout.Row = 3;
             app.ControlGrid.Layout.Column = 1;
             app.ControlGrid.RowHeight = {"fit", "fit"};
-            app.ControlGrid.ColumnWidth = {"1x", "1x", "1x", "1x"};
+            app.ControlGrid.ColumnWidth = {"1x", "1x", "1x", "1x", 220};
             app.ControlGrid.Padding = [0 0 0 0];
             app.ControlGrid.ColumnSpacing = 12;
 
@@ -1324,11 +1338,13 @@ classdef ProjectionViewerApp < handle
                 app.alphaChanging(source, event);
             app.AlphaSlider.ValueChangedFcn = @(~, ~) app.updateAlphaFromSlider();
 
-            app.ViewVectorLabel = uilabel(app.UIFigure, ...
+            app.ViewVectorLabel = uilabel(app.ControlGrid, ...
                 Text=sprintf("Omega 0.0000 deg\nPhi 0.0000 deg\nKappa 0.000 deg"), ...
                 HorizontalAlignment="right", VerticalAlignment="bottom", ...
                 BackgroundColor=[0.05 0.05 0.05], FontColor=[1 1 0.2], ...
                 Enable="off", Tag="ProjectionViewerViewVectorOverlay");
+            app.ViewVectorLabel.Layout.Row = [1 2];
+            app.ViewVectorLabel.Layout.Column = 5;
             app.createStereoCursorOverlay();
             app.positionViewerOverlays();
 
@@ -1350,6 +1366,14 @@ classdef ProjectionViewerApp < handle
 
         function closeAlignmentWorkbench(app)
             app.exitAlignmentSoloPair();
+            if ~isempty(app.AlignmentWorkbenchFigure) && ...
+                    isvalid(app.AlignmentWorkbenchFigure)
+                app.captureAlignmentControlState();
+                app.AlignmentWorkbenchFigure.Visible = "off";
+            end
+        end
+
+        function deleteAlignmentWorkbench(app)
             if ~isempty(app.AlignmentWorkbenchFigure) && ...
                     isvalid(app.AlignmentWorkbenchFigure)
                 app.AlignmentWorkbenchFigure.CloseRequestFcn = [];
@@ -1544,6 +1568,13 @@ classdef ProjectionViewerApp < handle
             app.AlignmentClearOverlaysButton.Layout.Row = 4;
             app.AlignmentClearOverlaysButton.Layout.Column = 16;
 
+            app.AlignmentResetButton = uibutton(app.AlignmentGrid, ...
+                Text="Reset", Tooltip="Clear the complete alignment session", ...
+                Tag="ProjectionViewerAlignmentResetButton", ...
+                ButtonPushedFcn=@(~, ~) app.resetAlignmentWorkbench());
+            app.AlignmentResetButton.Layout.Row = 4;
+            app.AlignmentResetButton.Layout.Column = 15;
+
             app.AlignmentAcceptedOverlayCheckBox = uibutton( ...
                 app.AlignmentGrid, "state", Text="Accepted", Value=true, ...
                 Tag="ProjectionViewerAlignmentAcceptedOverlayCheckBox", ...
@@ -1610,6 +1641,7 @@ classdef ProjectionViewerApp < handle
             app.AlignmentPairTable = uitable(app.AlignmentGrid, ...
                 Data=app.emptyAlignmentPairTable(), ...
                 ColumnEditable=[true false false false false false false], ...
+                CellEditCallback=@(~, ~) app.alignmentPairTableEdited(), ...
                 Tag="ProjectionViewerAlignmentPairTable");
             app.AlignmentPairTable.Layout.Row = 5;
             app.AlignmentPairTable.Layout.Column = [1 17];
@@ -1629,9 +1661,7 @@ classdef ProjectionViewerApp < handle
                 referenceLabel, movingLabel, presetLabel, scopeLabel, ...
                 detectorLabel, lossLabel, coplanarityLabel);
 
-            app.updateAlignmentLayerItems();
-            app.setAlignmentActionEnabled(false);
-            app.refreshAlignmentSessionIndicators();
+            app.restoreAlignmentSessionPresentation();
         end
 
         function organizeAlignmentWorkbenchLayout(app, setupHeading, ...
@@ -1908,10 +1938,13 @@ classdef ProjectionViewerApp < handle
                 control.Layout.Row = 2;
                 control.Layout.Column = column;
             end
+            app.AlignmentResetButton.Parent = workflowGrid;
+            app.AlignmentResetButton.Layout.Row = 2;
+            app.AlignmentResetButton.Layout.Column = 8;
             reviewHint = uilabel(workflowGrid, ...
                 Text="Selection is synchronized with the match ledger");
             reviewHint.Layout.Row = 2;
-            reviewHint.Layout.Column = [8 9];
+            reviewHint.Layout.Column = 9;
 
             pairPanel = uipanel(app.AlignmentGrid, ...
                 Title="Pair schedule — enable rows before Match", ...
@@ -1945,6 +1978,140 @@ classdef ProjectionViewerApp < handle
             app.AlignmentDiagnosticsTextArea.Parent = diagnosticsGrid;
             app.AlignmentDiagnosticsTextArea.Layout.Row = 1;
             app.AlignmentDiagnosticsTextArea.Layout.Column = 1;
+        end
+
+        function resetAlignmentWorkbench(app)
+            app.exitAlignmentSoloPair();
+            app.clearAlignmentOverlays();
+            app.clearAlignmentRoi(false);
+            app.closeDenseSurfaceWindows();
+            app.closeSurfaceWorkbench();
+            app.AlignmentSession.reset();
+            app.DenseSurfaceDiagnostics = struct();
+            app.AlignmentAppliedGenerationId = "";
+            app.applyAlignmentControlState(app.defaultAlignmentControlState());
+            app.updateAlignmentLayerItems();
+            app.refreshAlignmentPairTable();
+            app.updateAlignmentMatchTable([], []);
+            app.setAlignmentFilterEnabled(false);
+            app.setAlignmentSolveEnabled(false);
+            app.setAlignmentActionEnabled(false);
+            app.captureAlignmentControlState();
+            app.setAlignmentStatus("Alignment reset. Run Match to begin.");
+        end
+
+        function restoreAlignmentSessionPresentation(app)
+            app.updateAlignmentLayerItems();
+            if ~isempty(fieldnames(app.AlignmentSession.ControlState))
+                app.applyAlignmentControlState( ...
+                    app.AlignmentSession.ControlState);
+            end
+            state = app.AlignmentSession.diagnostics();
+            if app.hasScalarStruct(app.AlignmentWorkingImages) && ...
+                    isfield(app.AlignmentWorkingImages, "Schedule")
+                schedule = app.AlignmentWorkingImages.Schedule;
+                app.updateAlignmentPairTable(schedule, ...
+                    app.enabledAlignmentPairs(schedule), ...
+                    app.AlignmentRawMatchResult, ...
+                    app.AlignmentFilteredMatchResult);
+            else
+                app.refreshAlignmentPairTable();
+            end
+            if app.hasFilteredAlignmentMatches()
+                app.updateAlignmentMatchTable( ...
+                    app.AlignmentFilteredMatchResult, app.AlignmentResult);
+            elseif app.hasMatchResult(app.AlignmentRawMatchResult)
+                app.updateAlignmentMatchTable(app.AlignmentRawMatchResult, []);
+            else
+                app.updateAlignmentMatchTable([], []);
+            end
+            if ~isempty(app.AlignmentRoiBounds)
+                app.updateAlignmentRoiOverlay();
+            end
+            app.setAlignmentFilterEnabled(state.MatchRevision > 0);
+            app.setAlignmentSolveEnabled(app.hasSolvableFilteredMatches());
+            app.refreshAlignmentActionControls();
+            app.AlignmentStatusLabel.Text = char(state.StatusText);
+            app.refreshAlignmentSessionIndicators();
+            app.refreshAlignmentOverlays(true);
+            app.captureAlignmentControlState();
+        end
+
+        function captureAlignmentControlState(app)
+            if isempty(app.AlignmentPresetDropDown) || ...
+                    ~isvalid(app.AlignmentPresetDropDown)
+                return
+            end
+            app.AlignmentSession.ControlState = struct( ...
+                Reference=string(app.AlignmentReferenceDropDown.Value), ...
+                Moving=string(app.AlignmentMovingDropDown.Value), ...
+                Preset=string(app.AlignmentPresetDropDown.Value), ...
+                Scope=string(app.AlignmentScopeDropDown.Value), ...
+                Detector=string(app.AlignmentDetectorDropDown.Value), ...
+                PairGraphMode=string( ...
+                app.AlignmentPairGraphModeDropDown.Value), ...
+                MaxPairs=double(app.AlignmentMaxPairsSpinner.Value), ...
+                AllPairs=logical(app.AlignmentAllPairsCheckBox.Value), ...
+                NetworkConfiguration=string( ...
+                app.AlignmentNetworkConfigurationDropDown.Value), ...
+                Loss=string(app.AlignmentLossDropDown.Value), ...
+                Coplanarity=string(app.AlignmentCoplanarityDropDown.Value), ...
+                ReferenceMotion=logical( ...
+                app.AlignmentReferenceMotionCheckBox.Value), ...
+                AcceptedOverlay=logical( ...
+                app.AlignmentAcceptedOverlayCheckBox.Value), ...
+                RejectedOverlay=logical( ...
+                app.AlignmentRejectedOverlayCheckBox.Value), ...
+                WorstOverlay=logical( ...
+                app.AlignmentWorstOverlayCheckBox.Value), ...
+                FeatureOverlay=logical( ...
+                app.AlignmentFeatureOverlayCheckBox.Value));
+        end
+
+        function state = defaultAlignmentControlState(~)
+            state = struct(Preset="fast", Scope="selectedPair", ...
+                Detector="auto", PairGraphMode="balanced", MaxPairs=20, ...
+                AllPairs=false, NetworkConfiguration="multiplePasses", ...
+                Loss="projectionPlane2D", Coplanarity="none", ...
+                ReferenceMotion=true, AcceptedOverlay=true, ...
+                RejectedOverlay=false, WorstOverlay=false, ...
+                FeatureOverlay=true);
+        end
+
+        function applyAlignmentControlState(app, state)
+            controls = struct( ...
+                Reference="AlignmentReferenceDropDown", ...
+                Moving="AlignmentMovingDropDown", ...
+                Preset="AlignmentPresetDropDown", ...
+                Scope="AlignmentScopeDropDown", ...
+                Detector="AlignmentDetectorDropDown", ...
+                PairGraphMode="AlignmentPairGraphModeDropDown", ...
+                MaxPairs="AlignmentMaxPairsSpinner", ...
+                AllPairs="AlignmentAllPairsCheckBox", ...
+                NetworkConfiguration= ...
+                "AlignmentNetworkConfigurationDropDown", ...
+                Loss="AlignmentLossDropDown", ...
+                Coplanarity="AlignmentCoplanarityDropDown", ...
+                ReferenceMotion="AlignmentReferenceMotionCheckBox", ...
+                AcceptedOverlay="AlignmentAcceptedOverlayCheckBox", ...
+                RejectedOverlay="AlignmentRejectedOverlayCheckBox", ...
+                WorstOverlay="AlignmentWorstOverlayCheckBox", ...
+                FeatureOverlay="AlignmentFeatureOverlayCheckBox");
+            for field = reshape(string(fieldnames(controls)), 1, [])
+                if ~isfield(state, field)
+                    continue
+                end
+                control = app.(controls.(field));
+                if ~isempty(control) && isvalid(control)
+                    value = state.(field);
+                    if isprop(control, "ItemsData") && ...
+                            ~isempty(control.ItemsData) && ...
+                            ~any(string(control.ItemsData) == string(value))
+                        continue
+                    end
+                    control.Value = value;
+                end
+            end
         end
 
         function updateAlignmentLayerItems(app)
@@ -1986,6 +2153,7 @@ classdef ProjectionViewerApp < handle
 
         function alignmentActivePairSelectorsChanged(app)
             app.synchronizeAlignmentActivePairFromSelectors();
+            app.captureAlignmentControlState();
         end
 
         function selected = synchronizeAlignmentActivePairFromSelectors(app)
@@ -2049,6 +2217,8 @@ classdef ProjectionViewerApp < handle
             app.refreshAlignmentOverlays(true);
             app.clearSelectedAlignmentMatchOverlay();
             app.refreshStereoCursorForActivePair();
+            app.refreshSurfaceWorkbenchButton();
+            app.captureAlignmentControlState();
         end
 
         function refreshAlignmentActivePairControls(app)
@@ -2346,6 +2516,7 @@ classdef ProjectionViewerApp < handle
                 logical(app.AlignmentPairEnabledCheckBox.Value));
             app.updateAlignmentPairTableEnabledState(pair);
             app.refreshAlignmentActivePairControls();
+            app.refreshSurfaceWorkbenchButton();
         end
 
         function updateAlignmentPairTableEnabledState(app, pair)
@@ -2369,6 +2540,29 @@ classdef ProjectionViewerApp < handle
                 end
             end
             app.AlignmentPairTable.Data = data;
+        end
+
+        function alignmentPairTableEdited(app)
+            if isempty(app.AlignmentPairTable) || ...
+                    ~isvalid(app.AlignmentPairTable) || ...
+                    ~istable(app.AlignmentPairTable.Data)
+                return
+            end
+            data = app.AlignmentPairTable.Data;
+            controllerPairs = app.AlignmentPairController.Schedule.Pairs;
+            controllerIds = string({controllerPairs.PairId});
+            viewIds = ProjectionViewMetadata.ids(app.Scene);
+            for row = 1:height(data)
+                pair = [data.Moving(row) data.Reference(row)];
+                identity = ProjectionViewMetadata.pairIdentity( ...
+                    viewIds(pair(1)), viewIds(pair(2)));
+                if ismember(identity.PairId, controllerIds)
+                    app.AlignmentPairController.setPairEnabled( ...
+                        identity.PairId, logical(data.Enabled(row)));
+                end
+            end
+            app.refreshAlignmentActivePairControls();
+            app.refreshSurfaceWorkbenchButton();
         end
 
         function alignmentSoloPairChanged(app)
@@ -2443,6 +2637,8 @@ classdef ProjectionViewerApp < handle
             cleanup = onCleanup(@() app.setAlignmentRunning(false));
 
             try
+                app.setAlignmentActiveStatus("workingImagePlanning", ...
+                    "Planning alignment working images and pair schedule...");
                 request = app.currentAlignmentRequest();
                 options = request.Options;
                 if numel(request.LayerIndices) < 2
@@ -2462,14 +2658,21 @@ classdef ProjectionViewerApp < handle
                     return
                 end
 
-                app.setAlignmentStatus("Rendering working images...");
+                app.completeAlignmentStage("workingImagePlanning", ...
+                    sprintf("Planned %d enabled pair(s).", ...
+                    size(enabledPairs, 1)));
+                app.setAlignmentActiveStatus("workingImageRendering", ...
+                    "Rendering bounded analysis working images...");
                 app.throwIfAlignmentCancelled();
                 workingImages = app.renderAlignmentWorkingImages( ...
                     request, app.alignmentRenderOptions());
                 workingImages = app.applyEnabledPairsToWorkingImages( ...
                     workingImages, enabledPairs);
 
-                app.setAlignmentStatus("Detecting and matching features...");
+                app.completeAlignmentStage("workingImageRendering", ...
+                    "Working-image rendering complete.");
+                app.setAlignmentActiveStatus("featureMatching", ...
+                    "Detecting features and matching scheduled pairs...");
                 app.throwIfAlignmentCancelled();
                 matchResult = ProjectionAlignmentFeatureMatcher.match( ...
                     workingImages, options);
@@ -2481,7 +2684,7 @@ classdef ProjectionViewerApp < handle
                 app.drawAlignmentMatchOverlays(matchResult);
                 rawMatchCount = sum([matchResult.Matches.Count]);
                 app.setAlignmentFilterEnabled(true);
-                app.setAlignmentStatus(sprintf( ...
+                app.completeAlignmentStage("featureMatching", sprintf( ...
                     "Matched %d raw observations. Ready to filter.", ...
                     rawMatchCount));
             catch ME
@@ -2513,7 +2716,8 @@ classdef ProjectionViewerApp < handle
             app.setAlignmentSolveEnabled(false);
 
             try
-                app.setAlignmentStatus("Filtering matches...");
+                app.setAlignmentActiveStatus("filtering", ...
+                    "Filtering raw matches and updating the evidence ledger...");
                 app.throwIfAlignmentCancelled();
                 options = app.AlignmentRequest.Options;
                 currentOptions = app.currentAlignmentOptions();
@@ -2546,7 +2750,7 @@ classdef ProjectionViewerApp < handle
                 end
 
                 app.setAlignmentSolveEnabled(true);
-                app.setAlignmentStatus(sprintf( ...
+                app.completeAlignmentStage("filtering", sprintf( ...
                     "Filtered %d raw -> %d observations. Ready to solve.", ...
                     rawMatchCount, matchCount));
             catch ME
@@ -2594,7 +2798,8 @@ classdef ProjectionViewerApp < handle
                     return
                 end
 
-                app.setAlignmentStatus("Solving OPK corrections...");
+                app.setAlignmentActiveStatus("networkPreparation", ...
+                    "Preparing selected evidence, network gauge, and solver inputs...");
                 app.throwIfAlignmentCancelled();
                 options = app.AlignmentRequest.Options;
                 currentOptions = app.currentAlignmentOptions();
@@ -2608,6 +2813,8 @@ classdef ProjectionViewerApp < handle
                     ProgressFcn=@(update) ...
                     app.updateAlignmentSolveProgress(update), ...
                     ProgressIntervalSeconds=0.15);
+                app.setAlignmentActiveStatus("primaryOptimization", ...
+                    "Running primary OPK optimization...");
                 if schedule.Strategy == "qualityGraph"
                     result = ProjectionAlignmentNetworkSolver.solve( ...
                         app.Scene, solveMatches, options, runtimeControl);
@@ -2630,6 +2837,8 @@ classdef ProjectionViewerApp < handle
                     result.RequestSummary.GaugePolicy = ...
                         networkSummary.GaugePolicy;
                 end
+                app.setAlignmentActiveStatus("solveDiagnostics", ...
+                    "Evaluating solve diagnostics and correction actionability...");
                 result = ProjectionAlignmentSafeSolvePolicy.apply( ...
                     result, solveMatches, options);
                 app.AlignmentSession.storeSolve(result);
@@ -2638,7 +2847,8 @@ classdef ProjectionViewerApp < handle
                 app.drawAlignmentOverlays(result);
                 app.setAlignmentActionEnabled( ...
                     app.isAlignmentResultActionable(result));
-                app.setAlignmentStatus(app.alignmentResultSummary(result));
+                app.completeAlignmentStage("solveDiagnostics", ...
+                    app.alignmentResultSummary(result));
             catch ME
                 if any(strcmp(ME.identifier, [ ...
                         "ProjectionViewerApp:alignmentCancelled", ...
@@ -2679,12 +2889,14 @@ classdef ProjectionViewerApp < handle
                 status = sprintf("Solving: %s, iteration %d, %.1f s...", ...
                     char(stage), update.Iteration, update.ElapsedSeconds);
             end
-            app.setAlignmentStatus(string(status));
+            app.setAlignmentActiveStatus(stage, string(status));
             drawnow limitrate nocallbacks
         end
 
         function previewAlignmentResult(app)
-            if ~app.isAlignmentResultActionable(app.AlignmentResult)
+            state = app.AlignmentSession.diagnostics();
+            if ~ProjectionAlignmentSafeSolvePolicy.isPreviewAllowed( ...
+                    app.AlignmentResult) || state.Stage ~= "solved"
                 return
             end
             previousScene = app.Scene;
@@ -2697,12 +2909,22 @@ classdef ProjectionViewerApp < handle
             app.updateControlsFromSelectedLayer();
             app.drawAlignmentOverlays(app.AlignmentResult);
             app.AlignmentSession.markPreviewed();
+            app.refreshAlignmentActionControls();
+            app.refreshSurfaceWorkbenchButton();
             app.setAlignmentStatus("Previewing " + ...
                 app.alignmentCorrectionSummary(app.AlignmentResult));
         end
 
         function applyAlignmentResult(app)
-            if ~app.isAlignmentResultActionable(app.AlignmentResult)
+            state = app.AlignmentSession.diagnostics();
+            decision = ProjectionAlignmentSafeSolvePolicy.decision( ...
+                app.AlignmentResult);
+            if ~decision.ApplyAllowed || ...
+                    ~any(state.Stage == ["solved", "previewed"])
+                return
+            end
+            if decision.ConfirmationRequired && ...
+                    ~app.confirmAlignmentReviewResult(decision)
                 return
             end
             parentScene = ProjectionAlignmentOpkSolver.revertCorrections( ...
@@ -2724,12 +2946,15 @@ classdef ProjectionViewerApp < handle
             app.refreshCorrectionScene(previousScene);
             app.drawAlignmentOverlays(app.AlignmentResult);
             app.AlignmentSession.markApplied();
+            app.refreshAlignmentActionControls();
+            app.refreshSurfaceWorkbenchButton();
             app.setAlignmentStatus("Applied " + ...
                 app.alignmentCorrectionSummary(app.AlignmentResult));
         end
 
         function revertAlignmentResult(app)
-            if ~app.isAlignmentResultActionable(app.AlignmentResult)
+            state = app.AlignmentSession.diagnostics();
+            if ~any(state.Stage == ["previewed", "applied"])
                 return
             end
             previousScene = app.Scene;
@@ -2750,6 +2975,8 @@ classdef ProjectionViewerApp < handle
             app.refreshCorrectionScene(previousScene);
             app.drawAlignmentOverlays(app.AlignmentResult);
             app.AlignmentSession.markReverted();
+            app.refreshAlignmentActionControls();
+            app.refreshSurfaceWorkbenchButton();
             app.setAlignmentStatus("Reverted alignment preview.");
         end
 
@@ -2777,9 +3004,7 @@ classdef ProjectionViewerApp < handle
 
         function tf = hasSurfaceWorkbenchInput(app)
             tf = false;
-            if isempty(app.AlignmentMatchTable) || ...
-                    ~isvalid(app.AlignmentMatchTable) || ...
-                    ~app.hasFilteredAlignmentMatches()
+            if ~app.hasFilteredAlignmentMatches()
                 return
             end
             state = app.AlignmentSession.diagnostics();
@@ -2788,12 +3013,13 @@ classdef ProjectionViewerApp < handle
             if ~hasAlignedScene
                 return
             end
-            try
-                pairMatch = app.currentDenseSurfacePairMatch();
-                tf = pairMatch.Count >= 3;
-            catch
-                tf = false;
+            matches = app.alignmentAcceptedSolveMatches();
+            if ~isfield(matches, "Matches") || isempty(matches.Matches)
+                return
             end
+            options = app.currentAlignmentOptions();
+            minimum = options.SafeSolvePolicy.MinSolverObservationsPerPair;
+            tf = any([matches.Matches.Count] >= minimum);
         end
 
         function refreshSurfaceWorkbenchButton(app, state)
@@ -2836,9 +3062,11 @@ classdef ProjectionViewerApp < handle
                 Request=struct()), 1, 0);
             options = app.currentAlignmentOptions();
             options.Scheduling.Strategy = "twoImage";
+            minimum = options.SafeSolvePolicy. ...
+                MinSolverObservationsPerPair;
             for index = 1:numel(matches.Matches)
                 pairMatch = matches.Matches(index);
-                if pairMatch.Count < 1
+                if pairMatch.Count < minimum
                     continue
                 end
                 pair = ProjectionAlignmentLayerResolver.pairIndices( ...
@@ -2865,12 +3093,17 @@ classdef ProjectionViewerApp < handle
                 error("ProjectionViewerApp:noSurfaceWorkbenchPairs", ...
                     "No accepted physical pair evidence remains after curation.");
             end
-            [~, activePair] = app.currentDenseSurfacePairMatch();
-            activeViews = string({app.Scene.layers(activePair).ViewId});
-            activeIdentity = ProjectionViewMetadata.pairIdentity( ...
-                activeViews(1), activeViews(2));
+            active = app.AlignmentPairController.currentPair();
+            activePairId = "";
+            if isfield(active, "PairId")
+                activePairId = string(active.PairId);
+            end
+            entryIds = string({entries.PairId});
+            if ~ismember(activePairId, entryIds)
+                activePairId = entryIds(1);
+            end
             context = struct(PairEntries=entries, ...
-                ActivePairId=activeIdentity.PairId, ...
+                ActivePairId=activePairId, ...
                 CorrectionGenerationId=app.correctionGenerationId());
         end
 
@@ -2964,7 +3197,7 @@ classdef ProjectionViewerApp < handle
                 MinSolverObservationsPerPair=3, ...
                 MinPreferredObservationsPerPair=10, ...
                 FailOnBoundHit=true, ...
-                MinResidualImprovementFraction=0.10), ...
+                PreferredResidualImprovementFraction=0.10), ...
                 LossMode=string(app.AlignmentLossDropDown.Value)));
         end
 
@@ -3051,6 +3284,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function alignmentSetupChanged(app, refreshPairs)
+            app.captureAlignmentControlState();
             if refreshPairs
                 app.refreshAlignmentPairTable();
             end
@@ -3079,6 +3313,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function alignmentFilterSettingChanged(app)
+            app.captureAlignmentControlState();
             state = app.AlignmentSession.diagnostics();
             if state.MatchRevision == 0
                 app.refreshAlignmentSessionIndicators();
@@ -3094,6 +3329,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function alignmentSolveSettingChanged(app)
+            app.captureAlignmentControlState();
             state = app.AlignmentSession.diagnostics();
             if state.FilterRevision == 0
                 app.refreshAlignmentSessionIndicators();
@@ -4074,10 +4310,30 @@ classdef ProjectionViewerApp < handle
                     ~isvalid(app.AlignmentPreviewButton)
                 return
             end
-            state = app.onOff(isEnabled);
-            app.AlignmentPreviewButton.Enable = state;
-            app.AlignmentApplyButton.Enable = state;
-            app.AlignmentRevertButton.Enable = state;
+            if isEnabled
+                app.refreshAlignmentActionControls();
+            else
+                app.AlignmentPreviewButton.Enable = "off";
+                app.AlignmentApplyButton.Enable = "off";
+                app.AlignmentRevertButton.Enable = "off";
+            end
+        end
+
+        function refreshAlignmentActionControls(app)
+            if isempty(app.AlignmentPreviewButton) || ...
+                    ~isvalid(app.AlignmentPreviewButton)
+                return
+            end
+            decision = ProjectionAlignmentSafeSolvePolicy.decision( ...
+                app.AlignmentResult);
+            state = app.AlignmentSession.diagnostics();
+            app.AlignmentPreviewButton.Enable = app.onOff( ...
+                decision.PreviewAllowed && state.Stage == "solved");
+            app.AlignmentApplyButton.Enable = app.onOff( ...
+                decision.ApplyAllowed && ...
+                any(state.Stage == ["solved", "previewed"]));
+            app.AlignmentRevertButton.Enable = app.onOff( ...
+                any(state.Stage == ["previewed", "applied"]));
         end
 
         function tf = hasAlignmentResult(app)
@@ -4088,6 +4344,64 @@ classdef ProjectionViewerApp < handle
 
         function tf = isAlignmentResultActionable(~, result)
             tf = ProjectionAlignmentSafeSolvePolicy.isActionable(result);
+        end
+
+        function confirmed = confirmAlignmentReviewResult(app, decision)
+            message = app.alignmentReviewConfirmationSummary(decision);
+            if ~isempty(app.AlignmentReviewConfirmationFcn)
+                confirmed = logical(app.AlignmentReviewConfirmationFcn( ...
+                    decision, string(message)));
+                if ~isscalar(confirmed)
+                    error("ProjectionViewerApp:invalidConfirmationResult", ...
+                        "Confirmation function must return a logical scalar.");
+                end
+                return
+            end
+            parent = app.AlignmentWorkbenchFigure;
+            if isempty(parent) || ~isvalid(parent)
+                parent = app.UIFigure;
+            end
+            choice = uiconfirm(parent, message, ...
+                "Apply review correction?", ...
+                Options=["Apply", "Cancel"], DefaultOption=2, ...
+                CancelOption=2, Icon="warning");
+            confirmed = string(choice) == "Apply";
+        end
+
+        function summary = alignmentReviewConfirmationSummary(app, decision)
+            improvement = 100 * decision.ResidualImprovementFraction;
+            result = app.AlignmentResult;
+            observations = app.totalAlignmentMatchCount(result);
+            trackCount = "not reported";
+            if isfield(result.Diagnostics, "WorkAccounting") && ...
+                    isstruct(result.Diagnostics.WorkAccounting) && ...
+                    isfield(result.Diagnostics.WorkAccounting, "TrackCount")
+                value = result.Diagnostics.WorkAccounting.TrackCount;
+                if isnumeric(value) && isscalar(value) && isfinite(value)
+                    trackCount = string(round(value));
+                end
+            end
+            coverage = "not reported";
+            if isfield(result.Diagnostics, "Selection") && ...
+                    isfield(result.Diagnostics.Selection, "CoverageSummary")
+                coverage = string( ...
+                    result.Diagnostics.Selection.CoverageSummary);
+            end
+            format = "RMS %.4g -> %.4g (%+.1f%% improvement)\n" + ...
+                "Active objective %.4g -> %.4g (%+.4g); " + ...
+                "max incremental OPK %.4g deg\n" + ...
+                "%d observations; %s tracks; spatial coverage %s\n" + ...
+                "Condition %.4g; max attitude sigma %.4g deg; " + ...
+                "bound hit %s\n\nReview findings: %s";
+            summary = sprintf(format, ...
+                decision.RmsBefore, decision.RmsAfter, improvement, ...
+                decision.ActiveObjectiveBefore, decision.ActiveObjectiveAfter, ...
+                decision.ActiveObjectiveChange, ...
+                decision.MaximumIncrementalOpkDegrees, observations, ...
+                char(trackCount), char(coverage), decision.ConditionNumber, ...
+                decision.MaximumAttitudeStandardDeviationDegrees, ...
+                char(app.onOff(decision.BoundHit)), ...
+                char(strjoin(decision.Warnings, "; ")));
         end
 
         function tf = hasFilteredAlignmentMatches(app)
@@ -4127,6 +4441,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function setAlignmentStatus(app, statusText)
+            app.AlignmentSession.stopStage(statusText);
             didUpdate = false;
             if ~isempty(app.AlignmentStatusLabel) && ...
                     isvalid(app.AlignmentStatusLabel)
@@ -4137,6 +4452,26 @@ classdef ProjectionViewerApp < handle
             if didUpdate
                 drawnow limitrate
             end
+        end
+
+        function setAlignmentActiveStatus(app, stage, statusText)
+            app.AlignmentSession.beginStage(stage, statusText);
+            if ~isempty(app.AlignmentStatusLabel) && ...
+                    isvalid(app.AlignmentStatusLabel)
+                app.AlignmentStatusLabel.Text = char(statusText);
+                app.refreshAlignmentSessionIndicators();
+                drawnow
+            end
+        end
+
+        function completeAlignmentStage(app, stage, statusText)
+            app.AlignmentSession.completeStage(stage, statusText);
+            if ~isempty(app.AlignmentStatusLabel) && ...
+                    isvalid(app.AlignmentStatusLabel)
+                app.AlignmentStatusLabel.Text = char(statusText);
+            end
+            app.refreshAlignmentSessionIndicators();
+            drawnow limitrate
         end
 
         function refreshAlignmentSessionIndicators(app)
@@ -4167,6 +4502,15 @@ classdef ProjectionViewerApp < handle
             lines(10) = "Solved observations: " + string( ...
                 app.totalAlignmentMatchCount(app.AlignmentResult));
             lines(11) = "ROI: " + app.onOff(~isempty(app.AlignmentRoiBounds));
+            if strlength(state.ActiveStage) > 0
+                lines(end + 1) = "Active work: " + state.ActiveStage + ...
+                    " — " + state.ActiveStatus;
+            end
+            if strlength(state.LastCompletedStage) > 0
+                lines(end + 1) = "Last completed: " + ...
+                    state.LastCompletedStage + " — " + ...
+                    state.LastCompletedStatus;
+            end
             if state.ManualAdjustmentCount > 0
                 lines(end + 1) = "Manual anchor adjustments: " + ...
                     string(state.ManualAdjustmentCount);
@@ -4396,13 +4740,15 @@ classdef ProjectionViewerApp < handle
             selectedHandles = gobjects(0);
             if movingValid
                 movingWorld = PlanarProjection.reconstruct3d( ...
-                    movingProjectionPoint.', plane) - app.Scene.renderOrigin;
+                    movingProjectionPoint.', plane) - app.Scene.renderOrigin + ...
+                    app.alignmentOverlayDepthOffset();
             else
                 movingWorld = nan(3, 1);
             end
             if referenceValid
                 referenceWorld = PlanarProjection.reconstruct3d( ...
-                    referenceProjectionPoint.', plane) - app.Scene.renderOrigin;
+                    referenceProjectionPoint.', plane) - app.Scene.renderOrigin + ...
+                    app.alignmentOverlayDepthOffset();
             else
                 referenceWorld = nan(3, 1);
             end
@@ -4597,6 +4943,7 @@ classdef ProjectionViewerApp < handle
             if nargin < 2
                 force = false;
             end
+            app.captureAlignmentControlState();
             if ~force && ~app.hasAlignmentOverlayGraphics()
                 return
             end
@@ -5082,14 +5429,20 @@ classdef ProjectionViewerApp < handle
             if any(movingMask)
                 movingPoints(:, movingMask) = PlanarProjection.reconstruct3d( ...
                     movingPlanePoints(movingMask, :).', plane) - ...
-                    app.Scene.renderOrigin;
+                    app.Scene.renderOrigin + app.alignmentOverlayDepthOffset();
             end
             if any(referenceMask)
                 referencePoints(:, referenceMask) = ...
                     PlanarProjection.reconstruct3d( ...
                     referencePlanePoints(referenceMask, :).', plane) - ...
-                    app.Scene.renderOrigin;
+                    app.Scene.renderOrigin + app.alignmentOverlayDepthOffset();
             end
+        end
+
+        function offset = alignmentOverlayDepthOffset(app)
+            offset = -(numel(app.Scene.layers) + 1) / 2 * ...
+                app.previewLayerDepthStepMeters() * ...
+                app.frameCameraViewDirection();
         end
 
         function clearAlignmentOverlays(app)
@@ -5317,7 +5670,8 @@ classdef ProjectionViewerApp < handle
             app.MotionPassDropDown.Layout.Row = 4;
             app.MotionPassDropDown.Layout.Column = 2;
             app.MotionLoopCheckBox = uicheckbox(grid, Text="Loop", ...
-                Value=false, ValueChangedFcn=@(~, ~) app.motionControlChanged(), ...
+                Value=app.MotionLoopPreference, ...
+                ValueChangedFcn=@(~, ~) app.motionControlChanged(), ...
                 Tag="ProjectionViewerMotionLoopCheckBox");
             app.MotionLoopCheckBox.Layout.Row = 4;
             app.MotionLoopCheckBox.Layout.Column = 3;
@@ -5670,7 +6024,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function sequence = configuredMotionSequence(app)
-            options = struct();
+            options = struct(LayerIndices=1:numel(app.Scene.layers));
             if isempty(app.MotionTable) || ~isvalid(app.MotionTable)
                 options.IncludedViewIds = ProjectionViewMetadata.ids(app.Scene);
             else
@@ -5794,6 +6148,7 @@ classdef ProjectionViewerApp < handle
         function motionControlChanged(app)
             runtime = app.MotionRuntime;
             runtime.Loop = app.MotionLoopCheckBox.Value;
+            app.MotionLoopPreference = logical(app.MotionLoopCheckBox.Value);
             runtime.HoverEdges = app.MotionHoverCheckBox.Value;
             runtime.IdentityPinned = app.MotionPinCheckBox.Value;
             runtime.RateFps = ProjectionMotionPlayback.rate( ...
@@ -6246,13 +6601,6 @@ classdef ProjectionViewerApp < handle
             if isempty(app.Axes) || ~isvalid(app.Axes)
                 return
             end
-            axesPosition = getpixelposition(app.Axes, true);
-            if ~isempty(app.ViewVectorLabel) && isvalid(app.ViewVectorLabel)
-                overlaySize = [210 58];
-                app.ViewVectorLabel.Position = [ ...
-                    axesPosition(1) + axesPosition(3) - overlaySize(1) - 8, ...
-                    axesPosition(2) + 8, overlaySize];
-            end
             app.positionMotionViewportControls();
         end
 
@@ -6410,10 +6758,11 @@ classdef ProjectionViewerApp < handle
             end
         end
 
-        function runtime = defaultMotionRuntime(~)
+        function runtime = defaultMotionRuntime(app)
             runtime = struct(Active=false, Sequence=struct(), Position=0, ...
                 Mode="viewAll", TrackCamera=false, ...
-                Loop=false, HoverEdges=true, IdentityPinned=false, ...
+                Loop=app.MotionLoopPreference, HoverEdges=true, ...
+                IdentityPinned=false, ...
                 Playing=false, RateFps=ProjectionMotionPlayback.DefaultRateFps, ...
                 PauseReason="", Lookahead=struct(), ...
                 SceneSignature=struct(), PlaybackFrameCount=0, ...
@@ -6840,8 +7189,9 @@ classdef ProjectionViewerApp < handle
                 FaceColor="texturemap", EdgeColor="none", LineStyle="none", ...
                 CDataMapping="scaled", ...
                 FaceAlpha=app.previewFaceAlphaForLayer(mesh.Alpha, layerIndex), ...
-                Visible=app.onOff(app.previewSurfaceIsVisible( ...
-                mesh.Visible, mesh.Alpha)), ...
+                Visible=app.onOff( ...
+                app.layerSurfaceIsEffectivelyVisible( ...
+                layerIndex, mesh.Alpha)), ...
                 ContextMenu=app.ImageContextMenu, Tag=tag);
             app.PerformanceMonitor.increment("SurfaceCreations");
             app.PerformanceMonitor.increment( ...
@@ -7509,8 +7859,8 @@ classdef ProjectionViewerApp < handle
         function mesh = previewTileAppearanceMesh(app, mesh, layerIndex)
             layer = app.Scene.layers(layerIndex);
             mesh.Alpha = layer.Alpha;
-            mesh.Visible = app.previewSurfaceIsVisible( ...
-                layer.Visible, layer.Alpha);
+            mesh.Visible = app.layerSurfaceIsEffectivelyVisible( ...
+                layerIndex, layer.Alpha);
         end
 
         function retirePreviewTileSurfaces(app, surfaceHandles)
@@ -7579,6 +7929,8 @@ classdef ProjectionViewerApp < handle
                 return
             end
             alpha = app.Scene.layers(layerIndex).Alpha;
+            effectiveMask = app.effectiveLayerVisibilityMask();
+            isVisible = logical(isVisible) && effectiveMask(layerIndex);
             isVisible = app.previewSurfaceIsVisible(isVisible, alpha);
             set(surfaceHandles, "Visible", char(app.onOff(isVisible)));
         end
@@ -9153,7 +9505,8 @@ classdef ProjectionViewerApp < handle
             surfaceHandle.FaceAlpha = app.previewFaceAlphaForLayer( ...
                 mesh.Alpha, layerIndex);
             surfaceHandle.Visible = app.onOff( ...
-                app.previewSurfaceIsVisible(mesh.Visible, mesh.Alpha));
+                app.layerSurfaceIsEffectivelyVisible( ...
+                layerIndex, mesh.Alpha));
         end
 
         function maxVertices = previewTileMeshVertexLimit(app, meshSamplings)
@@ -9238,6 +9591,12 @@ classdef ProjectionViewerApp < handle
 
         function tf = previewSurfaceIsVisible(~, isVisible, alpha)
             tf = logical(isVisible) && alpha > 0;
+        end
+
+        function tf = layerSurfaceIsEffectivelyVisible( ...
+                app, layerIndex, alpha)
+            mask = app.effectiveLayerVisibilityMask();
+            tf = app.previewSurfaceIsVisible(mask(layerIndex), alpha);
         end
 
         function channelIndex = anaglyphChannelForLayer(app, layerIndex)
@@ -10160,6 +10519,7 @@ classdef ProjectionViewerApp < handle
             fullLevelCandidateCounts = zeros(1, layerCount);
             visibleSurfaceCount = 0;
             visibleTileSurfaceCount = 0;
+            surfaceVisibilityByLayer = false(1, layerCount);
             visibleTexturePixels = 0;
             visibleTextureBytes = 0;
             pyramidMaterializedLevelCounts = zeros(1, layerCount);
@@ -10207,6 +10567,7 @@ classdef ProjectionViewerApp < handle
                     if string(surfaceHandle.Visible) ~= "on"
                         continue
                     end
+                    surfaceVisibilityByLayer(layerIndex) = true;
                     visibleSurfaceCount = visibleSurfaceCount + 1;
                     if string(surfaceHandle.Tag) == ...
                             "ProjectionViewerPreviewTileSurface"
@@ -10260,6 +10621,7 @@ classdef ProjectionViewerApp < handle
                 app.PreviewBudgetLimitedLayerMask;
             runtime.VisibleSurfaceCount = visibleSurfaceCount;
             runtime.VisibleTileSurfaceCount = visibleTileSurfaceCount;
+            runtime.SurfaceVisibilityByLayer = surfaceVisibilityByLayer;
             runtime.VisibleTexturePixels = visibleTexturePixels;
             runtime.VisibleTextureBytes = visibleTextureBytes;
             runtime.CameraReconcilePending = ...

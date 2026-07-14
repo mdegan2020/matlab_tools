@@ -108,7 +108,15 @@ classdef ProjectionBackendAlignmentIntegrationTest < matlab.unittest.TestCase
             testCase.verifyEqual(result.Status, "alignmentRejected");
             testCase.verifyTrue(result.Alignment.Enabled);
             testCase.verifyFalse(result.Alignment.Applied);
-            testCase.verifyEqual(result.Alignment.Result.Status, "failed");
+            testCase.verifyEqual(result.Alignment.Result.Status, "solved");
+            testCase.verifyTrue( ...
+                result.Alignment.Result.Convergence.Success);
+            decision = result.Alignment.Result.Diagnostics.SafeSolvePolicy;
+            testCase.verifyEqual(decision.Status, "rejected");
+            testCase.verifyTrue(decision.PreviewAllowed);
+            testCase.verifyFalse(decision.ApplyAllowed);
+            testCase.verifyTrue(any(contains( ...
+                decision.HardRejectionReasons, "bounds")));
             testCase.verifyTrue(result.Alignment.Result.Diagnostics.AnyBoundHit);
             testCase.verifyNotEmpty( ...
                 result.Alignment.Result.SolvedCorrections);
