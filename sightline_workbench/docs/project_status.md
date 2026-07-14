@@ -304,6 +304,13 @@ parity is the next independent CPU stage in the explicit dependency order.
 C0-C3 are complete. A7 research is complete; production time-varying
 application remains gated on physical local observability and stability.
 
+`docs/ufm_evaluation_workplan.md` records a separate evidence-gated evaluation
+of UFM-Base as a possible optional external dense matcher. It does not yet add
+code, weights, Python/CUDA dependencies, or a product capability. Checkpoint
+license/use approval, pinned target-GPU evidence, standalone exported-pair
+quality and runtime, full-source geometry, and a controlled SGM/template
+comparison all precede any MATLAB adapter or Surface Workbench integration.
+
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
 immutable history, viewer integration, callback safeguards, and legacy
 compatibility are covered by focused and full fresh-class validation.
@@ -613,6 +620,9 @@ hardware-gated:
   `PlanarProjection.triangulateRays` APIs; and
 - custom GPU kernels, only if profiling shows a bottleneck not addressed by
   CPU tiling, thread execution, and MATLAB-managed GPU operations;
+- UFM-Base or another learned dense matcher, only after the license, runtime,
+  domain-fit, full-source geometry, and controlled-comparison gates in
+  `docs/ufm_evaluation_workplan.md` approve a specific optional integration;
 - later C++ stages beyond the completed portable D0 foundation and eventual
   NITF output; current prototyping may keep all inputs/outputs in memory and
   perform one final TIFF/PNG write.
@@ -647,6 +657,9 @@ hardware-gated:
   privacy-preserving acceptance evidence and interpretation.
 - `docs/dense_surface_synthetic_acceptance_thresholds.md` — proposed primary
   fixture gates derived from the first repeatable evidence package.
+- `docs/ufm_evaluation_workplan.md` — ordered license, runtime, correspondence,
+  full-source geometry, baseline-comparison, adapter, and operator gates for a
+  possible optional UFM learned dense matcher.
 - `docs/alignment_operator_guide.md` — current staged operator workflow.
 - `docs/architecture_concept_recommendations.md` — non-authoritative future
   architecture concept record; promotion requires an SRS/workplan gate.

@@ -95,3 +95,11 @@ exercise request/result validation, progress/provenance, cancellation,
 algorithm-failure wrapping, forbidden surface output, explicit registry
 behavior, SGM conversion, and the legacy request bridge. External subclasses
 can follow the same headless test pattern without launching the viewer.
+
+## Planned Learned-Matcher Evaluation
+
+`docs/ufm_evaluation_workplan.md` defines the gated evaluation of UFM-Base as a
+possible optional external matcher. No UFM adapter or dependency is currently
+implemented. License/use approval, a pinned Python/CUDA environment,
+standalone pair evidence, full-source mapping, and a controlled SGM/template
+comparison must pass before any MATLAB adapter or Surface Workbench UI work.
