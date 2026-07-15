@@ -10,9 +10,9 @@ to exactly one group.
 | --- | --- | ---: |
 | `coreGeometryState` | Geometry, identities, state, metadata, caches, native golden-fixture parity, and non-UI controllers | 147 |
 | `alignment` | Sparse matching/filtering, source refinement/diverse evidence, track and graph logic, global network solving, synthetic acceptance, correction SDK, A7 research, and atomic DEM position apply | 188 |
-| `backendSurface` | Backend jobs/rendering, dense matchers/search/audit, pair covariance, procedural anaglyph parity, robust multi-ray, surface-fusion SDK/audit, DEM registration SDK/audit, Surface Workbench model/runner, dense surface, synthetic truth, inverse warp, and raster paths | 248 |
+| `backendSurface` | Backend jobs/rendering, dense matchers/search/audit, pair covariance, procedural anaglyph parity, robust multi-ray, surface-fusion SDK/audit, DEM registration SDK/audit, Surface Workbench frame/loader/model/runner, dense surface, synthetic truth, inverse warp, and raster paths | 262 |
 | `viewerAlignmentUi` | Viewer alignment, active-pair, DEM-correction invalidation, and general app interaction | 77 |
-| `viewerPresentationWorkflows` | Viewer motion, framing, harness, stereo cursor/eyes, and Surface Workbench/3-D/DEM-preview workflows | 73 |
+| `viewerPresentationWorkflows` | Viewer motion, framing, harness, stereo cursor/eyes, and Surface Workbench/3-D/DEM-preview workflows | 76 |
 | `viewerPerformancePrecision` | Viewer performance evidence and long-range precision | 34 |
 
 The validated July 14, 2026 baseline is 767/767 with zero failures and zero

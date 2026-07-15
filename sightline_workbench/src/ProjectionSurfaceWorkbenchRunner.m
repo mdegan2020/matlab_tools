@@ -3,7 +3,7 @@ classdef ProjectionSurfaceWorkbenchRunner < handle
 
     properties (Constant)
         Format = "ProjectionSurfaceWorkbenchRun"
-        Version = 1
+        Version = 2
     end
 
     properties (Access = private)
@@ -143,6 +143,7 @@ classdef ProjectionSurfaceWorkbenchRunner < handle
                 SelectedPassIds=reshape(string(state.SelectedPassIds), 1, []), ...
                 ScheduledViewIds=scheduledViewIds, ...
                 ScheduledPassIds=scheduledPassIds, ...
+                CoordinateFrame=runner.Context.CoordinateFrame, ...
                 PairDecisions=pairDecisions, ...
                 MatcherAlgorithmId=matcherId, MatcherMetadata=metadata, ...
                 MatcherOptions=options, ...
@@ -705,7 +706,7 @@ classdef ProjectionSurfaceWorkbenchRunner < handle
         end
 
         function [pointSet, status, association] = ...
-                reconstruct(~, records, associationOptions, ...
+                reconstruct(runner, records, associationOptions, ...
                 reconstructionOptions, runtimeControl)
             if nargin < 4
                 reconstructionOptions = struct();
@@ -723,7 +724,8 @@ classdef ProjectionSurfaceWorkbenchRunner < handle
             request = struct( ...
                 Format=ProjectionDenseObservationAssociator.RequestFormat, ...
                 Version=ProjectionDenseObservationAssociator.RequestVersion, ...
-                WorldFrame="sceneWorld", Records=records);
+                WorldFrame=runner.Context.CoordinateFrame.WorldFrameId, ...
+                Records=records);
             associationRuntime = struct(ProgressFcn=[], ...
                 CancellationFcn=runtimeControl.CancellationFcn);
             if isfield(runtimeControl, "AssociationProgressFcn")
@@ -743,6 +745,7 @@ classdef ProjectionSurfaceWorkbenchRunner < handle
             end
             pointSet = ProjectionMultiRayReconstructor.reconstruct( ...
                 association, reconstructionOptions, reconstructionRuntime);
+            pointSet.CoordinateFrame = runner.Context.CoordinateFrame;
             if ~any([pointSet.Points.Valid])
                 return
             end
@@ -960,6 +963,62 @@ classdef ProjectionSurfaceWorkbenchRunner < handle
                 error("ProjectionSurfaceWorkbenchRunner:invalidContext", ...
                     "ActivePairId must identify one bound pair entry.");
             end
+            inferred = ProjectionSurfaceWorkbenchRunner. ...
+                inferCoordinateFrame(context.PairEntries);
+            if isfield(context, "CoordinateFrame")
+                explicit = ProjectionCoordinateFrame.validate( ...
+                    context.CoordinateFrame);
+                if explicit.WorldFrameId ~= inferred.WorldFrameId
+                    error("ProjectionSurfaceWorkbenchRunner:frameMismatch", ...
+                        "Explicit and scene-declared world frames disagree.");
+                end
+                context.CoordinateFrame = explicit;
+            else
+                context.CoordinateFrame = inferred;
+            end
+        end
+
+        function frame = inferCoordinateFrame(entries)
+            frameIds = strings(1, 0);
+            origins = zeros(3, 0);
+            for index = 1:numel(entries)
+                entry = entries(index);
+                scene = entry.Request.Context.Scene;
+                if ~isfield(scene, "renderOrigin") || ...
+                        ~isnumeric(scene.renderOrigin) || ...
+                        ~isequal(size(scene.renderOrigin), [3 1]) || ...
+                        any(~isfinite(scene.renderOrigin))
+                    error("ProjectionSurfaceWorkbenchRunner:invalidFrame", ...
+                        "Every scene-bound pair requires a finite world render origin.");
+                end
+                for side = 1:2
+                    layer = scene.layers(entry.LayerIndices(side));
+                    if ~isfield(layer, "SourceGeometry") || ...
+                            ~isstruct(layer.SourceGeometry) || ...
+                            ~isfield(layer.SourceGeometry, "CoordinateFrame")
+                        error("ProjectionSurfaceWorkbenchRunner:invalidFrame", ...
+                            "Every source geometry must declare its coordinate frame.");
+                    end
+                    id = string(layer.SourceGeometry.CoordinateFrame);
+                    if ~isscalar(id) || ismissing(id) || strlength(id) == 0
+                        error("ProjectionSurfaceWorkbenchRunner:invalidFrame", ...
+                            "Source coordinate-frame identity must be nonempty.");
+                    end
+                    frameIds(end + 1) = id; %#ok<AGROW>
+                    origins(:, end + 1) = double(scene.renderOrigin); %#ok<AGROW>
+                end
+            end
+            if numel(unique(frameIds)) ~= 1
+                error("ProjectionSurfaceWorkbenchRunner:frameMismatch", ...
+                    "Scheduled pair source geometries use inconsistent world frames.");
+            end
+            tolerance = 1e-9 * max(1, max(abs(origins), [], "all"));
+            if any(vecnorm(origins - origins(:, 1), 2, 1) > tolerance)
+                error("ProjectionSurfaceWorkbenchRunner:frameMismatch", ...
+                    "Scheduled pair scene origins are inconsistent.");
+            end
+            frame = ProjectionCoordinateFrame.fromDeclaration( ...
+                frameIds(1), origins(:, 1));
         end
 
         function runtime = validateRuntimeControl(runtime)

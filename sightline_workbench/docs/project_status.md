@@ -23,6 +23,12 @@ As of July 14, 2026:
   become backend radiometric inputs.
 - The latest grouped fresh-class repository suite passes 767/767 tests with
   zero failures and zero incomplete tests.
+- The post-RD-7 Surface Recovery queue is active. SR-0/SR-1 replace repeated
+  global dense-association scans with bounded indexed work, and SR-2/SR-3 add
+  explicit portable world/display frames, truthful ENU/HAE/world-Z semantics,
+  standard 3-D navigation/inspection, and defensive standalone MAT reopening.
+  Transactional tiled-surface ownership, viewport rebuild, grouped regression,
+  and representative private-data confirmation remain in SR-4 through SR-6.
 - `docs/real_data_validation_followup_workpack.md` is the completed RD corrective
   queue. RD-2, RD-3, RD-1, and RD-4 are complete: the default network
   path is bounded and observable, active tiled presentations reconcile against the

@@ -1,7 +1,7 @@
 # Real-Data Surface And Stereo Recovery Workplan
 
-Status: active July 15, 2026. The documentation baseline and SR-0/SR-1
-implementation milestone are complete. SR-2 through SR-6 remain in progress.
+Status: active July 15, 2026. The documentation baseline and SR-0 through SR-3
+implementation milestones are complete. SR-4 through SR-6 remain in progress.
 
 ## Purpose
 
@@ -79,7 +79,7 @@ present repeated global scans an acceptable production algorithm.
 
 ### Coordinate-frame presentation
 
-`ProjectionSurfaceWorkbenchRunner` currently labels reconstruction records
+Before SR-2, `ProjectionSurfaceWorkbenchRunner` labeled reconstruction records
 with the generic frame `sceneWorld`. `ProjectionSurfaceProductCatalog` retains
 only that frame label, not a reversible local display transform.
 `ProjectionSurface3DViewer` renders `PointsWorld`, mesh vertices, and grid
@@ -94,16 +94,15 @@ contract.
 
 ### 3-D interaction and saved-run inspection
 
-The 3-D viewer creates a `UIAxes`, applies `view(...,3)`, and assigns a
+Before SR-3, the 3-D viewer created a `UIAxes`, applied `view(...,3)`, and assigned a
 `ButtonDownFcn` to every rendered object for point selection. It does not
 explicitly configure the standard rotate/pan/zoom interaction set. The object
 callback can win the gesture over ordinary axes rotation.
 
-Surface Workbench MAT export correctly retains `surfaceWorkbenchRun`, including
+Surface Workbench MAT export retains `surfaceWorkbenchRun`, including
 the catalog, point set, association, pair evidence, fusion result, and
-provenance. There is no validated public loader or **Open saved run** workflow.
-The constructor can inspect an already extracted catalog, but users must know
-the internal MAT variable and object-creation sequence.
+provenance. SR-3 adds a validated public loader and standalone **Open saved
+run** workflow; the preceding lack of that path was the confirmed gap.
 
 ### Tiled anaglyph ownership and recovery
 
@@ -323,8 +322,7 @@ evidence on cancellation or failure.
 
 ## SR-2 — Truthful World Frame And Local Surface Presentation
 
-Status: blocked by the SR-0 ECEF fixture. May proceed in parallel with SR-1
-after fixtures are frozen.
+Status: complete July 15, 2026.
 
 ### Portable frame contract
 
@@ -393,7 +391,7 @@ after fixtures are frozen.
 
 ## SR-3 — Normal 3-D Interaction And Saved-Run Inspector
 
-Status: depends on the SR-2 display-frame contract.
+Status: complete July 15, 2026.
 
 ### Interaction contract
 
@@ -435,30 +433,32 @@ Status: depends on the SR-2 display-frame contract.
 7. Add concise documentation for both the supported app flow and direct MATLAB
    access to the underlying structs.
 
-### Immediate legacy inspection recipe
+### Supported saved-run inspection recipe
 
-Until the loader is implemented, a current successful export can be reopened
-without rerunning matching:
+A current successful export can be validated and reopened without rerunning
+matching:
 
 ```matlab
 addpath("src")
-loaded = load("surface-run.mat", "surfaceWorkbenchRun");
-run = loaded.surfaceWorkbenchRun;
-
-surfaceApp = ProjectionSurfaceWorkbenchApp(run.Catalog);
+[surfaceApp, loaded] = openSurfaceWorkbenchRun("surface-run.mat");
 surfaceViewer = surfaceApp.openViewer();
 
-available = run.Catalog.Products( ...
-    string({run.Catalog.Products.Status}) == "available");
+available = loaded.Catalog.Products( ...
+    string({loaded.Catalog.Products.Status}) == "available");
 table(string({available.ProductId}).', ...
     string({available.Representation}).', ...
     [available.FullElementCount].', ...
     VariableNames=["ProductId" "Representation" "ElementCount"])
 ```
 
-Keep `surfaceApp` in the workspace while using the viewer. This recipe opens
-the current raw-world presentation; it does not yet correct ECEF height or
-interaction behavior.
+Keep `surfaceApp` in the workspace while using the viewer. Direct headless
+inspection uses `loaded = ProjectionSurfaceRun.read("surface-run.mat")`.
+Version-one data without frame metadata requires either
+`struct(LegacyFrameDecision="unknown")` or a validated
+`CoordinateFrameOverride`; the loader never guesses ECEF from magnitude.
+Future run-wrapper versions are accepted only when their required portable
+fields and embedded catalog schema remain compatible. Unsupported catalog
+versions and runtime values fail closed.
 
 ### Acceptance
 
@@ -470,6 +470,19 @@ interaction behavior.
 - A loaded run can display every available representation and directly expose
   its mesh/grid/point arrays without source data.
 - Close/reopen of the 3-D child preserves the Workbench catalog and selections.
+
+### Validation record
+
+The SR-2/SR-3 focused methods pass 46/46 with zero incomplete tests: 36 frame,
+saved-run, model, and runner methods passed together; nine viewer methods passed
+after switching conflicting simultaneous navigation objects to the standard
+mutually exclusive axes toolbar; and the corrected camera/inspect regression
+passed separately. Code Analyzer reported zero findings across all 13 changed
+MATLAB sources, entry points, and tests. The synthetic WGS84 fixture verifies
+ECEF/ENU round trip, covariance rotation, distinct HAE/local-Up/world-Z
+semantics, and explicit unknown-frame failure. Loader tests cover current and
+compatible future run wrappers, catalog and point-set inputs, explicit version-
+one decisions/overrides, malformed/runtime rejection, and headless operation.
 
 ## SR-4 — Transactional Tiled/Anaglyph Surface Ownership
 

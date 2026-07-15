@@ -554,7 +554,7 @@ and stability have not been demonstrated; research CorrectionSets cannot Apply.
 | FR-SWB-001 | The Surface Workbench shall select views/passes, pair schedule, dense method, geometry search, processing stage, uncertainty filters, fusion product, DEM registration, and output product. | Approved | T, D |
 | FR-SWB-002 | The Surface Workbench shall expose progress, cancellation, processing diagnostics, pair/multi-view statistics, and estimated cost/memory. | Approved | T, D |
 | FR-SWB-003 | The 3-D viewer shall display point, mesh, and gridded products and compare raw, fused, uncertainty-filtered, voxel, DEM, and registered variants. | Approved | T, D |
-| FR-SWB-004 | The 3-D viewer shall color by source intensity, elevation, view/pass count, residual, uncertainty, conditioning, fusion method, pair/pass, or DEM difference as applicable. | Approved | T, D |
+| FR-SWB-004 | The 3-D viewer shall distinguish local Up, WGS84 HAE when available, and explicitly named diagnostic world Z; it shall never relabel ECEF Z as elevation or height. Other color modes include source intensity, view/pass count, residual, uncertainty, conditioning, fusion method, pair/pass, DEM difference, and evidence weight as applicable. | Approved | T, D |
 | FR-SWB-005 | Selecting a 3-D point shall link to its contributing full-source image observations. | Approved | T, D |
 | FR-SWB-006 | Uncertainty ellipsoids or principal-axis glyphs shall be limited to selected or bounded subsets to preserve responsiveness. | Approved | T, A |
 | FR-SWB-007 | Interactive decimation shall not discard or overwrite the complete authoritative result. | Approved | T |
@@ -564,6 +564,10 @@ and stability have not been demonstrated; research CorrectionSets cannot Apply.
 | FR-SWB-011 | Before and after Run, the Workbench shall state exactly which views, pairs, matcher, search policy, reconstruction stage, fusion method, execution path, fallbacks, and products were requested and completed. | Approved | T, D |
 | FR-SWB-012 | The Workbench shall expose retained rectification, disparity/score/confidence, consistency/occlusion, ray/conditioning, reconstruction, fusion, rejection, and uncertainty evidence sufficient to distinguish poor science from empty, failed, unsupported, or cancelled execution. | Approved | T, D |
 | FR-SWB-013 | Dense matching, surface reconstruction, fusion, and 3-D extraction initiated from the viewer shall be configured and executed through the Surface Workbench. | Core | T, D |
+| FR-SWB-014 | Catalogs and runs shall carry portable authoritative/display coordinate-frame metadata. Display transforms and covariance rotation shall not mutate authoritative world geometry, covariance, links, identities, or provenance. | Core | T, I |
+| FR-SWB-015 | Explicit ECEF products shall default to local ENU; unknown frames shall not gain ENU or absolute-height semantics through coordinate-magnitude guessing. | Approved | T, A |
+| FR-SWB-016 | The 3-D viewer shall provide standard rotate, pan, zoom, restore, and data-tip interaction, a visible inspection mode, metric aspect/vertical exaggeration, standard viewpoints, and camera preservation across compatible refreshes. | Approved | T, D |
+| FR-SWB-017 | A graphics-free loader and standalone entry point shall reopen supported run, catalog, and point-set MAT structs without source imagery or callbacks; legacy frame decisions shall be explicit and malformed, runtime, or incompatible catalog values shall fail closed. | Approved | T, I |
 
 ### 5.13 Uncertainty
 

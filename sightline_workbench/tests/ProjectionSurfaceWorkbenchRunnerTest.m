@@ -447,6 +447,42 @@ classdef ProjectionSurfaceWorkbenchRunnerTest < matlab.unittest.TestCase
             testCase.verifyEqual(outcome.LastCompletedPairId, ...
                 outcome.PairRuns(end).PairId);
         end
+
+        function testDeclaredCoordinateFramePropagatesWithoutGuessing(testCase)
+            [runner, catalog, configuration] = ...
+                ProjectionSurfaceWorkbenchRunnerTest.fixture();
+            state = ProjectionSurfaceWorkbenchRunnerTest.state( ...
+                catalog, configuration, struct(DenseMethod="external", ...
+                PairSchedule="fast", MaximumObservations=4));
+
+            report = runner.preflight(state);
+            outcome = runner.run(state);
+
+            testCase.verifyEqual(report.CoordinateFrame.WorldFrameId, ...
+                catalog.WorldFrame);
+            testCase.verifyEqual(report.CoordinateFrame.CoordinateKind, ...
+                "unknown");
+            testCase.verifyEqual(outcome.PointSet.WorldFrame, ...
+                catalog.WorldFrame);
+            testCase.verifyEqual(outcome.PointSet.CoordinateFrame, ...
+                report.CoordinateFrame);
+            testCase.verifyEqual(outcome.Catalog.CoordinateFrame, ...
+                report.CoordinateFrame);
+        end
+
+        function testInconsistentPairFrameMetadataFailsBeforeProcessing(testCase)
+            context = ProjectionSurfaceWorkbenchRunnerTest.context();
+            entry = context.PairEntries(2);
+            scene = entry.Request.Context.Scene;
+            layerIndex = entry.LayerIndices(2);
+            scene.layers(layerIndex).SourceGeometry.CoordinateFrame = ...
+                "different-world";
+            entry.Request.Context.Scene = scene;
+            context.PairEntries(2) = entry;
+
+            testCase.verifyError(@() ProjectionSurfaceWorkbenchRunner(context), ...
+                "ProjectionSurfaceWorkbenchRunner:frameMismatch");
+        end
     end
 
     methods (Static, Access = private)

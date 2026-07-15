@@ -25,6 +25,12 @@ remains supported for inspection workflows and intentionally disables Run.
 `ProjectionSurfaceProductCatalog.create` adapts one authoritative
 `ProjectionMultiRayPointSet`, zero or more normalized S6 fusion results, and
 optional mesh/grid values into a versioned graphics-independent catalog. The
+version-two catalog includes a validated `ProjectionCoordinateFrame` containing
+the authoritative frame ID, coordinate kind, metric units, display origin,
+proper world-to-local rotation, axis metadata, optional WGS84 origin/HAE
+reference, derivation, and reversibility. Version-one catalogs migrate only to
+an explicit unknown-frame presentation unless an operator supplies an override.
+The
 catalog distinguishes:
 
 - raw pairwise points;
@@ -59,7 +65,8 @@ fusion products remain derived/diagnostic according to the S6/B4 decision.
 complete catalog. Its configuration covers selected views/passes, pair
 schedule, dense method, geometry search, processing stage, maximum
 uncertainty, fusion product, DEM-registration mode, output/comparison products,
-color mode, decimation limit, and uncertainty-glyph bound.
+color mode, display frame, vertical exaggeration, decimation limit, and
+uncertainty-glyph bound.
 
 The model exposes:
 
@@ -75,6 +82,14 @@ Interactive filtering and decimation create bounded display payloads only.
 product. Mesh/grid payloads fall back to decimated point display when their
 native topology cannot be shown completely; the source mesh/grid remains
 intact.
+
+Every payload retains unchanged `PointsWorld` and derives `PointsDisplay`.
+ECEF products default to local ENU with `East (m)`, `North (m)`, and `Up (m)`
+axes. The explicit alternatives are origin-relative world and authoritative
+world diagnostic coordinates. Color modes distinguish local tangent-plane
+`localUp`, WGS84 ellipsoid `HAE`, and diagnostic `worldZ`; MSL is unavailable
+without a declared geoid transform. Covariance is rotated only for display
+glyphs, and vertical exaggeration never changes scientific values.
 
 ## Floating applications
 
@@ -125,12 +140,50 @@ forced DEM intersection is used to manufacture a surface.
 
 `ProjectionSurface3DViewer` renders point-cloud, voxel, triangle-mesh, and grid
 representations. It can compare any two available products and color by source
-intensity, elevation, independent view/pass count, residual, uncertainty,
+intensity, local Up, HAE, diagnostic world Z, independent view/pass count,
+residual, uncertainty,
 conditioning, fusion method, pair/pass identity, DEM difference, or evidence
 weight as applicable. Selecting a displayed point publishes all contributing
 full-source `[column,row]` observations. Uncertainty is rendered as the three
 principal covariance axes for the selected point only; it is never stored in
 the catalog.
+
+The 3-D axes expose the standard rotate/pan/zoom/restore/data-tip toolbar with
+rotate and data tips available directly. Product objects receive selection
+callbacks only while the visible **Inspect point** mode is enabled. Camera pose
+is preserved across color, decimation, comparison, and compatible product
+changes; display-frame changes and **Reset view** may refit it. Top, North,
+East, and isometric views plus metric vertical exaggeration are explicit
+controls.
+
+## Reopening a saved run
+
+Use the standalone entry point; omitting the path opens a MAT-file chooser:
+
+```matlab
+addpath("src")
+[surfaceApp, loaded] = openSurfaceWorkbenchRun("surface-workbench-run.mat");
+surfaceViewer = surfaceApp.openViewer();
+```
+
+For graphics-free access, call
+`loaded = ProjectionSurfaceRun.read("surface-workbench-run.mat")`. The loader
+accepts `surfaceWorkbenchRun`, `catalog`, or `pointSet` plain-struct variables,
+constructs a catalog where possible, and exposes only products marked
+`available`. It inventories the MAT file before loading, rejects runtime values
+and incompatible catalog schemas, and does not require imagery, scene
+callbacks, Python, or GPU state.
+
+Version-one data requires an explicit decision:
+
+```matlab
+loaded = ProjectionSurfaceRun.read("legacy-run.mat", ...
+    struct(LegacyFrameDecision="unknown"));
+```
+
+Alternatively pass `CoordinateFrameOverride` containing a validated
+`ProjectionCoordinateFrame`. The override is in memory and does not modify the
+saved file.
 
 Closing the Workbench deletes its owned 3-D viewer. Closing only the viewer
 allows the Workbench to create a fresh viewer later. All figures, axes,
@@ -142,6 +195,11 @@ controls, callbacks, render objects, and glyph handles are runtime-only.
 source links, uncertainty filtering, deterministic decimation/coloring,
 mesh/grid behavior, statistics/costs, and portable state. It belongs to
 `backendSurface`.
+
+`ProjectionCoordinateFrameTest` and `ProjectionSurfaceRunTest` cover exact
+ECEF/ENU and HAE semantics, no-guess legacy handling, covariance transforms,
+saved-run schema migration, compatible wrapper versions, and malformed/runtime
+rejection. They belong to `backendSurface`.
 
 `ProjectionSurfaceWorkbenchWorkflowTest` covers the responsive floating layout,
 selection/progress/cancel state, point/voxel/mesh/grid rendering, comparison,
