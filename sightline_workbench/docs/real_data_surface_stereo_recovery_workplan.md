@@ -1,7 +1,7 @@
 # Real-Data Surface And Stereo Recovery Workplan
 
-Status: proposed July 14, 2026. This plan records the first real-data findings
-after RD-7 completion. No implementation is claimed.
+Status: active July 15, 2026. The documentation baseline and SR-0/SR-1
+implementation milestone are complete. SR-2 through SR-6 remain in progress.
 
 ## Purpose
 
@@ -179,7 +179,8 @@ that SR-5 uses for deterministic recovery.
 
 ## SR-0 — Evidence Preservation And Reproduction Baselines
 
-Status: not started.
+Status: implementation complete July 15, 2026; private evidence intake remains
+an external gate.
 
 ### Required work
 
@@ -216,9 +217,22 @@ Status: not started.
 - Association scaling and orphan-surface reproduction are deterministic.
 - Existing output semantics are frozen before optimization.
 
+### Implementation and validation record
+
+- The exported private MAT run was not supplied to this repository session.
+  Its anonymous inventory/checksum and the original template-matcher visible
+  message therefore remain external validation gates; no cause is inferred.
+- Pair failures now retain the matcher ID, wrapper and underlying exception
+  identifiers/messages, failed pair, stage, exact options, elapsed time, last
+  completed pair, and completed pair evidence in portable MAT/JSON run data.
+- `ProjectionDenseAssociationFixture` supplies deterministic five-view
+  association, duplicate-observation, disconnected-track, duplicate-view
+  conflict, rejection, and scaling cases without private values.
+
 ## SR-1 — Bounded, Observable Dense Observation Association
 
-Status: blocked by SR-0 structural fixtures.
+Status: complete July 15, 2026; original private-data reproduction remains part
+of the SR-6 external gate.
 
 ### Algorithm correction
 
@@ -283,6 +297,29 @@ Status: blocked by SR-0 structural fixtures.
   configured chunks on the benchmark host.
 - Host memory remains bounded by records, observations, tracks, and explicit
   indexes; there is no dense record-by-observation matrix.
+
+### Validation record
+
+On a 14-core Apple development host using MATLAB R2026a Update 2, the
+privacy-safe warm benchmark measured:
+
+| Views / pairs | Records per pair | Total records | Association time (s) | Indexed work count |
+| --- | ---: | ---: | ---: | ---: |
+| 2 / 1 | 64 | 64 | 0.102 | 1,408 |
+| 2 / 1 | 250 | 250 | 0.284 | 5,500 |
+| 2 / 1 | 500 | 500 | 0.625 | 11,000 |
+| 2 / 1 | 5,000 | 5,000 | 4.975 | 110,000 |
+| 5 / 10 | 64 | 640 | 0.375 | 15,424 |
+| 5 / 10 | 250 | 2,500 | 0.939 | 60,250 |
+| 5 / 10 | 500 | 5,000 | 1.867 | 120,500 |
+| 5 / 10 | 5,000 | 50,000 | 18.808 | 1,205,000 |
+
+The focused SR-0/SR-1 suite passed 40/40 with zero incomplete tests, and Code
+Analyzer reported zero findings for every changed MATLAB source, helper, test,
+and benchmark file. Progress is monotonic across named substages, cancellation
+is checked at configured chunk boundaries, and the runner maps association and
+reconstruction progress through 72--88 percent while retaining partial
+evidence on cancellation or failure.
 
 ## SR-2 — Truthful World Frame And Local Surface Presentation
 

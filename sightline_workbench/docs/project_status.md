@@ -304,12 +304,17 @@ parity is the next independent CPU stage in the explicit dependency order.
 C0-C3 are complete. A7 research is complete; production time-varying
 application remains gated on physical local observability and stability.
 
-The first post-RD-7 real-data Surface Workbench and tiled-anaglyph findings are
-captured in `docs/real_data_surface_stereo_recovery_workplan.md`. That proposed
-corrective queue covers association scaling/progress/cancellation, truthful
-ECEF-to-local surface presentation, normal 3-D interaction, saved-MAT run
-inspection, transactional renderer ownership, and a presentation-only Rebuild
-viewport recovery. No implementation is yet claimed.
+The post-RD-7 real-data Surface Workbench and tiled-anaglyph corrective queue is
+active in `docs/real_data_surface_stereo_recovery_workplan.md`. SR-0/SR-1 are
+implemented: dense association now uses deterministic indexed grouping,
+path-compressed disjoint sets, component spans, and local view ordinals; it
+publishes bounded substage progress, accepts cooperative cancellation, exposes
+linear work counts, and retains exportable pair failure/partial-run evidence.
+The five-view/ten-pair privacy-safe benchmark measured 0.939 seconds at 250
+records per pair, 1.867 seconds at 500, and 18.808 seconds at 5,000 on the
+14-core MATLAB R2026a development host. The private saved-run inventory and
+original template-matcher message remain external gates. SR-2 through SR-6
+remain in progress.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
 immutable history, viewer integration, callback safeguards, and legacy
