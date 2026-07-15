@@ -195,5 +195,88 @@ classdef ProjectionSurfaceWorkbenchWorkflowTest < matlab.unittest.TestCase
             testCase.verifyTrue(app.diagnostics().ViewerOpen);
             testCase.verifyNotEqual(second, first);
         end
+
+        function testViewerUsesStandardInteractionsInspectModeAndCameraPersistence(testCase)
+            app = ProjectionSurfaceWorkbenchApp( ...
+                ProjectionSurfaceWorkbenchFixture.catalog());
+            testCase.addTeardown(@() delete(app));
+            viewer = app.openViewer();
+            axesHandle = viewer.axesHandle();
+            initialObject = findall(viewer.figureHandle(), "Tag", ...
+                "ProjectionSurface3DPointObject");
+            axesHandle.CameraPosition = [100 200 300];
+            axesHandle.CameraTarget = [1 2 3];
+            expected = viewer.cameraState();
+            testCase.verifyEmpty(initialObject.ButtonDownFcn);
+
+            viewer.setColorMode("uncertainty");
+            viewer.setDecimationLimit(4);
+            viewer.setComparison("raw-pairwise");
+            preserved = viewer.cameraState();
+
+            testCase.verifyGreaterThanOrEqual(expected.InteractionCount, 2);
+            testCase.verifyEqual(preserved.Position, expected.Position, ...
+                AbsTol=1e-12);
+            testCase.verifyEqual(preserved.Target, expected.Target, ...
+                AbsTol=1e-12);
+            viewer.setInspectMode(true);
+            inspectObject = findall(viewer.figureHandle(), "Tag", ...
+                "ProjectionSurface3DPointObject");
+            testCase.verifyNotEmpty(inspectObject.ButtonDownFcn);
+            testCase.verifyTrue(viewer.cameraState().InspectMode);
+            viewer.setVerticalExaggeration(5);
+            testCase.verifyEqual(viewer.diagnostics().VerticalExaggeration, 5);
+            viewer.setViewpoint("top");
+            testCase.verifyTrue(viewer.cameraState().Valid);
+            testCase.verifyNumElements(findall(viewer.figureHandle(), "Tag", ...
+                "ProjectionSurface3DInspectCheckBox"), 1);
+        end
+
+        function testDisplayFrameControlUsesExplicitAxisLabels(testCase)
+            app = ProjectionSurfaceWorkbenchApp( ...
+                ProjectionSurfaceWorkbenchFixture.catalog());
+            testCase.addTeardown(@() delete(app));
+            viewer = app.openViewer();
+
+            viewer.setDisplayFrame("originRelativeWorld");
+            axesHandle = viewer.axesHandle();
+            diagnostics = viewer.diagnostics();
+
+            testCase.verifyEqual(diagnostics.DisplayFrameId, ...
+                "originRelativeWorld");
+            testCase.verifyEqual(string(axesHandle.XLabel.String), ...
+                "World X - origin (m)");
+            testCase.verifyEqual(string(axesHandle.YLabel.String), ...
+                "World Y - origin (m)");
+            testCase.verifyEqual(string(axesHandle.ZLabel.String), ...
+                "World Z - origin (m)");
+            testCase.verifyNumElements(findall(viewer.figureHandle(), "Tag", ...
+                "ProjectionSurface3DDisplayFrameDropDown"), 1);
+        end
+
+        function testStandaloneSavedRunEntryPointOpensValidatedCatalog(testCase)
+            catalog = ProjectionSurfaceWorkbenchFixture.catalog();
+            path = string(tempname) + ".mat";
+            testCase.addTeardown(@() ...
+                ProjectionSurfaceWorkbenchWorkflowTest.deleteIfPresent(path));
+            save(path, "catalog", "-v7");
+
+            [app, loaded] = openSurfaceWorkbenchRun(path);
+            testCase.addTeardown(@() delete(app));
+
+            testCase.verifyEqual(loaded.Catalog.GenerationId, ...
+                catalog.GenerationId);
+            testCase.verifyFalse(app.diagnostics().RunnerBound);
+            testCase.verifyEqual(string(app.figureHandle().Name), ...
+                "Surface Workbench");
+        end
+    end
+
+    methods (Static, Access = private)
+        function deleteIfPresent(path)
+            if isfile(path)
+                delete(path);
+            end
+        end
     end
 end

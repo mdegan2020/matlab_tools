@@ -10,18 +10,18 @@ to exactly one group.
 | --- | --- | ---: |
 | `coreGeometryState` | Geometry, identities, state, metadata, caches, native golden-fixture parity, and non-UI controllers | 147 |
 | `alignment` | Sparse matching/filtering, source refinement/diverse evidence, track and graph logic, global network solving, synthetic acceptance, correction SDK, A7 research, and atomic DEM position apply | 188 |
-| `backendSurface` | Backend jobs/rendering, dense matchers/search/audit, pair covariance, procedural anaglyph parity, robust multi-ray, surface-fusion SDK/audit, DEM registration SDK/audit, Surface Workbench model/runner, dense surface, synthetic truth, inverse warp, and raster paths | 248 |
+| `backendSurface` | Backend jobs/rendering, dense matchers/search/audit, pair covariance, procedural anaglyph parity, robust multi-ray, surface-fusion SDK/audit, DEM registration SDK/audit, Surface Workbench frame/loader/model/runner, dense surface, synthetic truth, inverse warp, and raster paths | 270 |
 | `viewerAlignmentUi` | Viewer alignment, active-pair, DEM-correction invalidation, and general app interaction | 77 |
-| `viewerPresentationWorkflows` | Viewer motion, framing, harness, stereo cursor/eyes, and Surface Workbench/3-D/DEM-preview workflows | 73 |
+| `viewerPresentationWorkflows` | Viewer motion, framing, harness, stereo cursor/eyes, and Surface Workbench/3-D/DEM-preview workflows | 79 |
 | `viewerPerformancePrecision` | Viewer performance evidence and long-range precision | 34 |
 
-The validated July 14, 2026 baseline is 767/767 with zero failures and zero
+The validated July 15, 2026 baseline is 795/795 with zero failures and zero
 incomplete tests.
 
 The viewer suite is intentionally subdivided. A combined viewer/UI/
 performance group exceeded 600 seconds after repeated UI execution, while the
 same files passed when split by subsystem. The current UI groups contain 77
-alignment/app UI tests and 73 motion/framing/stereo/Workbench workflow tests;
+alignment/app UI tests and 79 motion/framing/stereo/Workbench workflow tests;
 the performance/precision group contains 34 tests. No individual test timed
 out; the observed failure mode was cumulative group/session behavior.
 

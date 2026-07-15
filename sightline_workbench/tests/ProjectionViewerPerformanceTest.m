@@ -960,9 +960,11 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
 
         function tf = commonTileHandlesMatch(firstSurfaces, secondSurfaces)
             firstKeys = string(arrayfun( ...
-                @(value) string(value.UserData), firstSurfaces));
+                @(value) ProjectionViewerPerformanceTest.tileSurfaceKey(value), ...
+                firstSurfaces));
             secondKeys = string(arrayfun( ...
-                @(value) string(value.UserData), secondSurfaces));
+                @(value) ProjectionViewerPerformanceTest.tileSurfaceKey(value), ...
+                secondSurfaces));
             commonKeys = intersect(firstKeys, secondKeys);
             tf = ~isempty(commonKeys);
             for key = reshape(commonKeys, 1, [])
@@ -970,6 +972,15 @@ classdef ProjectionViewerPerformanceTest < matlab.unittest.TestCase
                 secondHandle = secondSurfaces(secondKeys == key);
                 tf = tf && isscalar(firstHandle) && isscalar(secondHandle) && ...
                     firstHandle == secondHandle;
+            end
+        end
+
+        function key = tileSurfaceKey(surfaceHandle)
+            metadata = surfaceHandle.UserData;
+            if isstruct(metadata) && isfield(metadata, "TileKey")
+                key = string(metadata.TileKey);
+            else
+                key = string(metadata);
             end
         end
 

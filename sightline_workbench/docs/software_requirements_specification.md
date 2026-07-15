@@ -334,7 +334,7 @@ preview planes, or object ownership.
 | FR-VIEW-016 | The viewer shall support projection-plane layer translation through W/A/S/D and the documented modifier-drag interaction. | Core | T, D |
 | FR-VIEW-017 | The viewer shall support selected-layer omega, phi, and kappa adjustment through the documented keyboard and modifier-drag interactions. | Core | T, D |
 | FR-VIEW-018 | The viewer shall support active-layer selection, stack reordering, visibility, alpha, single-layer cycling, temporary hold-to-hide, and complete Reset behavior. | Core | T, D |
-| FR-VIEW-019 | The viewport context menu shall provide state Save/Load, Reset, Help, Crosshair, direct open/focus actions for supported workbenches, stereo-cursor state, layer presentation, and supported blend-mode commands. | Core | T, D |
+| FR-VIEW-019 | The viewport context menu shall provide state Save/Load, presentation-only Rebuild viewport, confirmed Reset scene and corrections, Help, Crosshair, direct open/focus actions for supported workbenches, stereo-cursor state, layer presentation, and supported blend-mode commands. | Core | T, D |
 | FR-VIEW-020 | Save and Load shall round-trip the documented viewer state, including selection/order, plane Tip/Tilt, camera Twist/pose, visibility, alpha, blend, projection offsets, and applied angular offsets. | Core | T |
 | FR-VIEW-021 | Camera Twist shall support the approved orientation range through at least plus or minus 85 degrees. | Core | T, D |
 | FR-VIEW-022 | When an oblique explicit plane is supplied without a caller camera pose, the initial camera shall orient the plane naturally upright and fit the projected footprint. | Core | T, D |
@@ -405,6 +405,10 @@ preview planes, or object ownership.
 | FR-MOTION-022 | Single View and Pair View shall temporarily present their scheduled layer or pair regardless of stored visibility without mutating that stored visibility. | Approved | T |
 | FR-MOTION-023 | Pair stepping shall choose the adjacent scheduled pair and then assign red/left and cyan/right from physical-eye geometry, independent of temporal order, layer order, and moving/reference role. | Approved | T |
 | FR-MOTION-024 | View All, Single View, and Pair View shall be runtime-only presentation modes, with View All as the Layer Manager default. | Approved | T, D |
+| FR-MOTION-025 | Tiled presentation replacement shall prepare hidden surfaces, validate owner/layer/view/tile and renderer generations, atomically publish one complete active set, and retire the preceding set only after commit; faults and stale requests shall leave a clean previous or empty frame. | Approved | T, A |
+| FR-MOTION-026 | Every renderer-tagged image surface shall belong exactly once to an active, preparing, or hidden bounded-pool registry, and a runtime audit shall compare those registries with axes children, effective visibility, expected tiles, stable pair, and physical-eye anaglyph channels. | Approved | T, I |
+| FR-MOTION-027 | The image context menu and Layer Manager shall provide Rebuild viewport, which pauses playback, invalidates pending renderer work, recreates renderer image graphics, restores presentation/camera/overlays, and preserves scientific and serializable session state. | Approved | T, D |
+| FR-MOTION-028 | Reset scene and corrections shall remain distinct from Rebuild viewport, retain its established scientific/session-reset semantics, and require operator confirmation when invoked from the UI. | Approved | T, D |
 
 ### 5.6 Sparse alignment and filtering
 
@@ -554,7 +558,7 @@ and stability have not been demonstrated; research CorrectionSets cannot Apply.
 | FR-SWB-001 | The Surface Workbench shall select views/passes, pair schedule, dense method, geometry search, processing stage, uncertainty filters, fusion product, DEM registration, and output product. | Approved | T, D |
 | FR-SWB-002 | The Surface Workbench shall expose progress, cancellation, processing diagnostics, pair/multi-view statistics, and estimated cost/memory. | Approved | T, D |
 | FR-SWB-003 | The 3-D viewer shall display point, mesh, and gridded products and compare raw, fused, uncertainty-filtered, voxel, DEM, and registered variants. | Approved | T, D |
-| FR-SWB-004 | The 3-D viewer shall color by source intensity, elevation, view/pass count, residual, uncertainty, conditioning, fusion method, pair/pass, or DEM difference as applicable. | Approved | T, D |
+| FR-SWB-004 | The 3-D viewer shall distinguish local Up, WGS84 HAE when available, and explicitly named diagnostic world Z; it shall never relabel ECEF Z as elevation or height. Other color modes include source intensity, view/pass count, residual, uncertainty, conditioning, fusion method, pair/pass, DEM difference, and evidence weight as applicable. | Approved | T, D |
 | FR-SWB-005 | Selecting a 3-D point shall link to its contributing full-source image observations. | Approved | T, D |
 | FR-SWB-006 | Uncertainty ellipsoids or principal-axis glyphs shall be limited to selected or bounded subsets to preserve responsiveness. | Approved | T, A |
 | FR-SWB-007 | Interactive decimation shall not discard or overwrite the complete authoritative result. | Approved | T |
@@ -564,6 +568,10 @@ and stability have not been demonstrated; research CorrectionSets cannot Apply.
 | FR-SWB-011 | Before and after Run, the Workbench shall state exactly which views, pairs, matcher, search policy, reconstruction stage, fusion method, execution path, fallbacks, and products were requested and completed. | Approved | T, D |
 | FR-SWB-012 | The Workbench shall expose retained rectification, disparity/score/confidence, consistency/occlusion, ray/conditioning, reconstruction, fusion, rejection, and uncertainty evidence sufficient to distinguish poor science from empty, failed, unsupported, or cancelled execution. | Approved | T, D |
 | FR-SWB-013 | Dense matching, surface reconstruction, fusion, and 3-D extraction initiated from the viewer shall be configured and executed through the Surface Workbench. | Core | T, D |
+| FR-SWB-014 | Catalogs and runs shall carry portable authoritative/display coordinate-frame metadata. Display transforms and covariance rotation shall not mutate authoritative world geometry, covariance, links, identities, or provenance. | Core | T, I |
+| FR-SWB-015 | Explicit ECEF products shall default to local ENU; unknown frames shall not gain ENU or absolute-height semantics through coordinate-magnitude guessing. | Approved | T, A |
+| FR-SWB-016 | The 3-D viewer shall provide standard rotate, pan, zoom, restore, and data-tip interaction, a visible inspection mode, metric aspect/vertical exaggeration, standard viewpoints, and camera preservation across compatible refreshes. | Approved | T, D |
+| FR-SWB-017 | A graphics-free loader and standalone entry point shall reopen supported run, catalog, and point-set MAT structs without source imagery or callbacks; legacy frame decisions shall be explicit and malformed, runtime, or incompatible catalog values shall fail closed. | Approved | T, I |
 
 ### 5.13 Uncertainty
 
@@ -958,9 +966,9 @@ some have gated requirements above:
 
 ## Appendix B. Informative realization snapshot
 
-At the date of this draft, the repository reports 762 of 762 grouped
-fresh-class tests passing. Original viewer milestones, Backend Milestones 1-10, Auto Alignment
-Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
+At the date of this draft, the repository reports 795 of 795 grouped
+fresh-class tests passing. Original viewer milestones, Backend Milestones 1-10,
+Auto Alignment Milestones 1-13, Alignment Hardening and Reliability Packs, Viewer Performance
 Packs 0-8, Backend Performance Packs 0-5, Dense Surface Pack 1, the
 cross-system pass, dense-surface synthetic milestones, and multi-image
 foundation MI-0 through MI-3, pair viewpoint, focus-aware keyboard controls,

@@ -88,7 +88,11 @@ classdef ProjectionSurfaceWorkbenchModelTest < matlab.unittest.TestCase
             testCase.verifyEqual(colorModes, ...
                 ProjectionSurfaceWorkbenchModel.colorModes());
             testCase.verifyTrue(colors{1}.ColorAvailable);
-            testCase.verifyTrue(colors{2}.ColorAvailable);
+            testCase.verifyFalse(colors{2}.ColorAvailable);
+            testCase.verifyEqual(colors{2}.ColorUnavailableReason, ...
+                "localUpUnavailableForUnknownWorldFrame");
+            testCase.verifyFalse(colors{3}.ColorAvailable);
+            testCase.verifyTrue(colors{4}.ColorAvailable);
             testCase.verifyEqual(first.ColorLabels, ...
                 "pair:a-b+pair:a-c+pair:b-c | pass-1+pass-2");
         end
@@ -97,11 +101,11 @@ classdef ProjectionSurfaceWorkbenchModelTest < matlab.unittest.TestCase
             model = ProjectionSurfaceWorkbenchModel( ...
                 ProjectionSurfaceWorkbenchFixture.catalog(), ...
                 struct(DecimationLimit=10));
-            mesh = model.payload("mesh-demo", "elevation");
-            grid = model.payload("grid-demo", "elevation");
+            mesh = model.payload("mesh-demo", "worldZ");
+            grid = model.payload("grid-demo", "worldZ");
             model.configure(struct(DecimationLimit=2));
-            meshDecimated = model.payload("mesh-demo", "elevation");
-            gridDecimated = model.payload("grid-demo", "elevation");
+            meshDecimated = model.payload("mesh-demo", "worldZ");
+            gridDecimated = model.payload("grid-demo", "worldZ");
 
             testCase.verifyEqual(mesh.Representation, "mesh");
             testCase.verifyEqual(grid.Representation, "grid");
@@ -185,13 +189,61 @@ classdef ProjectionSurfaceWorkbenchModelTest < matlab.unittest.TestCase
             catalog = ProjectionSurfaceWorkbenchFixture.catalog();
             model = ProjectionSurfaceWorkbenchModel(catalog);
 
-            testCase.verifyError(@() model.payload("dem", "elevation"), ...
+            testCase.verifyError(@() model.payload("dem", "worldZ"), ...
                 "ProjectionSurfaceWorkbenchModel:unavailableProduct");
-            testCase.verifyError(@() model.payload("missing", "elevation"), ...
+            testCase.verifyError(@() model.payload("missing", "worldZ"), ...
                 "ProjectionSurfaceProductCatalog:unknownProduct");
             testCase.verifyError(@() model.observationLinks( ...
                 "robust-multi-view", "missing"), ...
                 "ProjectionSurfaceWorkbenchModel:unknownPoint");
+        end
+
+        function testDisplayPayloadPreservesWorldAndMigratesLegacyElevation(testCase)
+            catalog = ProjectionSurfaceWorkbenchFixture.catalog();
+            model = ProjectionSurfaceWorkbenchModel(catalog);
+            model.configure(struct(DisplayFrame="originRelativeWorld", ...
+                VerticalExaggeration=3, ColorMode="elevation"));
+
+            payload = model.payload();
+            expected = payload.PointsWorld - ...
+                catalog.CoordinateFrame.WorldOriginMeters;
+
+            testCase.verifyEqual(payload.PointsDisplay, expected, ...
+                AbsTol=1e-12);
+            testCase.verifyEqual(payload.ColorMode, "worldZ");
+            testCase.verifyEqual(payload.ColorValues, ...
+                payload.PointsWorld(3, :), AbsTol=1e-12);
+            testCase.verifyEqual(payload.VerticalExaggeration, 3);
+            testCase.verifyEqual(model.state().ColorMode, "worldZ");
+            testCase.verifyEqual( ...
+                horzcat(payload.Points.PointWorld), payload.PointsWorld);
+        end
+
+        function testExplicitEcefDefaultsToLocalEnuUpAndOffersHae(testCase)
+            catalog = ProjectionSurfaceWorkbenchFixture.catalog();
+            ellipsoid = wgs84Ellipsoid("meter");
+            [x, y, z] = geodetic2ecef(ellipsoid, 42, -71, 120);
+            catalog.CoordinateFrame = ProjectionCoordinateFrame.ecef( ...
+                catalog.WorldFrame, [x; y; z]);
+            catalog = ProjectionSurfaceProductCatalog.validate(catalog);
+
+            model = ProjectionSurfaceWorkbenchModel(catalog);
+            state = model.state();
+            local = model.payload("robust-multi-view", "localUp");
+            hae = model.payload("robust-multi-view", "HAE");
+
+            testCase.verifyEqual(state.DisplayFrame, "localENU");
+            testCase.verifyEqual(state.ColorMode, "localUp");
+            testCase.verifyEqual(local.AxisNames, ...
+                ["East (m)" "North (m)" "Up (m)"]);
+            testCase.verifyTrue(local.ColorAvailable);
+            testCase.verifyTrue(hae.ColorAvailable);
+            testCase.verifyEqual(local.PointsWorld, ...
+                horzcat(local.Points.PointWorld));
+            testCase.verifyEqual(local.PointsDisplay, ...
+                catalog.CoordinateFrame.WorldToLocalRotation * ...
+                (local.PointsWorld - ...
+                catalog.CoordinateFrame.WorldOriginMeters), AbsTol=1e-8);
         end
     end
 end

@@ -16,21 +16,37 @@ classdef ProjectionMultiRayReconstructor
                 ResidualSigmaFloorMeters=0.01);
         end
 
-        function result = reconstruct(association, options)
+        function result = reconstruct(association, options, runtimeControl)
             %reconstruct Solve an authoritative point for every dense track.
             if nargin < 2
                 options = struct();
             end
+            if nargin < 3
+                runtimeControl = struct();
+            end
+            runtimeControl = ProjectionMultiRayReconstructor. ...
+                validateRuntimeControl(runtimeControl);
+            started = tic;
             association = ProjectionMultiRayReconstructor. ...
                 validateAssociation(association);
             options = ProjectionMultiRayReconstructor.validateOptions(options);
             tracks = association.Tracks;
+            ProjectionMultiRayReconstructor.publishProgress( ...
+                runtimeControl, 0, "reconstructTracks", 0, ...
+                numel(tracks), started);
+            ProjectionMultiRayReconstructor.checkCancelled(runtimeControl);
             points = repmat(ProjectionMultiRayReconstructor.emptyPoint(), ...
                 1, numel(tracks));
             for index = 1:numel(tracks)
                 points(index) = ProjectionMultiRayReconstructor.solveTrack( ...
                     association, tracks(index), options);
+                ProjectionMultiRayReconstructor.checkpoint( ...
+                    runtimeControl, index, numel(tracks), ...
+                    "reconstructTracks", 0, 0.9, started);
             end
+            ProjectionMultiRayReconstructor.checkCancelled(runtimeControl);
+            ProjectionMultiRayReconstructor.publishProgress( ...
+                runtimeControl, 0.95, "finalizeProvenance", 0, 1, started);
             generationPayload = struct( ...
                 AssociationGenerationId=association.GenerationId, ...
                 Options=options, PointIds=string({points.PointId}), ...
@@ -58,6 +74,8 @@ classdef ProjectionMultiRayReconstructor
                 PairwiseCovariancePolicy= ...
                 "retainedAsPairProvenance;notRecountedAsIndependentEvidence"), ...
                 Diagnostics=ProjectionMultiRayReconstructor.diagnostics(points));
+            ProjectionMultiRayReconstructor.publishProgress( ...
+                runtimeControl, 1, "finalizeProvenance", 1, 1, started);
         end
 
         function metadata = metadata(result)
@@ -205,6 +223,81 @@ classdef ProjectionMultiRayReconstructor
             end
             defaults.MaximumIterations = double(value);
             options = defaults;
+        end
+
+        function runtime = validateRuntimeControl(runtime)
+            defaults = struct(ProgressFcn=[], CancellationFcn=[], ...
+                ChunkSize=64);
+            if isempty(runtime)
+                runtime = defaults;
+                return
+            end
+            if ~isstruct(runtime) || ~isscalar(runtime) || ...
+                    any(~ismember(string(fieldnames(runtime)), ...
+                    string(fieldnames(defaults))))
+                error("ProjectionMultiRayReconstructor:invalidRuntimeControl", ...
+                    "Runtime control supports progress, cancellation, and chunk size.");
+            end
+            names = fieldnames(runtime);
+            for index = 1:numel(names)
+                defaults.(names{index}) = runtime.(names{index});
+            end
+            for field = ["ProgressFcn" "CancellationFcn"]
+                if ~(isempty(defaults.(field)) || ...
+                        isa(defaults.(field), "function_handle"))
+                    error("ProjectionMultiRayReconstructor:invalidRuntimeControl", ...
+                        "%s must be empty or a function handle.", field);
+                end
+            end
+            if ~isnumeric(defaults.ChunkSize) || ...
+                    ~isscalar(defaults.ChunkSize) || ...
+                    ~isfinite(defaults.ChunkSize) || ...
+                    defaults.ChunkSize < 1 || fix(defaults.ChunkSize) ~= ...
+                    defaults.ChunkSize
+                error("ProjectionMultiRayReconstructor:invalidRuntimeControl", ...
+                    "ChunkSize must be a positive integer.");
+            end
+            defaults.ChunkSize = double(defaults.ChunkSize);
+            runtime = defaults;
+        end
+
+        function checkpoint(runtime, completed, total, stage, ...
+                fractionBase, fractionSpan, started)
+            if completed == total || mod(completed, runtime.ChunkSize) == 0
+                ProjectionMultiRayReconstructor.checkCancelled(runtime);
+                fraction = fractionBase + fractionSpan * ...
+                    double(completed) / max(double(total), 1);
+                ProjectionMultiRayReconstructor.publishProgress( ...
+                    runtime, fraction, stage, completed, total, started);
+            end
+        end
+
+        function checkCancelled(runtime)
+            if isempty(runtime.CancellationFcn)
+                return
+            end
+            cancelled = runtime.CancellationFcn();
+            if ~islogical(cancelled) || ~isscalar(cancelled)
+                error("ProjectionMultiRayReconstructor:invalidRuntimeControl", ...
+                    "CancellationFcn must return a logical scalar.");
+            end
+            if cancelled
+                error("ProjectionMultiRayReconstructor:cancelled", ...
+                    "Multi-ray reconstruction was cancelled cooperatively.");
+            end
+        end
+
+        function publishProgress(runtime, fraction, stage, completed, ...
+                total, started)
+            if isempty(runtime.ProgressFcn)
+                return
+            end
+            elapsed = toc(started);
+            runtime.ProgressFcn(struct(Fraction=double(fraction), ...
+                Stage=string(stage), Completed=double(completed), ...
+                Total=double(total), ElapsedSeconds=elapsed, ...
+                Message=sprintf("%s: %d/%d (%.2f s)", stage, ...
+                completed, total, elapsed)));
         end
 
         function pointRecord = solveTrack(association, track, options)

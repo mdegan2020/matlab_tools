@@ -6,6 +6,8 @@ classdef ProjectionDenseMultiRayReconstructionTest < matlab.unittest.TestCase
             root = fileparts(fileparts(mfilename("fullpath")));
             testCase.applyFixture(matlab.unittest.fixtures.PathFixture( ...
                 fullfile(root, "src")));
+            testCase.applyFixture(matlab.unittest.fixtures.PathFixture( ...
+                fullfile(root, "tests")));
         end
     end
 
@@ -270,6 +272,102 @@ classdef ProjectionDenseMultiRayReconstructionTest < matlab.unittest.TestCase
             testCase.verifyError(@() ...
                 ProjectionMultiRayReconstructor.reconstruct(futureAssociation), ...
                 "ProjectionMultiRayReconstructor:unsupportedAssociation");
+        end
+
+        function testIndexedAssociationPreservesFrozenSemanticFixture(testCase)
+            request = ProjectionDenseAssociationFixture.semanticRequest();
+            reordered = request;
+            reordered.Records = request.Records(end:-1:1);
+
+            association = ProjectionDenseObservationAssociator.associate(request);
+            repeated = ProjectionDenseObservationAssociator.associate(reordered);
+
+            testCase.verifyEqual(association.GenerationId, repeated.GenerationId);
+            testCase.verifyEqual(association.RawPairwiseRecords, ...
+                repeated.RawPairwiseRecords);
+            testCase.verifyEqual(association.Observations, repeated.Observations);
+            testCase.verifyEqual(association.Tracks, repeated.Tracks);
+            testCase.verifyEqual(association.Diagnostics.TrackCount, 5);
+            testCase.verifyEqual( ...
+                association.Diagnostics.AcceptedPairRecordCount, 41);
+            testCase.verifyEqual( ...
+                association.Diagnostics.RejectedPairRecordCount, 2);
+            testCase.verifyEqual( ...
+                association.Diagnostics.DuplicateViewConflictCount, 1);
+            testCase.verifyFalse( ...
+                association.Diagnostics.DenseRecordObservationMatrixAllocated);
+        end
+
+        function testIndexedAssociationWorkCountsScaleNearLinearly(testCase)
+            smallRequest = ProjectionDenseAssociationFixture. ...
+                benchmarkRequest(32);
+            largeRequest = ProjectionDenseAssociationFixture. ...
+                benchmarkRequest(64);
+
+            small = ProjectionDenseObservationAssociator.associate(smallRequest);
+            large = ProjectionDenseObservationAssociator.associate(largeRequest);
+            ratio = large.Diagnostics.TotalIndexedWorkCount / ...
+                small.Diagnostics.TotalIndexedWorkCount;
+
+            testCase.verifyEqual(large.Diagnostics.InputPairRecordCount, ...
+                2 * small.Diagnostics.InputPairRecordCount);
+            testCase.verifyLessThan(ratio, 2.5);
+            testCase.verifyEqual(large.Diagnostics.TrackCount, ...
+                2 * small.Diagnostics.TrackCount);
+        end
+
+        function testAssociationProgressIsMonotonicAndNamesSubstages(testCase)
+            request = ProjectionDenseAssociationFixture.benchmarkRequest(16);
+            recorder = ProjectionRuntimeRecorder();
+
+            ProjectionDenseObservationAssociator.associate( ...
+                request, struct(), struct( ...
+                ProgressFcn=@(event) recorder.record(event), ChunkSize=7));
+            fractions = [recorder.Events.Fraction];
+            stages = string({recorder.Events.Stage});
+
+            testCase.verifyGreaterThan(numel(fractions), 6);
+            testCase.verifyGreaterThanOrEqual(diff(fractions), 0);
+            testCase.verifyEqual(fractions(1), 0, AbsTol=0);
+            testCase.verifyEqual(fractions(end), 1, AbsTol=0);
+            testCase.verifyTrue(all(ismember(["normalize" ...
+                "groupObservations" "precheckRecords" "unionComponents" ...
+                "reconcileTracks" "finalizeProvenance"], stages)));
+            testCase.verifyTrue(all([recorder.Events.ElapsedSeconds] >= 0));
+        end
+
+        function testAssociationCancellationHonorsConfiguredChunks(testCase)
+            request = ProjectionDenseAssociationFixture.benchmarkRequest(16);
+            recorder = ProjectionRuntimeRecorder();
+            recorder.CancelAfterCalls = 3;
+
+            operation = @() ProjectionDenseObservationAssociator.associate( ...
+                request, struct(), struct( ...
+                CancellationFcn=@() recorder.cancel(), ChunkSize=1));
+
+            testCase.verifyError(operation, ...
+                "ProjectionDenseObservationAssociator:cancelled");
+            testCase.verifyLessThanOrEqual( ...
+                recorder.CancellationCallCount, 3);
+        end
+
+        function testMultiRayProgressAndCancellationAreCooperative(testCase)
+            request = ProjectionDenseAssociationFixture.benchmarkRequest(8);
+            association = ProjectionDenseObservationAssociator.associate(request);
+            recorder = ProjectionRuntimeRecorder();
+            recorder.CancelAfterCalls = 2;
+
+            operation = @() ProjectionMultiRayReconstructor.reconstruct( ...
+                association, struct(), struct( ...
+                ProgressFcn=@(event) recorder.record(event), ...
+                CancellationFcn=@() recorder.cancel(), ChunkSize=1));
+
+            testCase.verifyError(operation, ...
+                "ProjectionMultiRayReconstructor:cancelled");
+            testCase.verifyEqual(recorder.Events(1).Stage, ...
+                "reconstructTracks");
+            testCase.verifyLessThanOrEqual( ...
+                recorder.CancellationCallCount, 2);
         end
     end
 

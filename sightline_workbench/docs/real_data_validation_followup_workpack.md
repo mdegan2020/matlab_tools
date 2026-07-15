@@ -2,7 +2,10 @@
 
 Status: complete July 14, 2026. RD-2, RD-3, RD-1, RD-4, RD-5, RD-6, and RD-7
 are complete in the recorded execution order. Independent D2 native CPU work
-may resume; hardware-gated GPU work remains external.
+may resume; hardware-gated GPU work remains external. Post-RD-7 real-data
+findings involving dense association scaling, ECEF 3-D presentation, saved-run
+inspection, tiled anaglyph ownership, and in-place viewport recovery are
+recorded separately in `docs/real_data_surface_stereo_recovery_workplan.md`.
 
 ## Purpose
 

@@ -18,6 +18,16 @@ classdef ProjectionViewerApp < handle
         PreviewTileDataCache
         PreviewSampledGeometryCache
         PreviewSurfacePool = gobjects(0)
+        PreviewPreparingSurfaces = gobjects(0)
+        RendererOwnerToken string = ""
+        RendererGeneration uint64 = uint64(1)
+        RendererPresentationGeneration uint64 = uint64(1)
+        RendererAppearanceGeneration uint64 = uint64(1)
+        RendererAnaglyphGeneration uint64 = uint64(1)
+        RendererFaultInjectionStage string = ""
+        RendererTransactionInProgress logical = false
+        LastGraphicsOwnershipAudit struct = struct()
+        LastViewportRecovery struct = struct()
         PreviewCurrentLevelIndices double
         PreviewDesiredLevelIndices double
         PreviewDesiredDownsamples double
@@ -103,6 +113,7 @@ classdef ProjectionViewerApp < handle
         LoadMenuItem
         CycleMenuItem
         ResetMenuItem
+        RebuildViewportMenuItem
         HelpMenuItem
         CrosshairMenuItem
         ActiveLayerOutlineMenuItem
@@ -205,6 +216,7 @@ classdef ProjectionViewerApp < handle
         LayerManagerTrackCameraCheckBox matlab.ui.control.CheckBox
         LayerManagerAllVisibleButton matlab.ui.control.Button
         LayerManagerNoneVisibleButton matlab.ui.control.Button
+        LayerManagerRebuildViewportButton matlab.ui.control.Button
         MotionTable matlab.ui.control.Table
         MotionPassDropDown matlab.ui.control.DropDown
         MotionLoopCheckBox matlab.ui.control.CheckBox
@@ -286,6 +298,8 @@ classdef ProjectionViewerApp < handle
             scene = ProjectionViewMetadata.ensureScene(scene);
 
             app.Scene = scene;
+            app.RendererOwnerToken = ...
+                ProjectionViewerApp.nextRendererOwnerToken();
             app.PresentationFrameCamera = ...
                 ProjectionViewerHarness.initialPresentationCamera(scene);
             app.AlignmentSession = ProjectionAlignmentSession();
@@ -575,6 +589,7 @@ classdef ProjectionViewerApp < handle
                 candidateScene.layers);
             newLayer = candidateScene.layers(end);
 
+            app.acceptCurrentViewportFrame();
             cameraState = app.exportCameraState();
             priorMode = app.MotionRuntime.Mode;
             presentationWasActive = app.MotionRuntime.Active;
@@ -1046,6 +1061,111 @@ classdef ProjectionViewerApp < handle
             app.AlphaPreviewMinIntervalSeconds = ...
                 options.AlphaPreviewMinIntervalSeconds;
             app.refreshTiledProjectionSurfaces();
+        end
+
+        function audit = graphicsOwnershipAudit(app)
+            %graphicsOwnershipAudit Compare image surfaces with renderer registries.
+            audit = app.buildGraphicsOwnershipAudit(false);
+            app.LastGraphicsOwnershipAudit = audit;
+        end
+
+        function configureRendererFaultInjection(app, stage)
+            %configureRendererFaultInjection Configure one-shot transaction fault.
+            stage = string(stage);
+            supported = ["" "afterAcquire" "beforeCommit" ...
+                "afterCommitBeforeRetire" "staleBeforeCommit"];
+            if ~isscalar(stage) || ismissing(stage) || ...
+                    ~ismember(stage, supported)
+                error("ProjectionViewerApp:invalidRendererFaultStage", ...
+                    "Renderer fault stage is unsupported.");
+            end
+            app.RendererFaultInjectionStage = stage;
+        end
+
+        function refreshPresentationGraphics(app, forceReplacement)
+            %refreshPresentationGraphics Reconcile current runtime presentation.
+            if nargin < 2
+                forceReplacement = false;
+            end
+            if forceReplacement
+                tiledLayers = find(app.PreviewTiledLayerMask);
+                for layerIndex = reshape(tiledLayers, 1, [])
+                    app.replaceTiledLayerSurfaces(layerIndex);
+                end
+            else
+                app.refreshTiledProjectionSurfaces();
+            end
+            app.updateAllSurfaceBlendAppearance();
+        end
+
+        function report = rebuildViewport(app)
+            %rebuildViewport Recreate image graphics without changing science.
+            if app.IsClosing
+                error("ProjectionViewerApp:viewerClosing", ...
+                    "Viewport cannot be rebuilt while the viewer is closing.");
+            end
+            camera = app.exportCameraState();
+            started = tic;
+            app.setViewportRecoveryStatus("Rebuilding viewport...");
+            app.pauseMotionPlayback( ...
+                "Playback paused after presentation-only viewport rebuild.");
+            app.cancelCameraReconciliation();
+            app.RendererGeneration = app.RendererGeneration + 1;
+            app.RendererPresentationGeneration = ...
+                app.RendererPresentationGeneration + 1;
+            app.RendererAppearanceGeneration = ...
+                app.RendererAppearanceGeneration + 1;
+            app.RendererAnaglyphGeneration = ...
+                app.RendererAnaglyphGeneration + 1;
+            try
+                app.deleteAllRendererSurfaces();
+                app.resetRendererSurfaceTracking();
+                app.createSurface();
+                app.applyCameraState(camera);
+                app.updateAllSurfaceBlendAppearance();
+                app.refreshTiledProjectionSurfaces();
+                app.applyCameraState(camera);
+                app.refreshAlignmentOverlays();
+                app.refreshSelectedFootprintOutline();
+                app.refreshStereoCursor();
+                app.updateCrosshair();
+                app.raiseCrosshairOverlay();
+                audit = app.buildGraphicsOwnershipAudit(true);
+                if ~audit.IsClean
+                    app.hideAllRendererSurfaces();
+                    error("ProjectionViewerApp:viewportAuditFailed", ...
+                        "Viewport ownership audit found %d violations.", ...
+                        audit.ViolationCount);
+                end
+                report = struct(Status="succeeded", ...
+                    Message="Viewport display graphics rebuilt; scientific and session state preserved.", ...
+                    RendererGeneration=double(app.RendererGeneration), ...
+                    ElapsedSeconds=toc(started), Audit=audit, ...
+                    PlaybackPaused=true);
+                app.setViewportRecoveryStatus(sprintf( ...
+                    "Viewport rebuilt: %d active surfaces, zero ownership violations.", ...
+                    audit.ActiveCount));
+            catch exception
+                app.hideAllRendererSurfaces();
+                audit = app.buildGraphicsOwnershipAudit(false);
+                report = struct(Status="failed", ...
+                    Message=string(exception.message), ...
+                    Identifier=string(exception.identifier), ...
+                    RendererGeneration=double(app.RendererGeneration), ...
+                    ElapsedSeconds=toc(started), Audit=audit, ...
+                    PlaybackPaused=true);
+                app.setViewportRecoveryStatus( ...
+                    "Viewport rebuild failed: " + string(exception.message));
+                app.LastViewportRecovery = report;
+                rethrow(exception)
+            end
+            app.LastGraphicsOwnershipAudit = audit;
+            app.LastViewportRecovery = report;
+        end
+
+        function report = viewportRecoveryDiagnostics(app)
+            %viewportRecoveryDiagnostics Return the last runtime recovery report.
+            report = app.LastViewportRecovery;
         end
     end
 
@@ -2408,8 +2528,7 @@ classdef ProjectionViewerApp < handle
         end
 
         function noteManualCameraMotion(app)
-            app.PendingInitialViewportFrame = false;
-            app.deleteInitialViewportFrameListener();
+            app.acceptCurrentViewportFrame();
             runtime = app.PairViewpointRuntime;
             if ~runtime.FollowEnabled
                 return
@@ -2420,6 +2539,11 @@ classdef ProjectionViewerApp < handle
                 app.PairViewpointRuntime = runtime;
                 app.refreshAlignmentPairViewpointStatus();
             end
+        end
+
+        function acceptCurrentViewportFrame(app)
+            app.PendingInitialViewportFrame = false;
+            app.deleteInitialViewportFrameListener();
         end
 
         function diagnostics = pairViewpointDiagnostics(app)
@@ -5486,9 +5610,14 @@ classdef ProjectionViewerApp < handle
             app.CycleMenuItem = uimenu(app.ImageContextMenu, Text="Cycle", ...
                 MenuSelectedFcn=@(~, ~) app.cycleLayer(), ...
                 Tag="ProjectionViewerCycleMenuItem");
-            app.ResetMenuItem = uimenu(app.ImageContextMenu, Text="Reset", ...
-                MenuSelectedFcn=@(~, ~) app.resetView(), ...
+            app.ResetMenuItem = uimenu(app.ImageContextMenu, ...
+                Text="Reset scene and corrections...", ...
+                MenuSelectedFcn=@(~, event) app.resetSceneFromMenu(event), ...
                 Tag="ProjectionViewerResetMenuItem");
+            app.RebuildViewportMenuItem = uimenu(app.ImageContextMenu, ...
+                Text="Rebuild viewport", ...
+                MenuSelectedFcn=@(~, ~) app.rebuildViewport(), ...
+                Tag="ProjectionViewerRebuildViewportMenuItem");
             app.HelpMenuItem = uimenu(app.ImageContextMenu, Text="Help", ...
                 Separator="on", MenuSelectedFcn=@(~, ~) app.showHelpDialog(), ...
                 Tag="ProjectionViewerHelpMenuItem");
@@ -5667,6 +5796,13 @@ classdef ProjectionViewerApp < handle
                 Tag="ProjectionViewerLayerManagerTrackCameraCheckBox");
             app.LayerManagerTrackCameraCheckBox.Layout.Row = 2;
             app.LayerManagerTrackCameraCheckBox.Layout.Column = [6 7];
+            app.LayerManagerRebuildViewportButton = uibutton(grid, ...
+                Text="Rebuild viewport", ...
+                Tooltip="Clear and recreate display graphics; preserve scene, corrections, alignment, layers, pair, and camera.", ...
+                ButtonPushedFcn=@(~, ~) app.rebuildViewport(), ...
+                Tag="ProjectionViewerLayerManagerRebuildViewportButton");
+            app.LayerManagerRebuildViewportButton.Layout.Row = 2;
+            app.LayerManagerRebuildViewportButton.Layout.Column = 8;
 
             passLabel = uilabel(grid, Text="Pass");
             passLabel.Layout.Row = 4;
@@ -6141,6 +6277,7 @@ classdef ProjectionViewerApp < handle
             app.LayerManagerTrackCameraCheckBox = [];
             app.LayerManagerAllVisibleButton = [];
             app.LayerManagerNoneVisibleButton = [];
+            app.LayerManagerRebuildViewportButton = [];
             app.MotionTable = [];
             app.MotionPassDropDown = [];
             app.MotionLoopCheckBox = [];
@@ -6323,8 +6460,14 @@ classdef ProjectionViewerApp < handle
                 end
                 return
             end
-            app.scheduleMotionPlaybackTick();
+            runtime = app.MotionRuntime;
+            runtime.PlaybackClock = tic;
+            runtime.LastPlaybackTickElapsed = 0;
+            runtime.NextPlaybackTickElapsed = ...
+                ProjectionMotionPlayback.delay(runtime.RateFps);
+            app.MotionRuntime = runtime;
             app.refreshMotionStatus();
+            app.scheduleMotionPlaybackTick();
         end
 
         function pauseMotionPlayback(app, reason)
@@ -7201,31 +7344,36 @@ classdef ProjectionViewerApp < handle
                 Visible=app.onOff( ...
                 app.layerSurfaceIsEffectivelyVisible( ...
                 layerIndex, mesh.Alpha)), ...
-                ContextMenu=app.ImageContextMenu, Tag=tag);
+                ContextMenu=app.ImageContextMenu, HitTest="on", ...
+                PickableParts="visible", ButtonDownFcn=[], Tag=tag);
             app.PerformanceMonitor.increment("SurfaceCreations");
             app.PerformanceMonitor.increment( ...
                 "TextureUploadBytes", app.arrayBytes(displayTexture));
             app.PerformanceMonitor.recordTiming( ...
                 "SurfaceCreateSeconds", toc(surfaceTimer));
+            tileKey = "untiled";
+            ownershipState = "active";
+            if string(tag) == "ProjectionViewerPreviewTileSurface"
+                tileKey = "";
+                ownershipState = "preparing";
+                surfaceHandle.Visible = "off";
+            end
+            app.setSurfaceOwnershipMetadata( ...
+                surfaceHandle, layerIndex, tileKey, ownershipState);
         end
 
         function surfaceHandles = createTiledLayerSurfaces(app, layerIndex, tiles)
             if nargin < 3
                 tiles = app.previewTilesForLayer(layerIndex);
             end
-            surfaceHandles = gobjects(1, numel(tiles));
-            tileKeys = app.previewTileKeys(tiles);
-            for tileIndex = 1:numel(tiles)
-                tileData = app.preparedPreviewTileData( ...
-                    layerIndex, tiles(tileIndex), ...
-                    app.PreviewTilingOptions.MaxTileMeshVertices);
-                surfaceHandles(tileIndex) = app.acquirePreviewTileSurface( ...
-                    layerIndex, tileData);
-                surfaceHandles(tileIndex).UserData = tileKeys(tileIndex);
+            app.setTiledLayerSurfaces(layerIndex, tiles, true);
+            app.refreshLayerSurfaceOwnership(layerIndex);
+            surfaceHandles = app.validLayerSurfaces(layerIndex);
+            if numel(app.rendererUniqueHandles(surfaceHandles)) ~= ...
+                    numel(surfaceHandles)
+                error("ProjectionViewerApp:rendererOwnershipCorrupt", ...
+                    "The active layer contains duplicate graphics handles.");
             end
-            app.PreviewTiles{layerIndex} = tiles;
-            app.PreviewTileKeys{layerIndex} = tileKeys;
-            app.recordAppliedPreviewLevel(layerIndex, tiles);
         end
 
         function tileLayer = tilePreviewLayer(app, layerIndex, tile, ...
@@ -7678,60 +7826,148 @@ classdef ProjectionViewerApp < handle
             if nargin < 4
                 updateTexture = false;
             end
+            if app.RendererTransactionInProgress
+                app.PerformanceMonitor.increment( ...
+                    "CoalescedRendererTransactions");
+                return
+            end
+            app.RendererTransactionInProgress = true;
+            transactionCleanup = onCleanup( ...
+                @() app.releaseRendererTransaction());
 
+            app.refreshLayerSurfaceOwnership(layerIndex);
             surfaceHandles = app.validLayerSurfaces(layerIndex);
+            if numel(app.rendererUniqueHandles(surfaceHandles)) ~= ...
+                    numel(surfaceHandles)
+                error("ProjectionViewerApp:rendererOwnershipCorrupt", ...
+                    "The active layer contains duplicate graphics handles.");
+            end
             if app.canReuseTiledLayerSurfaces(layerIndex, tiles, surfaceHandles)
                 app.PerformanceMonitor.increment( ...
                     "SurfaceHandleReuses", numel(surfaceHandles));
-                if updateTexture
-                    app.updateExistingTiledLayerSurfaces(layerIndex, tiles, true);
+                if ~updateTexture
+                    app.recordAppliedPreviewLevel(layerIndex, tiles);
+                    app.refreshLayerSurfaceOwnership(layerIndex);
+                    return
                 end
-                app.recordAppliedPreviewLevel(layerIndex, tiles);
-                return
             end
 
             previousKeys = app.currentPreviewTileKeys(layerIndex);
             targetKeys = app.previewTileKeys(tiles);
             replacementHandles = gobjects(1, numel(tiles));
+            preparedReplacement = false(1, numel(tiles));
+            replacementSources = strings(1, numel(tiles));
             usedPrevious = false(1, numel(surfaceHandles));
+            request = struct( ...
+                RendererGeneration=app.RendererGeneration, ...
+                PresentationGeneration= ...
+                app.RendererPresentationGeneration, ...
+                GeometryGeneration= ...
+                app.PreviewGeometryGenerations(layerIndex), ...
+                CameraGeneration=app.CameraScheduleGeneration, ...
+                LayerIndex=layerIndex, TargetKeys=targetKeys);
             if numel(previousKeys) ~= numel(surfaceHandles)
                 previousKeys = strings(size(surfaceHandles));
             end
-            for tileIndex = 1:numel(tiles)
-                previousIndex = find(~usedPrevious & ...
-                    previousKeys == targetKeys(tileIndex), 1, "first");
-                if ~isempty(previousIndex)
-                    replacementHandles(tileIndex) = ...
-                        surfaceHandles(previousIndex);
-                    usedPrevious(previousIndex) = true;
-                    app.PerformanceMonitor.increment("SurfaceHandleReuses");
-                    if updateTexture
-                        tileData = app.preparedPreviewTileData( ...
-                            layerIndex, tiles(tileIndex), ...
-                            app.PreviewTilingOptions.MaxTileMeshVertices);
-                        app.updatePreviewTileSurface( ...
-                            replacementHandles(tileIndex), layerIndex, ...
-                            tileData, true);
+            app.rollbackPreparingSurfaces();
+            cleanup = onCleanup(@() app.rollbackPreparingSurfaces());
+            committed = false;
+            retired = false;
+            try
+                for tileIndex = 1:numel(tiles)
+                    previousIndex = [];
+                    if ~updateTexture
+                        previousIndex = find(~usedPrevious & ...
+                            previousKeys == targetKeys(tileIndex), ...
+                            1, "first");
                     end
-                    continue
+                    if ~isempty(previousIndex)
+                        replacementHandles(tileIndex) = ...
+                            surfaceHandles(previousIndex);
+                        usedPrevious(previousIndex) = true;
+                        replacementSources(tileIndex) = "active";
+                        app.PerformanceMonitor.increment( ...
+                            "SurfaceHandleReuses");
+                        continue
+                    end
+
+                    tileData = app.preparedPreviewTileData( ...
+                        layerIndex, tiles(tileIndex), ...
+                        app.PreviewTilingOptions.MaxTileMeshVertices);
+                    [replacementHandles(tileIndex), ...
+                        replacementSources(tileIndex)] = ...
+                        app.acquirePreviewTileSurface(layerIndex, tileData);
+                    preparedReplacement(tileIndex) = true;
+                    app.setSurfaceOwnershipMetadata( ...
+                        replacementHandles(tileIndex), layerIndex, ...
+                        targetKeys(tileIndex), "preparing");
+                    app.maybeInjectRendererFault("afterAcquire");
                 end
 
-                tileData = app.preparedPreviewTileData( ...
-                    layerIndex, tiles(tileIndex), ...
-                    app.PreviewTilingOptions.MaxTileMeshVertices);
-                replacementHandles(tileIndex) = ...
-                    app.acquirePreviewTileSurface(layerIndex, tileData);
-                replacementHandles(tileIndex).UserData = targetKeys(tileIndex);
-            end
+                for leftIndex = 1:numel(replacementHandles)
+                    for rightIndex = leftIndex + 1:numel(replacementHandles)
+                        if replacementHandles(leftIndex) == ...
+                                replacementHandles(rightIndex)
+                            error("ProjectionViewerApp:rendererOwnershipCorrupt", ...
+                                "Replacement slots %d (%s, %s) and %d " + ...
+                                "(%s, %s) contain the same graphics handle.", ...
+                                leftIndex, replacementSources(leftIndex), ...
+                                targetKeys(leftIndex), rightIndex, ...
+                                replacementSources(rightIndex), ...
+                                targetKeys(rightIndex));
+                        end
+                    end
+                end
 
-            app.retirePreviewTileSurfaces(surfaceHandles(~usedPrevious));
-            app.Surfaces{layerIndex} = replacementHandles;
-            app.PreviewTiles{layerIndex} = tiles;
-            app.PreviewTileKeys{layerIndex} = targetKeys;
-            app.recordAppliedPreviewLevel(layerIndex, tiles);
-            if layerIndex == app.SelectedLayerIndex
-                app.Surface = app.primarySurfaceForLayer(layerIndex);
+                if app.RendererFaultInjectionStage == "staleBeforeCommit"
+                    app.RendererFaultInjectionStage = "";
+                    app.CameraScheduleGeneration = ...
+                        app.CameraScheduleGeneration + 1;
+                end
+                for tileIndex = 1:numel(replacementHandles)
+                    state = "active";
+                    if preparedReplacement(tileIndex)
+                        state = "preparing";
+                    end
+                    app.setSurfaceOwnershipMetadata( ...
+                        replacementHandles(tileIndex), layerIndex, ...
+                        targetKeys(tileIndex), state);
+                end
+                app.assertRendererRequestCurrent(request, replacementHandles);
+                app.maybeInjectRendererFault("beforeCommit");
+                app.Surfaces{layerIndex} = replacementHandles;
+                app.PreviewTiles{layerIndex} = tiles;
+                app.PreviewTileKeys{layerIndex} = targetKeys;
+                for tileIndex = 1:numel(replacementHandles)
+                    app.setSurfaceOwnershipMetadata( ...
+                        replacementHandles(tileIndex), layerIndex, ...
+                        targetKeys(tileIndex), "active");
+                    replacementHandles(tileIndex).Visible = app.onOff( ...
+                        app.layerSurfaceIsEffectivelyVisible( ...
+                        layerIndex, app.Scene.layers(layerIndex).Alpha));
+                end
+                app.PreviewPreparingSurfaces = gobjects(0);
+                committed = true;
+                app.maybeInjectRendererFault("afterCommitBeforeRetire");
+                app.retirePreviewTileSurfaces(surfaceHandles(~usedPrevious));
+                retired = true;
+                app.recordAppliedPreviewLevel(layerIndex, tiles);
+                if layerIndex == app.SelectedLayerIndex
+                    app.Surface = app.primarySurfaceForLayer(layerIndex);
+                end
+            catch exception
+                if committed && ~retired
+                    app.retirePreviewTileSurfaces( ...
+                        surfaceHandles(~usedPrevious));
+                end
+                rethrow(exception)
             end
+            clear cleanup
+            clear transactionCleanup
+        end
+
+        function releaseRendererTransaction(app)
+            app.RendererTransactionInProgress = false;
         end
 
         function tf = canReuseTiledLayerSurfaces(app, layerIndex, tiles, surfaceHandles)
@@ -7776,6 +8012,7 @@ classdef ProjectionViewerApp < handle
             end
             app.PreviewTiles{layerIndex} = tiles;
             app.PreviewTileKeys{layerIndex} = app.previewTileKeys(tiles);
+            app.refreshLayerSurfaceOwnership(layerIndex);
             if layerIndex == app.SelectedLayerIndex
                 app.Surface = app.primarySurfaceForLayer(layerIndex);
             end
@@ -7824,24 +8061,40 @@ classdef ProjectionViewerApp < handle
             delete(surfaceHandles);
         end
 
-        function surfaceHandle = acquirePreviewTileSurface( ...
+        function [surfaceHandle, acquisitionSource] = ...
+                acquirePreviewTileSurface( ...
                 app, layerIndex, tileData)
             app.PreviewSurfacePool = app.validPreviewSurfacePool();
             mesh = app.previewTileAppearanceMesh(tileData.Mesh, layerIndex);
-            if isempty(app.PreviewSurfacePool)
+            poolIndex = [];
+            for index = numel(app.PreviewSurfacePool):-1:1
+                metadata = app.PreviewSurfacePool(index).UserData;
+                if isstruct(metadata) && isfield(metadata, "LastLayerIndex") && ...
+                        double(metadata.LastLayerIndex) == layerIndex
+                    poolIndex = index;
+                    break
+                end
+            end
+            if isempty(poolIndex)
                 app.PerformanceMonitor.increment("SurfacePoolMisses");
+                acquisitionSource = "new";
                 surfaceHandle = app.createPreviewSurface( ...
                     layerIndex, mesh, tileData.DisplayTexture, ...
                     "ProjectionViewerPreviewTileSurface");
+                app.PreviewPreparingSurfaces(end + 1) = surfaceHandle;
                 return
             end
 
             app.PerformanceMonitor.increment("SurfacePoolHits");
-            surfaceHandle = app.PreviewSurfacePool(end);
-            app.PreviewSurfacePool(end) = [];
+            acquisitionSource = "pool";
+            surfaceHandle = app.PreviewSurfacePool(poolIndex);
+            app.PreviewSurfacePool(poolIndex) = [];
             surfaceHandle.Visible = "off";
             surfaceHandle.Tag = "ProjectionViewerPreviewTileSurface";
             surfaceHandle.ContextMenu = app.ImageContextMenu;
+            surfaceHandle.HitTest = "on";
+            surfaceHandle.PickableParts = "visible";
+            surfaceHandle.ButtonDownFcn = [];
             displayTexture = app.previewTextureForLayer( ...
                 tileData.DisplayTexture, layerIndex);
             surfaceHandle.CData = displayTexture;
@@ -7849,6 +8102,10 @@ classdef ProjectionViewerApp < handle
                 "TextureUploadBytes", app.arrayBytes(displayTexture));
             app.updatePreviewSurfaceHandle( ...
                 surfaceHandle, layerIndex, mesh, false);
+            surfaceHandle.Visible = "off";
+            app.setSurfaceOwnershipMetadata( ...
+                surfaceHandle, layerIndex, "", "preparing");
+            app.PreviewPreparingSurfaces(end + 1) = surfaceHandle;
         end
 
         function updatePreviewTileSurface(app, surfaceHandle, layerIndex, ...
@@ -7863,6 +8120,11 @@ classdef ProjectionViewerApp < handle
             end
             app.updatePreviewSurfaceHandle( ...
                 surfaceHandle, layerIndex, mesh, false);
+            metadata = surfaceHandle.UserData;
+            if isstruct(metadata) && isfield(metadata, "OwnershipState") && ...
+                    string(metadata.OwnershipState) == "preparing"
+                surfaceHandle.Visible = "off";
+            end
         end
 
         function mesh = previewTileAppearanceMesh(app, mesh, layerIndex)
@@ -7873,11 +8135,28 @@ classdef ProjectionViewerApp < handle
         end
 
         function retirePreviewTileSurfaces(app, surfaceHandles)
-            surfaceHandles = surfaceHandles(isgraphics(surfaceHandles));
+            surfaceHandles = app.rendererUniqueHandles(surfaceHandles);
             if isempty(surfaceHandles)
                 return
             end
             app.PreviewSurfacePool = app.validPreviewSurfacePool();
+            active = app.rendererActiveSurfaces();
+            preparing = app.PreviewPreparingSurfaces;
+            preparing = preparing(isgraphics(preparing));
+            newHandleMask = true(1, numel(surfaceHandles));
+            for index = 1:numel(surfaceHandles)
+                newHandleMask(index) = ...
+                    app.rendererHandleMembershipCount( ...
+                    surfaceHandles(index), app.PreviewSurfacePool) == 0 && ...
+                    app.rendererHandleMembershipCount( ...
+                    surfaceHandles(index), active) == 0 && ...
+                    app.rendererHandleMembershipCount( ...
+                    surfaceHandles(index), preparing) == 0;
+            end
+            surfaceHandles = surfaceHandles(newHandleMask);
+            if isempty(surfaceHandles)
+                return
+            end
             availableCount = max(0, app.PreviewSurfacePoolMaxCount - ...
                 numel(app.PreviewSurfacePool));
             pooledCount = min(numel(surfaceHandles), availableCount);
@@ -7885,7 +8164,10 @@ classdef ProjectionViewerApp < handle
             if ~isempty(pooledHandles)
                 set(pooledHandles, "Visible", "off", ...
                     "Tag", "ProjectionViewerPooledTileSurface");
-                set(pooledHandles, "UserData", "");
+                for index = 1:numel(pooledHandles)
+                    app.setSurfaceOwnershipMetadata( ...
+                        pooledHandles(index), 0, "", "pooled");
+                end
                 app.PreviewSurfacePool = ...
                     [app.PreviewSurfacePool pooledHandles];
                 app.PerformanceMonitor.increment( ...
@@ -7897,6 +8179,19 @@ classdef ProjectionViewerApp < handle
         function surfaceHandles = validPreviewSurfacePool(app)
             surfaceHandles = app.PreviewSurfacePool;
             surfaceHandles = surfaceHandles(isgraphics(surfaceHandles));
+            surfaceHandles = app.rendererUniqueHandles(surfaceHandles);
+            active = app.rendererActiveSurfaces();
+            preparing = app.PreviewPreparingSurfaces;
+            preparing = preparing(isgraphics(preparing));
+            keep = true(1, numel(surfaceHandles));
+            for index = 1:numel(surfaceHandles)
+                keep(index) = app.rendererHandleMembershipCount( ...
+                    surfaceHandles(index), active) == 0 && ...
+                    app.rendererHandleMembershipCount( ...
+                    surfaceHandles(index), preparing) == 0;
+            end
+            surfaceHandles = surfaceHandles(keep);
+            app.PreviewSurfacePool = surfaceHandles;
         end
 
         function clearPreviewTileRuntimeCache(app)
@@ -7907,6 +8202,7 @@ classdef ProjectionViewerApp < handle
             pool = app.validPreviewSurfacePool();
             app.deleteSurfaceHandles(pool);
             app.PreviewSurfacePool = gobjects(0);
+            app.rollbackPreparingSurfaces(true);
         end
 
         function clearPreviewSampledGeometryCache(app)
@@ -7914,6 +8210,458 @@ classdef ProjectionViewerApp < handle
                     isvalid(app.PreviewSampledGeometryCache)
                 app.PreviewSampledGeometryCache.clear();
             end
+        end
+
+        function setSurfaceOwnershipMetadata(app, surfaceHandle, ...
+                layerIndex, tileKey, ownershipState)
+            if isempty(surfaceHandle) || ~isgraphics(surfaceHandle)
+                return
+            end
+            ownershipState = string(ownershipState);
+            tileKey = string(tileKey);
+            viewId = "";
+            layerId = "";
+            geometryGeneration = 0;
+            channel = 0;
+            expectedVisible = false;
+            pairId = "";
+            lastLayerIndex = double(layerIndex);
+            previousMetadata = surfaceHandle.UserData;
+            if layerIndex == 0 && isstruct(previousMetadata) && ...
+                    isfield(previousMetadata, "LayerIndex")
+                lastLayerIndex = double(previousMetadata.LayerIndex);
+            end
+            if layerIndex >= 1 && layerIndex <= numel(app.Scene.layers)
+                layer = app.Scene.layers(layerIndex);
+                viewId = string(layer.ViewId);
+                layerId = string(layer.LayerId);
+                geometryGeneration = ...
+                    app.PreviewGeometryGenerations(layerIndex);
+                assignments = app.anaglyphChannelAssignments();
+                if lower(string(layer.BlendMode)) == "redblueanaglyph"
+                    channel = assignments(layerIndex);
+                    if channel == 0
+                        channel = 1;
+                    end
+                end
+                expectedVisible = app.layerSurfaceIsEffectivelyVisible( ...
+                    layerIndex, layer.Alpha);
+                pair = app.AlignmentPairController.currentPair();
+                if isstruct(pair) && isfield(pair, "PairId")
+                    pairId = string(pair.PairId);
+                end
+            end
+            if ownershipState == "pooled"
+                tag = "ProjectionViewerPooledTileSurface";
+                expectedVisible = false;
+            elseif tileKey == "untiled"
+                tag = "ProjectionViewerLayerSurface";
+            else
+                tag = "ProjectionViewerPreviewTileSurface";
+            end
+            if ownershipState ~= "active"
+                expectedVisible = false;
+                surfaceHandle.Visible = "off";
+            end
+            surfaceHandle.Tag = tag;
+            surfaceHandle.UserData = struct( ...
+                Format="ProjectionViewerRendererSurface", Version=1, ...
+                OwnerToken=app.RendererOwnerToken, ...
+                OwnershipState=ownershipState, ...
+                LayerIndex=double(layerIndex), ...
+                LastLayerIndex=lastLayerIndex, LayerId=layerId, ...
+                ViewId=viewId, TileKey=tileKey, ...
+                GeometryGeneration=double(geometryGeneration), ...
+                CameraGeneration=double(app.CameraScheduleGeneration), ...
+                PresentationGeneration= ...
+                double(app.RendererPresentationGeneration), ...
+                AppearanceGeneration= ...
+                double(app.RendererAppearanceGeneration), ...
+                RendererGeneration=double(app.RendererGeneration), ...
+                AnaglyphGeneration= ...
+                double(app.RendererAnaglyphGeneration), ...
+                StereoPairId=pairId, AnaglyphChannel=double(channel), ...
+                ExpectedVisible=logical(expectedVisible), RendererTag=tag);
+        end
+
+        function refreshLayerSurfaceOwnership(app, layerIndex)
+            handles = app.validLayerSurfaces(layerIndex);
+            if isempty(handles)
+                return
+            end
+            if app.usesTiledPreview(layerIndex)
+                keys = app.currentPreviewTileKeys(layerIndex);
+            else
+                keys = "untiled";
+            end
+            if numel(keys) ~= numel(handles)
+                keys = strings(1, numel(handles));
+                for index = 1:numel(handles)
+                    metadata = handles(index).UserData;
+                    if isstruct(metadata) && isfield(metadata, "TileKey")
+                        keys(index) = string(metadata.TileKey);
+                    end
+                end
+            end
+            for index = 1:numel(handles)
+                app.setSurfaceOwnershipMetadata( ...
+                    handles(index), layerIndex, keys(index), "active");
+            end
+        end
+
+        function rollbackPreparingSurfaces(app, deleteInstead)
+            if nargin < 2
+                deleteInstead = false;
+            end
+            handles = app.PreviewPreparingSurfaces;
+            handles = handles(isgraphics(handles));
+            app.PreviewPreparingSurfaces = gobjects(0);
+            if isempty(handles)
+                return
+            end
+            if deleteInstead || app.IsClosing
+                app.deleteSurfaceHandles(handles);
+            else
+                app.retirePreviewTileSurfaces(handles);
+            end
+        end
+
+        function assertRendererRequestCurrent(app, request, handles)
+            layerIndex = request.LayerIndex;
+            rendererCurrent = ...
+                app.RendererGeneration == request.RendererGeneration;
+            presentationCurrent = app.RendererPresentationGeneration == ...
+                request.PresentationGeneration;
+            cameraCurrent = ...
+                app.CameraScheduleGeneration == request.CameraGeneration;
+            geometryCurrent = ...
+                app.PreviewGeometryGenerations(layerIndex) == ...
+                request.GeometryGeneration;
+            metadataCurrent = true;
+            actualKeys = strings(1, numel(handles));
+            for index = 1:numel(handles)
+                metadata = handles(index).UserData;
+                if ~isstruct(metadata) || ~isfield(metadata, "TileKey")
+                    metadataCurrent = false;
+                    continue
+                end
+                actualKeys(index) = string(metadata.TileKey);
+            end
+            keysCurrent = isequal(actualKeys, request.TargetKeys);
+            uniqueHandlesCurrent = ...
+                numel(app.rendererUniqueHandles(handles)) == numel(handles);
+            firstKeyMismatch = find(actualKeys ~= request.TargetKeys, 1);
+            if isempty(firstKeyMismatch)
+                actualKey = "";
+                targetKey = "";
+            else
+                actualKey = actualKeys(firstKeyMismatch);
+                targetKey = request.TargetKeys(firstKeyMismatch);
+            end
+            current = rendererCurrent && presentationCurrent && ...
+                cameraCurrent && geometryCurrent && metadataCurrent && ...
+                keysCurrent && uniqueHandlesCurrent;
+            if ~current
+                error("ProjectionViewerApp:staleRendererTransaction", ...
+                    "A newer render request superseded the prepared tile " + ...
+                    "transaction (renderer=%d, presentation=%d, camera=%d, " + ...
+                    "geometry=%d, metadata=%d, keys=%d, unique=%d, actual=%s, " + ...
+                    "target=%s).", ...
+                    rendererCurrent, presentationCurrent, cameraCurrent, ...
+                    geometryCurrent, metadataCurrent, keysCurrent, ...
+                    uniqueHandlesCurrent, actualKey, targetKey);
+            end
+        end
+
+        function maybeInjectRendererFault(app, stage)
+            stage = string(stage);
+            if app.RendererFaultInjectionStage ~= stage
+                return
+            end
+            app.RendererFaultInjectionStage = "";
+            error("ProjectionViewerApp:injectedRendererFailure", ...
+                "Injected renderer transaction failure at stage %s.", stage);
+        end
+
+        function handles = rendererActiveSurfaces(app)
+            handles = gobjects(1, 0);
+            for layerIndex = 1:numel(app.Surfaces)
+                layerHandles = app.validLayerSurfaces(layerIndex);
+                handles = [handles reshape(layerHandles, 1, [])]; %#ok<AGROW>
+            end
+        end
+
+        function handles = rendererTaggedSurfaces(app)
+            handles = gobjects(1, 0);
+            if isempty(app.Axes) || ~isvalid(app.Axes)
+                return
+            end
+            candidates = findall(app.Axes, "Type", "surface");
+            tags = string(get(candidates, "Tag"));
+            rendererTags = ["ProjectionViewerLayerSurface" ...
+                "ProjectionViewerPreviewTileSurface" ...
+                "ProjectionViewerPooledTileSurface"];
+            handles = reshape(candidates(ismember(tags, rendererTags)), 1, []);
+        end
+
+        function handles = rendererUniqueHandles(app, handles)
+            handles = handles(isgraphics(handles));
+            uniqueHandles = gobjects(1, 0);
+            for index = 1:numel(handles)
+                if app.rendererHandleMembershipCount( ...
+                        handles(index), uniqueHandles) == 0
+                    uniqueHandles(end + 1) = handles(index); %#ok<AGROW>
+                end
+            end
+            handles = uniqueHandles;
+        end
+
+        function count = rendererHandleMembershipCount(~, handle, handles)
+            count = 0;
+            for index = 1:numel(handles)
+                count = count + double(handle == handles(index));
+            end
+        end
+
+        function deleteAllRendererSurfaces(app)
+            handles = [app.rendererTaggedSurfaces() ...
+                app.rendererActiveSurfaces() ...
+                reshape(app.PreviewPreparingSurfaces, 1, []) ...
+                reshape(app.PreviewSurfacePool, 1, [])];
+            handles = app.rendererUniqueHandles(handles);
+            app.PreviewPreparingSurfaces = gobjects(0);
+            app.PreviewSurfacePool = gobjects(0);
+            app.deleteSurfaceHandles(handles);
+        end
+
+        function resetRendererSurfaceTracking(app)
+            layerCount = numel(app.Scene.layers);
+            app.Surfaces = cell(1, layerCount);
+            app.PreviewTiles = cell(1, layerCount);
+            app.PreviewTileKeys = cell(1, layerCount);
+            app.PreviewPreparingSurfaces = gobjects(0);
+            app.PreviewSurfacePool = gobjects(0);
+            app.Surface = gobjects(0);
+            tiled = app.PreviewTiledLayerMask;
+            app.PreviewCurrentLevelIndices(tiled) = 0;
+            app.PreviewPendingLevelIndices(:) = 0;
+            app.PreviewPredictedCandidateCounts(:) = 0;
+            app.PreviewPredictedVisibleTileCounts(:) = 0;
+            app.PreviewPredictedTextureBytes(:) = 0;
+            app.PreviewBudgetLimitedLayerMask(:) = false;
+        end
+
+        function hideAllRendererSurfaces(app)
+            handles = app.rendererUniqueHandles([ ...
+                app.rendererTaggedSurfaces() app.rendererActiveSurfaces() ...
+                reshape(app.PreviewPreparingSurfaces, 1, []) ...
+                reshape(app.PreviewSurfacePool, 1, [])]);
+            if ~isempty(handles)
+                set(handles, "Visible", "off");
+            end
+        end
+
+        function setViewportRecoveryStatus(app, message)
+            if ~isempty(app.MotionStatusLabel) && ...
+                    isvalid(app.MotionStatusLabel)
+                app.MotionStatusLabel.Text = char(string(message));
+            end
+        end
+
+        function audit = buildGraphicsOwnershipAudit(app, repairVisibility)
+            if nargin < 2
+                repairVisibility = false;
+            end
+            active = app.rendererActiveSurfaces();
+            preparing = app.PreviewPreparingSurfaces;
+            preparing = preparing(isgraphics(preparing));
+            pooled = app.validPreviewSurfacePool();
+            tagged = app.rendererTaggedSurfaces();
+            active = reshape(active, 1, []);
+            preparing = reshape(preparing, 1, []);
+            pooled = reshape(pooled, 1, []);
+            registry = [active preparing pooled];
+
+            orphanCount = 0;
+            duplicateRegistryCount = 0;
+            invalidMetadataCount = 0;
+            visibleInactiveCount = 0;
+            visiblePreparingCount = 0;
+            visiblePooledCount = 0;
+            visibilityMismatchCount = 0;
+            staleGenerationCount = 0;
+            requiredFields = ["Format" "Version" "OwnerToken" ...
+                "OwnershipState" "LayerIndex" "LastLayerIndex" ...
+                "ViewId" "TileKey" ...
+                "GeometryGeneration" "CameraGeneration" ...
+                "PresentationGeneration" "AppearanceGeneration" ...
+                "RendererGeneration" "AnaglyphGeneration" ...
+                "StereoPairId" "AnaglyphChannel" "ExpectedVisible"];
+            for index = 1:numel(tagged)
+                handle = tagged(index);
+                membership = app.rendererHandleMembershipCount( ...
+                    handle, registry);
+                orphanCount = orphanCount + double(membership == 0);
+                duplicateRegistryCount = duplicateRegistryCount + ...
+                    max(0, membership - 1);
+                isActive = app.rendererHandleMembershipCount( ...
+                    handle, active) > 0;
+                isPreparing = app.rendererHandleMembershipCount( ...
+                    handle, preparing) > 0;
+                isPooled = app.rendererHandleMembershipCount( ...
+                    handle, pooled) > 0;
+                visible = string(handle.Visible) == "on";
+                if repairVisibility && ~isActive && visible
+                    handle.Visible = "off";
+                    visible = false;
+                end
+                visibleInactiveCount = visibleInactiveCount + ...
+                    double(visible && ~isActive);
+                visiblePreparingCount = visiblePreparingCount + ...
+                    double(visible && isPreparing);
+                visiblePooledCount = visiblePooledCount + ...
+                    double(visible && isPooled);
+                metadata = handle.UserData;
+                validMetadata = isstruct(metadata) && isscalar(metadata) && ...
+                    all(isfield(metadata, requiredFields)) && ...
+                    string(metadata.Format) == ...
+                    "ProjectionViewerRendererSurface" && ...
+                    string(metadata.OwnerToken) == app.RendererOwnerToken;
+                expectedState = "";
+                if isActive
+                    expectedState = "active";
+                elseif isPreparing
+                    expectedState = "preparing";
+                elseif isPooled
+                    expectedState = "pooled";
+                end
+                if validMetadata && expectedState ~= ""
+                    validMetadata = string(metadata.OwnershipState) == ...
+                        expectedState;
+                end
+                invalidMetadataCount = invalidMetadataCount + ...
+                    double(~validMetadata);
+                if ~validMetadata || ~isActive
+                    continue
+                end
+                layerIndex = double(metadata.LayerIndex);
+                layerValid = isfinite(layerIndex) && ...
+                    layerIndex == fix(layerIndex) && layerIndex >= 1 && ...
+                    layerIndex <= numel(app.Scene.layers);
+                if ~layerValid
+                    invalidMetadataCount = invalidMetadataCount + 1;
+                    continue
+                end
+                expectedVisible = app.layerSurfaceIsEffectivelyVisible( ...
+                    layerIndex, app.Scene.layers(layerIndex).Alpha);
+                if repairVisibility && visible ~= expectedVisible
+                    handle.Visible = app.onOff(expectedVisible);
+                    visible = expectedVisible;
+                    app.setSurfaceOwnershipMetadata(handle, layerIndex, ...
+                        string(metadata.TileKey), "active");
+                    metadata = handle.UserData;
+                end
+                visibilityMismatchCount = visibilityMismatchCount + ...
+                    double(visible ~= expectedVisible);
+                stale = double(metadata.RendererGeneration) ~= ...
+                    double(app.RendererGeneration) || ...
+                    double(metadata.GeometryGeneration) ~= ...
+                    app.PreviewGeometryGenerations(layerIndex) || ...
+                    double(metadata.PresentationGeneration) ~= ...
+                    double(app.RendererPresentationGeneration) || ...
+                    double(metadata.AppearanceGeneration) ~= ...
+                    double(app.RendererAppearanceGeneration) || ...
+                    double(metadata.AnaglyphGeneration) ~= ...
+                    double(app.RendererAnaglyphGeneration);
+                staleGenerationCount = staleGenerationCount + double(stale);
+            end
+
+            missingExpectedCount = 0;
+            duplicateActiveKeyCount = 0;
+            activeVisibleByLayer = zeros(1, numel(app.Scene.layers));
+            channelsByLayer = zeros(1, numel(app.Scene.layers));
+            viewIds = strings(1, numel(active));
+            activeChannels = zeros(1, numel(active));
+            for layerIndex = 1:numel(app.Scene.layers)
+                if app.usesTiledPreview(layerIndex)
+                    expectedKeys = app.currentPreviewTileKeys(layerIndex);
+                else
+                    expectedKeys = "untiled";
+                end
+                layerKeys = strings(1, 0);
+                for index = 1:numel(active)
+                    metadata = active(index).UserData;
+                    if ~isstruct(metadata) || ...
+                            ~isfield(metadata, "LayerIndex") || ...
+                            double(metadata.LayerIndex) ~= layerIndex
+                        continue
+                    end
+                    if isfield(metadata, "TileKey")
+                        layerKeys(end + 1) = string(metadata.TileKey); %#ok<AGROW>
+                    end
+                    activeVisibleByLayer(layerIndex) = ...
+                        activeVisibleByLayer(layerIndex) + ...
+                        double(string(active(index).Visible) == "on");
+                    if isfield(metadata, "AnaglyphChannel")
+                        channelsByLayer(layerIndex) = ...
+                            double(metadata.AnaglyphChannel);
+                    end
+                end
+                for key = reshape(expectedKeys, 1, [])
+                    keyCount = nnz(layerKeys == key);
+                    missingExpectedCount = missingExpectedCount + ...
+                        double(keyCount == 0);
+                    duplicateActiveKeyCount = duplicateActiveKeyCount + ...
+                        max(0, keyCount - 1);
+                end
+                missingExpectedCount = missingExpectedCount + ...
+                    nnz(~ismember(layerKeys, expectedKeys));
+            end
+            for index = 1:numel(active)
+                metadata = active(index).UserData;
+                if isstruct(metadata) && isfield(metadata, "ViewId")
+                    viewIds(index) = string(metadata.ViewId);
+                end
+                if isstruct(metadata) && isfield(metadata, "AnaglyphChannel")
+                    activeChannels(index) = double(metadata.AnaglyphChannel);
+                end
+            end
+            channelConflictCount = 0;
+            for viewId = unique(viewIds(viewIds ~= ""), "stable")
+                channels = unique(activeChannels( ...
+                    viewIds == viewId & activeChannels > 0));
+                channelConflictCount = channelConflictCount + ...
+                    max(0, numel(channels) - 1);
+            end
+            violationCount = orphanCount + duplicateRegistryCount + ...
+                invalidMetadataCount + visibleInactiveCount + ...
+                visiblePreparingCount + visiblePooledCount + ...
+                visibilityMismatchCount + missingExpectedCount + ...
+                duplicateActiveKeyCount + staleGenerationCount + ...
+                channelConflictCount;
+            currentPair = app.AlignmentPairController.currentPair();
+            audit = struct( ...
+                Format="ProjectionViewerGraphicsOwnershipAudit", Version=1, ...
+                OwnerToken=app.RendererOwnerToken, ...
+                RendererGeneration=double(app.RendererGeneration), ...
+                TaggedCount=numel(tagged), ActiveCount=numel(active), ...
+                PreparingCount=numel(preparing), PooledCount=numel(pooled), ...
+                OrphanCount=orphanCount, ...
+                DuplicateRegistryCount=duplicateRegistryCount, ...
+                InvalidMetadataCount=invalidMetadataCount, ...
+                VisibleInactiveCount=visibleInactiveCount, ...
+                VisiblePreparingCount=visiblePreparingCount, ...
+                VisiblePooledCount=visiblePooledCount, ...
+                VisibilityMismatchCount=visibilityMismatchCount, ...
+                MissingExpectedCount=missingExpectedCount, ...
+                DuplicateActiveKeyCount=duplicateActiveKeyCount, ...
+                StaleGenerationCount=staleGenerationCount, ...
+                ChannelConflictCount=channelConflictCount, ...
+                ViolationCount=violationCount, IsClean=violationCount == 0, ...
+                EffectiveLayerVisibility=app.effectiveLayerVisibilityMask(), ...
+                CurrentStablePair=currentPair, ...
+                ActiveVisibleByLayer=activeVisibleByLayer, ...
+                AnaglyphChannelsByLayer=channelsByLayer);
         end
 
         function recordAppliedPreviewLevel(app, layerIndex, tiles)
@@ -7942,6 +8690,7 @@ classdef ProjectionViewerApp < handle
             isVisible = logical(isVisible) && effectiveMask(layerIndex);
             isVisible = app.previewSurfaceIsVisible(isVisible, alpha);
             set(surfaceHandles, "Visible", char(app.onOff(isVisible)));
+            app.refreshLayerSurfaceOwnership(layerIndex);
         end
 
         function setLayerSurfaceAlpha(app, layerIndex, alpha)
@@ -7958,6 +8707,7 @@ classdef ProjectionViewerApp < handle
                 (currentVisibility == "on") ~= isVisible);
             set(surfaceHandles, "FaceAlpha", faceAlpha, ...
                 "Visible", char(app.onOff(isVisible)));
+            app.refreshLayerSurfaceOwnership(layerIndex);
             app.PerformanceMonitor.increment( ...
                 "AlphaVisibilityTransitions", visibilityChanges);
         end
@@ -8559,6 +9309,7 @@ classdef ProjectionViewerApp < handle
             if ~app.isPointerInAxes()
                 return
             end
+            app.acceptCurrentViewportFrame();
 
             selectionType = string(app.UIFigure.SelectionType);
             if app.AlignmentRoiDrawingActive && selectionType == "normal"
@@ -9516,6 +10267,13 @@ classdef ProjectionViewerApp < handle
             surfaceHandle.Visible = app.onOff( ...
                 app.layerSurfaceIsEffectivelyVisible( ...
                 layerIndex, mesh.Alpha));
+            metadata = surfaceHandle.UserData;
+            if isstruct(metadata) && isfield(metadata, "OwnershipState") && ...
+                    string(metadata.OwnershipState) == "preparing"
+                surfaceHandle.Visible = "off";
+            else
+                app.refreshLayerSurfaceOwnership(layerIndex);
+            end
         end
 
         function maxVertices = previewTileMeshVertexLimit(app, meshSamplings)
@@ -9526,6 +10284,12 @@ classdef ProjectionViewerApp < handle
         end
 
         function updateAllSurfaceBlendAppearance(app)
+            app.RendererPresentationGeneration = ...
+                app.RendererPresentationGeneration + 1;
+            app.RendererAppearanceGeneration = ...
+                app.RendererAppearanceGeneration + 1;
+            app.RendererAnaglyphGeneration = ...
+                app.RendererAnaglyphGeneration + 1;
             visibleMask = app.effectiveLayerVisibilityMask();
             for layerIndex = 1:numel(app.Surfaces)
                 if app.usesTiledPreview(layerIndex)
@@ -9545,6 +10309,23 @@ classdef ProjectionViewerApp < handle
                 surfaceHandle.Visible = app.onOff( ...
                     app.previewSurfaceIsVisible( ...
                     visibleMask(layerIndex), layer.Alpha));
+                app.refreshLayerSurfaceOwnership(layerIndex);
+            end
+            app.LastGraphicsOwnershipAudit = ...
+                app.buildGraphicsOwnershipAudit(true);
+            corruptionCount = ...
+                app.LastGraphicsOwnershipAudit.OrphanCount + ...
+                app.LastGraphicsOwnershipAudit.DuplicateRegistryCount + ...
+                app.LastGraphicsOwnershipAudit.InvalidMetadataCount + ...
+                app.LastGraphicsOwnershipAudit.MissingExpectedCount + ...
+                app.LastGraphicsOwnershipAudit.DuplicateActiveKeyCount + ...
+                app.LastGraphicsOwnershipAudit.StaleGenerationCount + ...
+                app.LastGraphicsOwnershipAudit.ChannelConflictCount;
+            if corruptionCount > 0
+                app.hideAllRendererSurfaces();
+                error("ProjectionViewerApp:rendererOwnershipCorrupt", ...
+                    "Renderer ownership audit failed with %d structural " + ...
+                    "violations. Use Rebuild viewport.", corruptionCount);
             end
         end
 
@@ -9570,6 +10351,7 @@ classdef ProjectionViewerApp < handle
                     app.previewSurfaceIsVisible( ...
                     visibleMask(layerIndex), layer.Alpha));
             end
+            app.refreshLayerSurfaceOwnership(layerIndex);
         end
 
         function texture = previewTextureForLayer(app, texture, layerIndex)
@@ -10037,6 +10819,23 @@ classdef ProjectionViewerApp < handle
             app.refreshTiledProjectionSurfaces();
             app.PreviewTimer = tic;
             app.updateCrosshair();
+        end
+
+        function resetSceneFromMenu(app, event)
+            % Programmatic callbacks in tests retain the established direct path.
+            if isstruct(event)
+                app.resetView();
+                return
+            end
+            choice = uiconfirm(app.UIFigure, ...
+                "Reset scene layers, projection/view corrections, " + ...
+                "alignment review state, and camera?", ...
+                "Reset scene and corrections", ...
+                Options=["Reset" "Cancel"], DefaultOption="Cancel", ...
+                CancelOption="Cancel", Icon="warning");
+            if string(choice) == "Reset"
+                app.resetView();
+            end
         end
 
         function meshSamplings = createDragMeshSampling(app)
@@ -10666,6 +11465,8 @@ classdef ProjectionViewerApp < handle
                 app.PreviewSampledGeometryCache.diagnostics();
             runtime.SurfacePoolCount = numel(app.validPreviewSurfacePool());
             runtime.SurfacePoolLimit = app.PreviewSurfacePoolMaxCount;
+            runtime.GraphicsOwnership = ...
+                app.buildGraphicsOwnershipAudit(false);
             runtime.Motion = struct(Active=app.MotionRuntime.Active, ...
                 Playing=app.MotionRuntime.Playing, ...
                 LookaheadCount=double(isstruct(app.MotionRuntime.Lookahead) && ...
@@ -11202,6 +12003,17 @@ classdef ProjectionViewerApp < handle
     end
 
     methods (Static, Access = private)
+        function token = nextRendererOwnerToken()
+            persistent sequence
+            if isempty(sequence)
+                sequence = uint64(0);
+            end
+            sequence = sequence + 1;
+            timestamp = string(datetime("now", ...
+                Format="yyyyMMdd'T'HHmmssSSS"));
+            token = "renderer-" + timestamp + "-" + string(sequence);
+        end
+
         function dispatchMotionPlaybackTick(app)
             if ~isempty(app) && isvalid(app)
                 app.motionPlaybackTick();
