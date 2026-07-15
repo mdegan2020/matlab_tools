@@ -186,15 +186,13 @@ classdef ProjectionViewerStereoCursorWorkflowTest < matlab.uitest.TestCase
             after = app.stereoCursorDiagnostics();
 
             testCase.verifyNotEqual(axesHandle.CameraViewAngle, beforeAngle);
-            testCase.verifyEqual(after.AnchorPlaneCoordinates, ...
+            testCase.verifyNotEqual(after.AnchorPlaneCoordinates, ...
                 before.AnchorPlaneCoordinates);
             testCase.verifyEqual(after.HeightMeters, before.HeightMeters);
-            testCase.verifyEqual(after.WorldPoint, before.WorldPoint, ...
-                AbsTol=ProjectionViewerStereoCursorWorkflowTest.Tol);
-            testCase.verifyEqual( ...
+            testCase.verifyNotEqual(after.WorldPoint, before.WorldPoint);
+            testCase.verifyNotEqual( ...
                 [after.Projection.Projections.SourceCoordinates], ...
-                [before.Projection.Projections.SourceCoordinates], ...
-                AbsTol=ProjectionViewerStereoCursorWorkflowTest.Tol);
+                [before.Projection.Projections.SourceCoordinates]);
 
             invalid = app.placeStereoCursor([1e6 0], 0);
             markers = findall(viewer, "-regexp", "Tag", ...
@@ -211,6 +209,42 @@ classdef ProjectionViewerStereoCursorWorkflowTest < matlab.uitest.TestCase
             app.importState(state);
             testCase.verifyFalse(app.stereoCursorDiagnostics().Enabled);
             testCase.verifyFalse(isfield(state, "StereoCursor"));
+        end
+
+        function testCursorFollowsPointerAndUsesHeightReadout(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerStereoCursorWorkflowTest.scene(2));
+            testCase.addTeardown(@() delete(app));
+            drawnow
+            viewer = ProjectionViewerStereoCursorWorkflowTest.viewer();
+            axesHandle = findall(viewer, "Type", "axes");
+            viewer.Pointer = "hand";
+            initial = app.placeStereoCursor([0 0], -3);
+            viewVector = ProjectionViewerStereoCursorWorkflowTest.tagged( ...
+                "ProjectionViewerViewVectorOverlay");
+            center = axesHandle.InnerPosition(1:2) + ...
+                axesHandle.InnerPosition(3:4) / 2;
+            viewer.CurrentObject = axesHandle;
+            viewer.CurrentPoint = center + [35 18];
+            drawnow
+            viewer.WindowButtonMotionFcn(viewer, struct());
+            followed = app.stereoCursorDiagnostics();
+
+            testCase.verifyEqual(string(viewer.Pointer), "crosshair");
+            testCase.verifyNotEmpty(viewer.WindowButtonMotionFcn);
+            testCase.verifyNotEqual(followed.AnchorPlaneCoordinates, ...
+                initial.AnchorPlaneCoordinates);
+            testCase.verifyEqual(followed.HeightMeters, -3, ...
+                AbsTol=ProjectionViewerStereoCursorWorkflowTest.Tol);
+            testCase.verifyTrue(contains(string(viewVector.Text), ...
+                "Stereo cursor -3.000 m below projection plane"));
+
+            menu = ProjectionViewerStereoCursorWorkflowTest.tagged( ...
+                "ProjectionViewerStereoCursorMenuItem");
+            menu.MenuSelectedFcn(menu, struct());
+            testCase.verifyEqual(string(viewer.Pointer), "hand");
+            testCase.verifyFalse(contains(string(viewVector.Text), ...
+                "Stereo cursor"));
         end
     end
 

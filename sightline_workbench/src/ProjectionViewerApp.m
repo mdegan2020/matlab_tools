@@ -82,6 +82,7 @@ classdef ProjectionViewerApp < handle
         StereoCursorHeightLimitsMeters double = [-1e5 1e5]
         StereoCursorFineStepFactor double = 0.1
         StereoCursorCoarseStepFactor double = 10
+        StereoCursorPreviousPointer string = "arrow"
         ProjectionArrowStepDegrees double = 0.5
         ViewVectorDragProbeDegrees double = 0.01
         MinDragScreenJacobianRcond double = 1e-12
@@ -796,6 +797,7 @@ classdef ProjectionViewerApp < handle
             plane = app.currentProjectionPlane();
             ProjectionStereoCursorModel.worldPoint( ...
                 plane, anchorPlaneCoordinates, heightMeters);
+            wasEnabled = app.StereoCursorRuntime.Enabled;
             runtime = app.defaultStereoCursorRuntime();
             runtime.Enabled = true;
             runtime.PairId = pair.PairId;
@@ -806,6 +808,12 @@ classdef ProjectionViewerApp < handle
                 app.StereoCursorHeightLimitsMeters(1)), ...
                 app.StereoCursorHeightLimitsMeters(2));
             app.StereoCursorRuntime = runtime;
+            if ~wasEnabled && ~isempty(app.UIFigure) && isvalid(app.UIFigure)
+                app.StereoCursorPreviousPointer = ...
+                    string(app.UIFigure.Pointer);
+            end
+            app.setStereoCursorPointer(true);
+            app.refreshPointerMotionCallback();
             app.refreshStereoCursor();
             diagnostics = app.stereoCursorDiagnostics();
         end
@@ -9154,6 +9162,7 @@ classdef ProjectionViewerApp < handle
             cleanup = onCleanup(@() app.finishPointerMotion());
             app.PerformanceMonitor.increment("PointerMotionCallbacks");
             app.updatePan();
+            app.updateStereoCursorFromPointer();
             app.updateCrosshair();
             app.updateMotionEdgeControls();
             clear cleanup
@@ -10752,9 +10761,22 @@ classdef ProjectionViewerApp < handle
         function updateViewVectorLabel(app)
             layer = app.Scene.layers(app.SelectedLayerIndex);
             offsetsDegrees = app.layerViewVectorAngularOffsetsDegrees(layer);
-            app.ViewVectorLabel.Text = sprintf( ...
+            text = sprintf( ...
                 "Omega %.4f deg\nPhi %.4f deg\nKappa %.3f deg", ...
                 offsetsDegrees(1), offsetsDegrees(2), offsetsDegrees(3));
+            if app.StereoCursorRuntime.Enabled
+                height = app.StereoCursorRuntime.HeightMeters;
+                if height > 0
+                    relation = "above";
+                elseif height < 0
+                    relation = "below";
+                else
+                    relation = "on";
+                end
+                text = sprintf("%s\nStereo cursor %+.3f m %s projection plane", ...
+                    text, height, relation);
+            end
+            app.ViewVectorLabel.Text = text;
         end
 
         function alpha = validateSliderAlpha(app, alpha)
@@ -11627,9 +11649,44 @@ classdef ProjectionViewerApp < handle
         end
 
         function disableStereoCursor(app)
+            wasEnabled = app.StereoCursorRuntime.Enabled;
             app.StereoCursorRuntime = app.defaultStereoCursorRuntime();
             app.hideStereoCursorGraphics();
+            if wasEnabled
+                app.setStereoCursorPointer(false);
+            end
+            app.refreshPointerMotionCallback();
             app.refreshStereoCursorMenuState();
+            app.updateViewVectorLabel();
+        end
+
+        function setStereoCursorPointer(app, enabled)
+            if isempty(app.UIFigure) || ~isvalid(app.UIFigure)
+                return
+            end
+            if enabled
+                app.UIFigure.Pointer = "crosshair";
+            else
+                pointer = app.StereoCursorPreviousPointer;
+                if strlength(pointer) == 0
+                    pointer = "arrow";
+                end
+                app.UIFigure.Pointer = pointer;
+                app.StereoCursorPreviousPointer = "arrow";
+            end
+        end
+
+        function updateStereoCursorFromPointer(app)
+            if ~app.StereoCursorRuntime.Enabled || ~app.isPointerInAxes()
+                return
+            end
+            point = app.currentPointerProjectionPlanePoint();
+            if any(~isfinite(point)) || isequaln( ...
+                    point, app.StereoCursorRuntime.AnchorPlaneCoordinates)
+                return
+            end
+            app.StereoCursorRuntime.AnchorPlaneCoordinates = point;
+            app.refreshStereoCursor();
         end
 
         function refreshStereoCursorMenuState(app)
@@ -11796,10 +11853,11 @@ classdef ProjectionViewerApp < handle
             if ~isempty(app.StereoCursorOverlayLabel) && ...
                     isvalid(app.StereoCursorOverlayLabel)
                 app.StereoCursorOverlayLabel.String = sprintf( ...
-                    "Z = %.3f m relative to plane (+ along VN)\n%s | %s", ...
+                    "Height = %+.3f m relative to projection plane (+ along VN)\n%s | %s", ...
                     runtime.HeightMeters, statuses(1), statuses(2));
                 app.StereoCursorOverlayLabel.Visible = "on";
             end
+            app.updateViewVectorLabel();
             app.raiseCrosshairOverlay();
         end
 
@@ -11860,7 +11918,7 @@ classdef ProjectionViewerApp < handle
             motionHoverActive = app.MotionRuntime.Active && ...
                 app.MotionRuntime.HoverEdges;
             if app.IsCrosshairEnabled || app.DragMode ~= "none" || ...
-                    motionHoverActive
+                    motionHoverActive || app.StereoCursorRuntime.Enabled
                 app.UIFigure.WindowButtonMotionFcn = ...
                     @(~, ~) app.pointerMoved();
             else
