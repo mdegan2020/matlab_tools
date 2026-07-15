@@ -117,23 +117,19 @@ The current implementation baseline is summarized in
   Orientation and Anaglyph Presentation Pack, and the Alignment Workbench
   Usability and Offset-Semantics Pack, and the Cross-System Acceleration Pass
   are complete; Multi-Image Foundation MI-0 through MI-3 are also complete;
-- the latest grouped fresh-class repository validation passes all 767 tests;
+- the latest grouped fresh-class repository validation passes all 795 tests;
 - all dense-surface synthetic milestones and the separate numerical-threshold
   proposal are complete; proposed limits remain documentation-only until they
   are explicitly adopted as an automated gate;
 - the MATLAB multi-image/dense/SDK workstream is complete through A7, B8, S7,
   P1, and C3, and the portable native D0 foundation is complete on macOS;
-- the active top-priority corrective queue is
-  `docs/real_data_validation_followup_workpack.md`, which incorporates the
-  July 13 operator findings as ordered network-solve, viewer correctness,
-  orientation, Layer Manager, dense-surface, and stereo-cursor packs; RD-2's
-  bounded network solve, RD-3's LOD/lifecycle correction, RD-1's explicit-plane
-  orientation correction, RD-4's Layer Manager/viewer shell, RD-5's
-  scene-bound dense-surface controls/evidence/recovery, and RD-6's world-space
-  stereo cursor are complete; RD-7A/B/C/G presentation, persistent alignment
-  session, multi-image Surface Workbench launch, and correction actionability
-  and RD-7D/E/F analysis-safe measurement and bounded performance work are
-  complete before independent D2 native CPU work; and
+- the post-RD-7 corrective queue in
+  `docs/real_data_surface_stereo_recovery_workplan.md` is implemented through
+  SR-5 with SR-6 privacy-safe automated validation complete; dense association,
+  truthful local surface frames, saved-run 3-D inspection, transactional tiled
+  ownership, and presentation-only viewport rebuild are delivered, while the
+  representative private scenario and exact template-failure intake remain
+  explicit external gates; and
 - representative 100-150 MP Windows viewer and optional GPU validation remain
   external. The truth-aware synthetic expansion is the primary systematic
   alignment acceptance fixture; later air-gapped real-data findings may refine
@@ -253,7 +249,7 @@ buildtool coverage
 
 The tests use MATLAB's class-based `matlab.unittest` framework and exercise
 the public API with deterministic numeric examples. The current grouped
-fresh-class baseline is 767 passing tests with no failures or incomplete
+fresh-class baseline is 795 passing tests with no failures or incomplete
 tests. MATLAB MCP validation runs `coreGeometryState`, `alignment`,
 `backendSurface`, `viewerAlignmentUi`, `viewerPresentationWorkflows`, and
 `viewerPerformancePrecision` through `runTestGroup` in six separate
@@ -1282,6 +1278,22 @@ sequence/layer mutation, stale or missing data, load failure, or the no-wrap
 boundary. Playback remains direct single-frame presentation: no interpolation,
 crossfade, or display-only cache product can enter viewer serialization or a
 backend/scientific input.
+
+Tiled presentation replacement is transactional. Incoming surfaces remain
+hidden until their owner/layer/view/tile and render-generation metadata match
+the complete request, publication swaps one coherent active set, and old
+surfaces are pooled or deleted only after commit. The runtime ownership audit
+compares every renderer-tagged axes child with active/preparing/pool registries
+and fails closed on orphans, duplicate keys, missing tiles, stale generations,
+or conflicting anaglyph channels.
+
+Use **Rebuild viewport** from the image context menu or Layer Manager to repair
+display corruption without closing Sightline. It recreates only renderer image
+graphics, restores the current camera/presentation and overlays, leaves
+playback paused, and verifies a zero-violation audit. It preserves scene,
+corrections, alignment evidence, layer order/visibility, active pair, and saved
+state. **Reset scene and corrections...** is the separate confirmed scientific/
+session reset and must not be used as a graphics-repair command.
 
 An open viewer can append another compatible image without reconstructing the
 app shell:

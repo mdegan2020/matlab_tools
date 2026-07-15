@@ -364,6 +364,162 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             testCase.verifyEqual(string(outline.Visible), "on");
         end
 
+        function testFiveTiledPairTraversalMaintainsRendererOwnership(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerMotionWorkflowTest.makeFiveTiledScene());
+            testCase.addTeardown(@() delete(app));
+            viewer = ProjectionViewerMotionWorkflowTest.viewer();
+            viewer.Position = [100 100 360 300];
+            drawnow
+            app.configurePreviewTiling(struct(TileSize=64, ...
+                MinTiledImagePixels=1, MaxVisibleTilesPerLayer=96));
+            ProjectionViewerMotionWorkflowTest.openAndStartMotion(testCase);
+            window = ProjectionViewerMotionWorkflowTest.motionWindow();
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            anaglyph = findall(groot, "Tag", ...
+                "ProjectionViewerAnaglyphBlendMenuItem");
+            anaglyph(1).MenuSelectedFcn(anaglyph(1), struct());
+            app.flushPreviewUpdates();
+            ProjectionViewerMotionWorkflowTest.verifyOwnershipAudit( ...
+                testCase, app, 2);
+
+            next = ProjectionViewerMotionWorkflowTest.tagged(window, ...
+                "ProjectionViewerMotionNextButton");
+            previous = ProjectionViewerMotionWorkflowTest.tagged(window, ...
+                "ProjectionViewerMotionPreviousButton");
+            loop = ProjectionViewerMotionWorkflowTest.tagged(window, ...
+                "ProjectionViewerMotionLoopCheckBox");
+            for index = 1:7
+                testCase.press(next);
+                app.flushPreviewUpdates();
+                ProjectionViewerMotionWorkflowTest.verifyOwnershipAudit( ...
+                    testCase, app, 2);
+            end
+            for index = 1:7
+                testCase.press(previous);
+                app.flushPreviewUpdates();
+                ProjectionViewerMotionWorkflowTest.verifyOwnershipAudit( ...
+                    testCase, app, 2);
+            end
+            loop.Value = true;
+            loop.ValueChangedFcn(loop, struct());
+            for index = 1:10
+                testCase.press(next);
+                app.flushPreviewUpdates();
+                ProjectionViewerMotionWorkflowTest.verifyOwnershipAudit( ...
+                    testCase, app, 2);
+            end
+            diagnostics = app.performanceDiagnostics();
+            testCase.verifyLessThanOrEqual( ...
+                diagnostics.Viewer.SurfacePoolCount, ...
+                diagnostics.Viewer.SurfacePoolLimit);
+        end
+
+        function testRendererFaultBoundariesRollbackToCleanFrame(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerMotionWorkflowTest.makeTiledScene());
+            testCase.addTeardown(@() delete(app));
+            app.configurePreviewTiling(struct(TileSize=64, ...
+                MinTiledImagePixels=1, MaxVisibleTilesPerLayer=96));
+            stages = ["afterAcquire" "beforeCommit" ...
+                "afterCommitBeforeRetire" "staleBeforeCommit"];
+            for stage = stages
+                app.configureRendererFaultInjection(stage);
+                testCase.verifyError( ...
+                    @() app.refreshPresentationGraphics(true), ...
+                    ProjectionViewerMotionWorkflowTest.rendererFaultId(stage));
+                ProjectionViewerMotionWorkflowTest.verifyOwnershipAudit( ...
+                    testCase, app, 3);
+            end
+        end
+
+        function testRebuildViewportRepairsCorruptionWithoutStateMutation(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerMotionWorkflowTest.makeFiveTiledScene());
+            testCase.addTeardown(@() delete(app));
+            viewer = ProjectionViewerMotionWorkflowTest.viewer();
+            viewer.Position = [100 100 360 300];
+            drawnow
+            app.configurePreviewTiling(struct(TileSize=64, ...
+                MinTiledImagePixels=1, MaxVisibleTilesPerLayer=96));
+            ProjectionViewerMotionWorkflowTest.openAndStartMotion(testCase);
+            window = ProjectionViewerMotionWorkflowTest.motionWindow();
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            anaglyph = findall(groot, "Tag", ...
+                "ProjectionViewerAnaglyphBlendMenuItem");
+            anaglyph(1).MenuSelectedFcn(anaglyph(1), struct());
+            app.refreshPresentationGraphics(true);
+            beforeState = app.exportState();
+            beforeMotion = app.motionDiagnostics();
+            axesHandle = findall(viewer, "Type", "axes");
+            orphan = surface(axesHandle, [0 1; 0 1], [0 0; 1 1], ...
+                zeros(2), zeros(2), EdgeColor="none", Visible="on", ...
+                Tag="ProjectionViewerPreviewTileSurface");
+            pool = findall(axesHandle, "Tag", ...
+                "ProjectionViewerPooledTileSurface");
+            testCase.assertNotEmpty(pool);
+            pool(1).Visible = "on";
+            active = findall(axesHandle, "Tag", ...
+                "ProjectionViewerPreviewTileSurface");
+            active(active == orphan) = [];
+            testCase.assertGreaterThan(numel(active), 2);
+            layerIndices = arrayfun(@(handle) ...
+                double(handle.UserData.LayerIndex), active);
+            targetLayer = mode(layerIndices);
+            sameLayer = find(layerIndices == targetLayer);
+            testCase.assertGreaterThan(numel(sameLayer), 1);
+            metadata = active(sameLayer(1)).UserData;
+            metadata.AnaglyphChannel = 3 - metadata.AnaglyphChannel + 1;
+            active(sameLayer(1)).UserData = metadata;
+            duplicateMetadata = active(sameLayer(2)).UserData;
+            duplicateMetadata.TileKey = metadata.TileKey;
+            active(sameLayer(2)).UserData = duplicateMetadata;
+            deleteIndex = setdiff(1:numel(active), sameLayer(1:2), "stable");
+            delete(active(deleteIndex(1)));
+            corrupted = app.graphicsOwnershipAudit();
+            testCase.verifyFalse(corrupted.IsClean);
+            testCase.verifyGreaterThan(corrupted.OrphanCount, 0);
+            testCase.verifyGreaterThan(corrupted.VisiblePooledCount, 0);
+            testCase.verifyGreaterThan(corrupted.MissingExpectedCount, 0);
+            testCase.verifyGreaterThan( ...
+                corrupted.DuplicateActiveKeyCount, 0);
+            testCase.verifyGreaterThan(corrupted.ChannelConflictCount, 0);
+
+            report = app.rebuildViewport();
+            afterState = app.exportState();
+            afterMotion = app.motionDiagnostics();
+            testCase.verifyEqual(report.Status, "succeeded");
+            testCase.verifyTrue(report.Audit.IsClean);
+            testCase.verifyFalse(isgraphics(orphan));
+            testCase.verifyEqual(afterState, beforeState);
+            testCase.verifyEqual(afterMotion.Active, beforeMotion.Active);
+            testCase.verifyEqual(afterMotion.Mode, beforeMotion.Mode);
+            testCase.verifyEqual(afterMotion.Position, beforeMotion.Position);
+            testCase.verifyEqual(afterMotion.EffectiveVisibility, ...
+                beforeMotion.EffectiveVisibility);
+            testCase.verifyFalse(afterMotion.Playing);
+            topology = [report.Audit.ActiveCount report.Audit.PooledCount ...
+                report.Audit.TaggedCount];
+
+            second = app.rebuildViewport();
+            testCase.verifyEqual(app.exportState(), beforeState);
+            testCase.verifyTrue(second.Audit.IsClean);
+            testCase.verifyEqual([second.Audit.ActiveCount ...
+                second.Audit.PooledCount second.Audit.TaggedCount], topology);
+            rebuildMenu = findall(groot, "Tag", ...
+                "ProjectionViewerRebuildViewportMenuItem");
+            rebuildButton = findall(window, "Tag", ...
+                "ProjectionViewerLayerManagerRebuildViewportButton");
+            resetMenu = findall(groot, "Tag", ...
+                "ProjectionViewerResetMenuItem");
+            testCase.verifyEqual(string(rebuildMenu.Text), ...
+                "Rebuild viewport");
+            testCase.verifySubstring(string(rebuildButton.Tooltip), ...
+                "preserve scene");
+            testCase.verifyEqual(string(resetMenu.Text), ...
+                "Reset scene and corrections...");
+        end
+
         function testPlaybackRejectsStaleLookaheadAfterCameraChange(testCase)
             app = ProjectionViewerApp( ...
                 ProjectionViewerMotionWorkflowTest.makeTiledScene());
@@ -381,17 +537,26 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             play = ProjectionViewerMotionWorkflowTest.tagged( ...
                 ProjectionViewerMotionWorkflowTest.motionWindow(), ...
                 "ProjectionViewerMotionPlayPauseButton");
-            testCase.press(play);
+            rate = ProjectionViewerMotionWorkflowTest.tagged( ...
+                ProjectionViewerMotionWorkflowTest.motionWindow(), ...
+                "ProjectionViewerMotionRateSpinner");
+            rate.Value = 0.5;
+            play.ButtonPushedFcn(play, struct());
+            playbackTimer = timerfindall("Tag", ...
+                "ProjectionViewerMotionPlaybackTimer");
+            playbackCallback = playbackTimer.TimerFcn;
+            stop(playbackTimer);
+            delete(playbackTimer);
+            viewer.CurrentObject = axesHandle;
+            testCase.assertTrue(app.motionDiagnostics().Playing);
             beforeCameraChange = app.performanceDiagnostics();
 
             for index = 1:12
                 viewer.WindowScrollWheelFcn( ...
                     viewer, struct(VerticalScrollCount=-1));
             end
-            playbackTimer = timerfindall("Tag", ...
-                "ProjectionViewerMotionPlaybackTimer");
-            stop(playbackTimer);
-            playbackTimer.TimerFcn(playbackTimer, struct());
+            viewer.CurrentObject = axesHandle;
+            playbackCallback([], struct());
             drawnow
             afterTick = app.performanceDiagnostics();
 
@@ -403,6 +568,8 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
                 afterTick.Viewer.DesiredLevelIndices(2));
             testCase.verifyGreaterThan( ...
                 afterTick.Viewer.VisibleTileSurfaceCount, 0);
+            testCase.verifyTrue( ...
+                afterTick.Viewer.GraphicsOwnership.IsClean);
             testCase.verifyEqual( ...
                 afterTick.Counters.BlankPreviewTransitions, 0);
         end
@@ -838,6 +1005,30 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
 
         function event = keyEvent(key)
             event = struct(Key=key, Modifier=strings(1, 0));
+        end
+
+        function verifyOwnershipAudit(testCase, app, visibleLayerCount)
+            audit = app.graphicsOwnershipAudit();
+            testCase.verifyTrue(audit.IsClean, ...
+                sprintf("Ownership audit reported %d violations.", ...
+                audit.ViolationCount));
+            testCase.verifyEqual(audit.PreparingCount, 0);
+            testCase.verifyEqual(audit.VisiblePreparingCount, 0);
+            testCase.verifyEqual(audit.VisiblePooledCount, 0);
+            testCase.verifyEqual(nnz(audit.EffectiveLayerVisibility), ...
+                visibleLayerCount);
+            testCase.verifyEqual(nnz(audit.ActiveVisibleByLayer > 0), ...
+                visibleLayerCount);
+            testCase.verifyEqual(audit.ActiveVisibleByLayer > 0, ...
+                audit.EffectiveLayerVisibility);
+        end
+
+        function identifier = rendererFaultId(stage)
+            if stage == "staleBeforeCommit"
+                identifier = "ProjectionViewerApp:staleRendererTransaction";
+            else
+                identifier = "ProjectionViewerApp:injectedRendererFailure";
+            end
         end
 
         function closeFigures()

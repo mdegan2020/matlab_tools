@@ -6,7 +6,7 @@ should not be mistaken for unfinished implementation.
 
 ## Current Baseline
 
-As of July 14, 2026:
+As of July 15, 2026:
 
 - The project directory is `sightline_workbench`; the main application title is
   **Sightline**.
@@ -21,14 +21,17 @@ As of July 14, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 767/767 tests with
+- The latest grouped fresh-class repository suite passes 795/795 tests with
   zero failures and zero incomplete tests.
-- The post-RD-7 Surface Recovery queue is active. SR-0/SR-1 replace repeated
-  global dense-association scans with bounded indexed work, and SR-2/SR-3 add
+- The post-RD-7 Surface Recovery implementation is complete. SR-0/SR-1 replace
+  repeated global dense-association scans with bounded indexed work, and
+  SR-2/SR-3 add
   explicit portable world/display frames, truthful ENU/HAE/world-Z semantics,
   standard 3-D navigation/inspection, and defensive standalone MAT reopening.
-  Transactional tiled-surface ownership, viewport rebuild, grouped regression,
-  and representative private-data confirmation remain in SR-4 through SR-6.
+  SR-4/SR-5 add transactional tiled-surface ownership, exact graphics audit,
+  and presentation-only viewport rebuild. SR-6 privacy-safe automated
+  validation is complete; representative private-data confirmation and the
+  exact template-matcher failure remain external release gates.
 - `docs/real_data_validation_followup_workpack.md` is the completed RD corrective
   queue. RD-2, RD-3, RD-1, and RD-4 are complete: the default network
   path is bounded and observable, active tiled presentations reconcile against the
@@ -121,6 +124,8 @@ As of July 14, 2026:
 | Real-data follow-up RD-7C multi-image Surface Workbench launch | Complete |
 | Real-data follow-up RD-7D through RD-7F measurement/performance path | Complete |
 | Real-data follow-up RD-7G correction actionability | Complete |
+| Post-RD-7 Surface Recovery SR-0 through SR-5 | Complete |
+| Post-RD-7 Surface Recovery SR-6 | Automated validation complete; private/template evidence gated |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -311,16 +316,20 @@ C0-C3 are complete. A7 research is complete; production time-varying
 application remains gated on physical local observability and stability.
 
 The post-RD-7 real-data Surface Workbench and tiled-anaglyph corrective queue is
-active in `docs/real_data_surface_stereo_recovery_workplan.md`. SR-0/SR-1 are
-implemented: dense association now uses deterministic indexed grouping,
+implemented in `docs/real_data_surface_stereo_recovery_workplan.md`. SR-0/SR-1
+are implemented: dense association now uses deterministic indexed grouping,
 path-compressed disjoint sets, component spans, and local view ordinals; it
 publishes bounded substage progress, accepts cooperative cancellation, exposes
 linear work counts, and retains exportable pair failure/partial-run evidence.
 The five-view/ten-pair privacy-safe benchmark measured 0.939 seconds at 250
 records per pair, 1.867 seconds at 500, and 18.808 seconds at 5,000 on the
 14-core MATLAB R2026a development host. The private saved-run inventory and
-original template-matcher message remain external gates. SR-2 through SR-6
-remain in progress.
+original template-matcher message remain external gates. SR-2/SR-3 provide
+truthful portable coordinate frames, standard 3-D interactions, and defensive
+saved-run inspection. SR-4/SR-5 provide transactional renderer ownership,
+direct audit, deterministic failure rollback, and presentation-only viewport
+rebuild. SR-6 privacy-safe grouped validation passes 795/795; the representative
+private scenario remains unclaimed.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
 immutable history, viewer integration, callback safeguards, and legacy
@@ -646,7 +655,7 @@ hardware-gated:
   roadmap; most MATLAB trees and D0 are complete.
 - `docs/real_data_validation_followup_workpack.md` — completed RD corrective
   queue and historical intake point for the July 13 real-data findings.
-- `docs/real_data_surface_stereo_recovery_workplan.md` — proposed post-RD-7
+- `docs/real_data_surface_stereo_recovery_workplan.md` — implemented post-RD-7
   corrective queue for dense association, ECEF/local 3-D review, saved-run
   inspection, tiled anaglyph ownership, and viewport recovery.
 - `docs/matlab_sdk_audit.md` — completed inventory of current public/headless

@@ -1,7 +1,8 @@
 # Real-Data Surface And Stereo Recovery Workplan
 
-Status: active July 15, 2026. The documentation baseline and SR-0 through SR-3
-implementation milestones are complete. SR-4 through SR-6 remain in progress.
+Status: implementation and privacy-safe automated validation complete July 15,
+2026. The private saved-run inventory, representative real-data scenario, and
+exact template-matcher failure intake remain explicit external release gates.
 
 ## Purpose
 
@@ -104,10 +105,10 @@ the catalog, point set, association, pair evidence, fusion result, and
 provenance. SR-3 adds a validated public loader and standalone **Open saved
 run** workflow; the preceding lack of that path was the confirmed gap.
 
-### Tiled anaglyph ownership and recovery
+### Tiled anaglyph ownership and recovery before SR-4/SR-5
 
-Pair View computes an effective two-layer presentation mask and tracked
-surfaces are updated against it. Tiled replacement, however, is not a
+Pair View computed an effective two-layer presentation mask and tracked
+surfaces were updated against it. Before SR-4, tiled replacement was not a
 transaction:
 
 - replacement surfaces can be created or acquired before the prior set is
@@ -486,7 +487,7 @@ one decisions/overrides, malformed/runtime rejection, and headless operation.
 
 ## SR-4 — Transactional Tiled/Anaglyph Surface Ownership
 
-Status: depends on the SR-0 orphan fixture.
+Status: complete July 15, 2026.
 
 ### Ownership model
 
@@ -557,9 +558,35 @@ not only the logical mask or `app.Surfaces` contents.
   view carrying the opposite channel.
 - Surface-pool count stays within its bound and every pooled object is hidden.
 
+### Validation record
+
+Every renderer image surface now carries an owner token, active/preparing/
+pooled state, stable view/layer/tile identity, render/geometry/presentation/
+appearance/anaglyph generations, expected visibility, and channel assignment.
+Tiled replacement prepares hidden handles, validates the complete request,
+publishes one coherent set, and retires the old set only after commit. One-shot
+fault injection covers acquire, pre-commit, post-commit/pre-retire, and stale
+request boundaries. Renderer mutations reject reentrant tile transactions,
+and playback arms its first timer only after bounded lookahead is ready.
+
+The public graphics audit compares all renderer-tagged axes children with the
+active, preparing, and pooled registries. It reports orphans, duplicate
+registry membership and active keys, invalid/stale metadata, missing expected
+tiles, visibility drift, channel conflicts, current pair, and effective mask.
+MATLAB graphics identity is tested with handle `==`; `isequal` is deliberately
+not used because distinct graphics objects with equal properties compare equal
+under that API.
+
+The privacy-safe five-layer tiled fixture traversed adjacent pairs forward,
+backward, and under loop with exactly two effective visible views and a clean
+audit after every transition. All four injected transaction boundaries rolled
+back or retired to a clean frame. The focused SR-4/SR-5 set passed 4/4, and the
+authoritative performance/precision group passed 34/34, including surface-pool
+reuse and stale camera completion.
+
 ## SR-5 — Presentation-Only Rebuild Viewport Recovery
 
-Status: depends on SR-4 ownership metadata and audit.
+Status: complete July 15, 2026.
 
 ### Operator contract
 
@@ -627,9 +654,29 @@ playing to paused.
 - The operator never needs to close the main viewer to recover from graphics
   corruption.
 
+### Validation record
+
+**Rebuild viewport** is available from the image context menu and Layer
+Manager. It pauses playback, cancels camera reconciliation, advances renderer
+generations, removes registered and escaped tagged renderer surfaces, rebuilds
+the exact current presentation, restores camera and overlays, and publishes a
+zero-violation audit summary. It does not use `cla` and does not remove
+crosshair, alignment, stereo-cursor, or selected-footprint overlays.
+
+The corruption fixture combines a visible orphan, visible pool member,
+duplicate active tile key, missing active tile, and conflicting anaglyph
+metadata. Rebuild repairs all violations, preserves exported viewer/scientific
+state exactly, preserves active presentation mode/position and effective
+visibility, leaves playback paused, and is idempotent with identical
+registered topology on the second invocation. The former Reset action is now
+**Reset scene and corrections...** with operator confirmation; its established
+programmatic reset path remains covered separately.
+
 ## SR-6 — Integrated Validation And Delivery
 
-Status: blocked by SR-1 through SR-5.
+Status: privacy-safe automated integration and delivery complete July 15,
+2026; representative private-data execution and exact template-failure intake
+remain external release gates.
 
 ### Integrated scenario
 
@@ -702,7 +749,35 @@ Do not mark this workstream complete until:
 - Pair View cannot accumulate stale/duplicate red/cyan surfaces under the
   transition matrix; and
 - Rebuild viewport recovers injected corruption without changing scientific or
-  session state.
+  session state; and
+- the representative private scenario and saved-run inventory are recorded
+  without committing private data.
+
+### Integrated validation record
+
+The privacy-safe association, ECEF/ENU, saved-run, 3-D interaction, tiled Pair
+View, fault-injection, and viewport-recovery scenarios all pass. Code Analyzer
+reported zero findings on the final SR-4/SR-5 source and test files. The six
+authoritative groups were run in separate fresh-class noninteractive MATLAB
+sessions:
+
+| Group | Passed | Failed | Incomplete |
+| --- | ---: | ---: | ---: |
+| `coreGeometryState` | 147 | 0 | 0 |
+| `alignment` | 188 | 0 | 0 |
+| `backendSurface` | 270 | 0 | 0 |
+| `viewerAlignmentUi` | 77 | 0 | 0 |
+| `viewerPresentationWorkflows` | 79 | 0 | 0 |
+| `viewerPerformancePrecision` | 34 | 0 | 0 |
+| **Total** | **795** | **0** | **0** |
+
+The alignment group used the documented timeout fallback: the network-solver
+file passed 14/14 (including the 478.61-second proxy-bounds test), and the
+remaining alignment files passed 174/174. No private MAT run, imagery,
+coordinate, collection dimension, screenshot, or identifying path was used or
+committed. Consequently this record does not claim the representative private
+scenario, saved-run inventory/checksum, GPU availability on that host, or a
+resolution of the still-unsupplied template-matcher message.
 
 ## Likely Code And Test Touchpoints
 
