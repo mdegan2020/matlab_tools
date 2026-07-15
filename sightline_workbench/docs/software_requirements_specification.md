@@ -342,10 +342,11 @@ preview planes, or object ownership.
 | FR-VIEW-024 | Closing the main viewer shall idempotently stop its runtime work and close every viewer-owned child while leaving independent caller-owned figures unchanged. | Core | T |
 | FR-VIEW-025 | Changing the active layer or pair shall reconcile preview LOD against the current camera even when a valid stale surface exists; refinement shall converge without another camera event or a visibility toggle and shall not transiently erase the last valid representation. | Core | T, A |
 | FR-VIEW-026 | In View All, the selected visible layer shall have a yellow projected-footprint outline rendered above the image stack without changing radiometry or serialized scientific state. A checked runtime context command shall toggle that outline, and Single/Pair modes shall suppress it. | Core | T, D |
-| FR-VIEW-027 | The context-menu stereo cursor shall represent one physical world point `Pplane + z*VN`, project it independently into the active physical stereo pair, and display signed meters relative to the plane. While enabled, Shift+wheel shall adjust Z and Shift+Up/Down shall remain available for Tip; when disabled, established wheel bindings shall remain unchanged. | Core | T, D |
+| FR-VIEW-027 | The context-menu stereo cursor shall represent one physical world point `Pplane + z*VN`, follow the pointer's projection-plane intersection, project independently into the active physical stereo pair, and display signed metres with above/below wording in the bottom-right OPK readout. While enabled, the figure pointer shall use the unobtrusive built-in crosshair, Shift+wheel shall adjust Z, and Shift+Up/Down shall remain available for Tip; disable shall restore the prior pointer and established wheel bindings. | Core | T, D |
 | FR-VIEW-028 | The main viewer figure title shall be `Sightline`. | Core | T, D |
 | FR-VIEW-029 | The viewport context menu shall provide a runtime-only command that inverts desired camera up and resets/reframes the camera without changing plane, source, OPK, image, or backend state. | Core | T, D |
 | FR-VIEW-030 | `ProjectionViewerApp.addImage` shall append a compatible image and `SampleFcn`-backed source geometry to an open viewer, preserve existing layer and camera state, refresh layer/pass/view/pair presentation state, include the new view, and extend Reset. It shall reject invalid size/identity and active correction lifecycles before scene mutation. | Core | T, I |
+| FR-VIEW-031 | When exactly two visible layers use anaglyph mode, the physical red-eye layer shall default to scene alpha 0.50, become the selected layer, and synchronize the Alpha slider on initial presentation and every new pair; the cyan layer shall not receive a hidden global alpha cap. | Core | T, D |
 
 ### 5.3 Pair controls and Alignment Workbench
 
@@ -376,6 +377,7 @@ preview planes, or object ownership.
 | FR-PVIEW-004 | Track camera shall be owned by Pair View in the Layer Manager, shall be optional and runtime-only, and shall be disabled by default. | Approved | T |
 | FR-PVIEW-005 | Manual camera movement shall suspend following for the current pair; subsequent pair navigation shall resume following when enabled. | Approved | T, D |
 | FR-PVIEW-006 | Pair viewpoint shall disable with an explanation when required overlap or geometry is unavailable. | Approved | T, D |
+| FR-PVIEW-007 | After Track camera establishes the first pair viewpoint, pair turnover shall apply the new pair direction/up while preserving the current viewport target and world-space view height; numeric view angle shall be recomputed when pair camera distance changes. | Core | T, D |
 
 ### 5.5 Keyboard and motion-imagery presentation
 
@@ -572,6 +574,7 @@ and stability have not been demonstrated; research CorrectionSets cannot Apply.
 | FR-SWB-015 | Explicit ECEF products shall default to local ENU; unknown frames shall not gain ENU or absolute-height semantics through coordinate-magnitude guessing. | Approved | T, A |
 | FR-SWB-016 | The 3-D viewer shall provide standard rotate, pan, zoom, restore, and data-tip interaction, a visible inspection mode, metric aspect/vertical exaggeration, standard viewpoints, and camera preservation across compatible refreshes. | Approved | T, D |
 | FR-SWB-017 | A graphics-free loader and standalone entry point shall reopen supported run, catalog, and point-set MAT structs without source imagery or callbacks; legacy frame decisions shall be explicit and malformed, runtime, or incompatible catalog values shall fail closed. | Approved | T, I |
+| FR-SWB-018 | Compatible 3-D presentation refreshes shall replace only viewer-owned data/glyph objects and shall retain or reassert standard axes interactions and toolbar state rather than clearing the complete axes. | Core | T, D |
 
 ### 5.13 Uncertainty
 

@@ -184,6 +184,24 @@ surface diagnostically. Low texture, occlusion, repetitive content, weak
 baseline, or an incomplete sparse disparity range can produce holes or unstable
 height. See `docs/dense_surface_feature_pack.md`.
 
+## Pair View interaction continuity
+
+In Layer Manager **Pair View**, select **Red/blue anaglyph** to assign channels
+from physical eye geometry. The red-eye scene layer is selected and set to
+Alpha `0.50`; the main Alpha slider shows the same value. Each newly selected
+pair reapplies that red-eye default.
+
+When **Track camera** is enabled, the first pair is fitted to its shared
+footprint. Later pair changes follow the new sensor-pair orientation while
+retaining the current viewport center and zoom scale. Manual pan/zoom therefore
+provides a stable point of comparison through the sequence.
+
+Enable **Stereo cursor** from the viewport context menu to make the two-eye
+cursor follow the mouse. The ordinary pointer changes to MATLAB's built-in
+crosshair. Shift+wheel changes signed height along projection-plane `VN`; the
+bottom-right OPK readout states the signed metres above or below the projection
+plane. Disable restores the pointer that was active before the cursor.
+
 ## Reproducible validation report
 
 Run the synthetic Pack 8 matrix from the repository root:

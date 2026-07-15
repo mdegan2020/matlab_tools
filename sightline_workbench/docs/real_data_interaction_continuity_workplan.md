@@ -1,6 +1,7 @@
 # Real-Data Interaction Continuity Workplan
 
-Status: implementation in progress July 15, 2026.
+Status: implementation and automated validation complete July 15, 2026;
+representative private-data confirmation remains external.
 
 ## Purpose
 
@@ -169,3 +170,27 @@ crosshair use/restoration, stable height, and runtime-only serialization.
 Exit criterion: all automated gates pass and the pushed main branch contains
 the implementation and documentation.
 
+## Implementation And Validation Record
+
+- IC-1 replaces broad axes clearing with owned-object replacement and
+  reasserted standard navigation. Repeated world-Z/HAE/color, comparison,
+  decimation, inspect, and vertical-exaggeration refreshes preserve compatible
+  camera state and the rotate/data-tip interaction set.
+- IC-2 removes the former global 0.70 anaglyph cap. The physical red-eye scene
+  layer is selected at Alpha 0.50 for initial and subsequent pairs, while
+  tracked pair turnover preserves viewport target and world-space view height.
+- IC-3 installs demand-driven mouse motion for the stereo cursor, appends
+  signed above/below-plane height to the OPK readout, uses MATLAB's built-in
+  crosshair pointer, restores the prior pointer on disable, and safely skips UI
+  refresh during externally initiated figure teardown.
+- MATLAB Code Analyzer reports no issues in the modified source and test files.
+- Focused and complete affected-class validation passed for Surface Workbench,
+  motion presentation, stereo cursor, blend-mode interaction, and external
+  close/delete lifecycle behavior.
+- The six authoritative fresh-class groups passed separately with zero failed
+  and zero incomplete tests: `coreGeometryState` 147, `alignment` 188,
+  `backendSurface` 270, `viewerAlignmentUi` 77,
+  `viewerPresentationWorkflows` 81, and `viewerPerformancePrecision` 34.
+  The repository acceptance total is 797/797.
+- The exact five-image private workflow remains an operator confirmation gate;
+  no private values entered the repository.

@@ -21,7 +21,7 @@ As of July 15, 2026:
 - Backend radiometry defaults to full-source inverse warp. Display pyramids,
   preview tiles, alignment working images, and dense-surface products never
   become backend radiometric inputs.
-- The latest grouped fresh-class repository suite passes 795/795 tests with
+- The latest grouped fresh-class repository suite passes 797/797 tests with
   zero failures and zero incomplete tests.
 - The post-RD-7 Surface Recovery implementation is complete. SR-0/SR-1 replace
   repeated global dense-association scans with bounded indexed work, and
@@ -32,6 +32,12 @@ As of July 15, 2026:
   and presentation-only viewport rebuild. SR-6 privacy-safe automated
   validation is complete; representative private-data confirmation and the
   exact template-matcher failure remain external release gates.
+- The subsequent Interaction Continuity IC-0 through IC-4 correction is
+  complete. Surface Viewer presentation refreshes retain standard navigation;
+  anaglyph pairs select the physical red layer at 0.50 scene alpha; Track
+  camera preserves viewport target and scale across pair changes; and the
+  stereo cursor follows the mouse with a crosshair pointer and signed
+  above/below-plane height in the OPK readout.
 - `docs/real_data_validation_followup_workpack.md` is the completed RD corrective
   queue. RD-2, RD-3, RD-1, and RD-4 are complete: the default network
   path is bounded and observable, active tiled presentations reconcile against the
@@ -126,6 +132,7 @@ As of July 15, 2026:
 | Real-data follow-up RD-7G correction actionability | Complete |
 | Post-RD-7 Surface Recovery SR-0 through SR-5 | Complete |
 | Post-RD-7 Surface Recovery SR-6 | Automated validation complete; private/template evidence gated |
+| Real-data Interaction Continuity IC-0 through IC-4 | Complete; representative private-data confirmation pending |
 
 The alignment system now includes stable match provenance, current-geometry
 overlays, a staged Alignment Workbench, deterministic mask-aware matching,
@@ -166,8 +173,11 @@ RD-4 removes the redundant hidden alignment launcher, makes
 nonmodal Layer Manager with every viewer. The manager owns stable-ID layer
 selection/order, stored individual and bulk visibility, sequence filtering,
 playback, and runtime-only View All, Single View, and overlapping Pair View
-masks. Pair View owns absolute no-drift camera tracking and re-runs physical-eye
-red/cyan assignment after pair turnover. View All draws a clipped yellow
+masks. Pair View fits the initial tracked camera and then preserves the
+operator's viewport target and world-space zoom while adopting each new pair's
+direction. It re-runs physical-eye red/cyan assignment after pair turnover and
+sets/selects the physical red layer at 0.50 scene alpha with a synchronized
+Alpha slider. View All draws a clipped yellow
 selected-footprint outline above the image stack without radiometric rerender;
 the checked viewport command can hide it, and Single/Pair modes suppress it
 automatically. Both Single and Pair modes retain hover or persistent edge
@@ -198,13 +208,17 @@ extends Reset. Addition is rejected while a correction lifecycle is active.
 RD-6 adds checked **Stereo cursor** and **Reposition stereo cursor here**
 viewport commands. A plane anchor and signed `z` define exactly one world point
 `Pplane + z*VN`, which is inverted independently through both stable-ID source
-models and displayed with physical-eye colors. Pair turnover, role swap, layer
-reorder, OPK refresh, pan, zoom, and twist preserve the physical definition.
-The compact overlay reports signed meters and explicit invalid, behind-source,
-and outside-footprint states. Shift+wheel changes Z only while enabled, with
-fine/coarse modifiers and configurable bounds; Shift+Up/Down still controls
-Tip. Cursor state is omitted from Save/Load/backend products and is cleared by
-disable, import, Reset, and viewer deletion. Its acceptance work also replaced
+models and displayed with physical-eye colors. While enabled, its plane anchor
+follows the mouse and its signed height remains independently adjustable. Pair
+turnover, role swap, layer reorder, OPK refresh, pan, zoom, and twist preserve
+that physical definition. The detailed overlay reports signed metres and
+explicit invalid, behind-source, and outside-footprint states; the bottom-right
+OPK readout says how far above or below the projection plane the cursor lies.
+MATLAB's built-in crosshair replaces the arrow until disable restores the prior
+pointer. Shift+wheel changes Z only while enabled, with fine/coarse modifiers
+and configurable bounds; Shift+Up/Down still controls Tip. Cursor state is
+omitted from Save/Load/backend products and is cleared by disable, import,
+Reset, and viewer deletion. Its acceptance work also replaced
 the unreliable UIAxes `InnerPosition` listener with a guarded one-shot
 post-layout graphics event so initial framing uses the resolved viewport.
 
@@ -330,6 +344,17 @@ saved-run inspection. SR-4/SR-5 provide transactional renderer ownership,
 direct audit, deterministic failure rollback, and presentation-only viewport
 rebuild. SR-6 privacy-safe grouped validation passes 795/795; the representative
 private scenario remains unclaimed.
+
+The follow-on interaction-continuity queue is implemented in
+`docs/real_data_interaction_continuity_workplan.md`. IC-1 removes broad axes
+clearing from compatible Surface Viewer refreshes and retains the standard
+interaction/tooling state. IC-2 replaces the old global anaglyph alpha cap with
+a physical-red 0.50 scene alpha/slider contract and preserves target plus
+world-space view height during tracked pair turnover. IC-3 adds demand-driven
+mouse-follow cursor updates, signed OPK height wording, and built-in crosshair
+pointer restoration. IC-4 grouped validation passes 797/797 and is recorded in
+that workplan;
+representative private-data confirmation remains external.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
 immutable history, viewer integration, callback safeguards, and legacy
@@ -658,6 +683,9 @@ hardware-gated:
 - `docs/real_data_surface_stereo_recovery_workplan.md` — implemented post-RD-7
   corrective queue for dense association, ECEF/local 3-D review, saved-run
   inspection, tiled anaglyph ownership, and viewport recovery.
+- `docs/real_data_interaction_continuity_workplan.md` — implemented follow-up
+  for Surface Viewer navigation lifetime, anaglyph alpha/camera continuity,
+  and mouse-follow stereo cursor presentation.
 - `docs/matlab_sdk_audit.md` — completed inventory of current public/headless
   entry points, reuse candidates, and compatibility risks feeding the SDK plan.
 - `docs/viewer_development_plan.md` — architecture, historical viewer/backend

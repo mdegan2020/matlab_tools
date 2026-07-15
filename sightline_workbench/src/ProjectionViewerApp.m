@@ -10759,6 +10759,9 @@ classdef ProjectionViewerApp < handle
         end
 
         function updateViewVectorLabel(app)
+            if isempty(app.ViewVectorLabel) || ~isvalid(app.ViewVectorLabel)
+                return
+            end
             layer = app.Scene.layers(app.SelectedLayerIndex);
             offsetsDegrees = app.layerViewVectorAngularOffsetsDegrees(layer);
             text = sprintf( ...

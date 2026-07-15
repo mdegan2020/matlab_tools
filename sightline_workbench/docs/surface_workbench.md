@@ -91,6 +91,14 @@ world diagnostic coordinates. Color modes distinguish local tangent-plane
 without a declared geoid transform. Covariance is rotated only for display
 glyphs, and vertical exaggeration never changes scientific values.
 
+The 3-D viewer uses MATLAB's standard rotate/data-tip interactions and a
+visible rotate/pan/zoom/restore/data-tip toolbar. Product, comparison, color,
+decimation, inspect, and vertical-exaggeration refreshes replace only
+viewer-owned render objects; they do not clear the axes or discard its
+interaction state. Camera pose is retained across those compatible refreshes.
+Changing the declared display frame may refit the view because its displayed
+coordinates and axis meanings change.
+
 ## Floating applications
 
 The usual operator path is **Alignment Workbench > Surface Workbench...** after
