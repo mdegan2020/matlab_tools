@@ -739,6 +739,70 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
             testCase.verifyEqual(returnedCamera, firstCamera, AbsTol=1e-10);
         end
 
+        function testPairAnaglyphDefaultsRedAlphaAndPreservesViewport(testCase)
+            app = ProjectionViewerApp( ...
+                ProjectionViewerMotionWorkflowTest.makeFourFrameScene());
+            testCase.addTeardown(@() delete(app));
+            viewer = ProjectionViewerMotionWorkflowTest.viewer();
+            axesHandle = findall(viewer, "Type", "axes");
+            window = ProjectionViewerMotionWorkflowTest.motionWindow();
+            layer = ProjectionViewerMotionWorkflowTest.layerDropDown([]);
+            layer.Value = 1;
+            layer.ValueChangedFcn(layer, struct(Value=1));
+            ProjectionViewerMotionWorkflowTest.setMode(window, "pair");
+            track = ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerLayerManagerTrackCameraCheckBox");
+            track.Value = true;
+            track.ValueChangedFcn(track, struct());
+            anaglyph = findall(groot, "Tag", ...
+                "ProjectionViewerAnaglyphBlendMenuItem");
+            anaglyph(1).MenuSelectedFcn(anaglyph(1), struct());
+            initialState = app.exportState();
+            initialAudit = app.graphicsOwnershipAudit();
+            initialRedLayer = find( ...
+                initialAudit.AnaglyphChannelsByLayer == 1 & ...
+                initialAudit.EffectiveLayerVisibility, 1, "first");
+            alphaSlider = ProjectionViewerMotionWorkflowTest.tagged( ...
+                viewer, "ProjectionViewerAlphaSlider");
+
+            camera = initialState.Camera;
+            cameraOffset = camera.Position - camera.Target;
+            axesHandle.CameraTarget = camera.Target + [4 -3 2];
+            axesHandle.CameraPosition = axesHandle.CameraTarget + cameraOffset;
+            axesHandle.CameraViewAngle = 0.6 * camera.ViewAngle;
+            adjustedCamera = app.exportState().Camera;
+            adjustedViewHeight = ...
+                ProjectionViewerMotionWorkflowTest.cameraViewHeight( ...
+                adjustedCamera);
+            next = ProjectionViewerMotionWorkflowTest.tagged( ...
+                window, "ProjectionViewerMotionNextButton");
+            testCase.press(next);
+            nextState = app.exportState();
+            nextAudit = app.graphicsOwnershipAudit();
+            nextRedLayer = find( ...
+                nextAudit.AnaglyphChannelsByLayer == 1 & ...
+                nextAudit.EffectiveLayerVisibility, 1, "first");
+            nextViewHeight = ...
+                ProjectionViewerMotionWorkflowTest.cameraViewHeight( ...
+                nextState.Camera);
+
+            testCase.verifyEqual(initialState.SelectedLayerIndex, ...
+                initialRedLayer);
+            testCase.verifyEqual( ...
+                initialState.Layers(initialRedLayer).Alpha, 0.5, ...
+                AbsTol=1e-12);
+            testCase.verifyEqual(nextState.SelectedLayerIndex, nextRedLayer);
+            testCase.verifyEqual(nextState.Layers(nextRedLayer).Alpha, 0.5, ...
+                AbsTol=1e-12);
+            testCase.verifyEqual(alphaSlider.Value, 0.5, AbsTol=1e-12);
+            testCase.verifyEqual(nextState.Camera.Target, ...
+                adjustedCamera.Target, AbsTol=1e-10);
+            testCase.verifyEqual(nextViewHeight, adjustedViewHeight, ...
+                RelTol=1e-10);
+            testCase.verifyNotEqual(nextState.Camera.Position, ...
+                adjustedCamera.Position);
+        end
+
         function testLayerReorderRebuildsConsecutiveStackPairs(testCase)
             app = ProjectionViewerApp( ...
                 ProjectionViewerMotionWorkflowTest.makeFourFrameScene());
@@ -1005,6 +1069,11 @@ classdef ProjectionViewerMotionWorkflowTest < matlab.uitest.TestCase
 
         function event = keyEvent(key)
             event = struct(Key=key, Modifier=strings(1, 0));
+        end
+
+        function height = cameraViewHeight(camera)
+            distance = norm(camera.Position - camera.Target);
+            height = 2 * distance * tan(deg2rad(camera.ViewAngle) / 2);
         end
 
         function verifyOwnershipAudit(testCase, app, visibleLayerCount)

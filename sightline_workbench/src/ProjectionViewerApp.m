@@ -91,7 +91,7 @@ classdef ProjectionViewerApp < handle
         InteractivePreviewMaxTileMeshVertices double = 17
         PreviewLayerDepthStepFraction double = 1e-4
         PreviewLayerDepthMinimumStepMeters double = 0.5
-        AnaglyphPreviewFaceAlpha double = 0.70
+        AnaglyphRedEyeDefaultAlpha double = 0.50
         AnaglyphChannelGain double = 1.25
         AnaglyphOffChannelFloor double = 0.08
         AnaglyphStereoExaggeration double = 1
@@ -1450,7 +1450,8 @@ classdef ProjectionViewerApp < handle
             app.AlphaLabel = uilabel(app.ControlGrid, Text="Alpha 1.00");
             app.AlphaLabel.Layout.Row = 1;
             app.AlphaLabel.Layout.Column = 4;
-            app.AlphaSlider = uislider(app.ControlGrid, Limits=[0 1], Value=1);
+            app.AlphaSlider = uislider(app.ControlGrid, Limits=[0 1], Value=1, ...
+                Tag="ProjectionViewerAlphaSlider");
             app.AlphaSlider.Layout.Row = 2;
             app.AlphaSlider.Layout.Column = 4;
             app.AlphaSlider.MajorTicks = 0:0.25:1;
@@ -2390,14 +2391,19 @@ classdef ProjectionViewerApp < handle
             end
             app.PairViewpointRuntime = runtime;
             if pairChanged && runtime.FollowEnabled
-                app.applyActivePairViewpoint(false);
+                app.applyActivePairViewpoint(false, true);
             end
         end
 
-        function applyActivePairViewpoint(app, captureRestore)
+        function applyActivePairViewpoint(app, captureRestore, preserveViewport)
             if nargin < 2
                 captureRestore = true;
             end
+            if nargin < 3
+                preserveViewport = false;
+            end
+            currentCamera = app.exportCameraState();
+            [~, currentViewHeight] = app.cameraViewWorldSize();
             plan = app.activePairViewpointPlan();
             runtime = app.PairViewpointRuntime;
             runtime.LastPlan = plan;
@@ -2420,6 +2426,21 @@ classdef ProjectionViewerApp < handle
                 Target=(plan.Camera.TargetWorld - app.Scene.renderOrigin).', ...
                 UpVector=app.cameraUpOverride(plan.Camera.UpVector).', ...
                 ViewAngle=plan.Camera.ViewAngle, Projection="orthographic");
+            if preserveViewport
+                pairOffset = plan.Camera.PositionWorld - ...
+                    plan.Camera.TargetWorld;
+                pairDistance = norm(pairOffset);
+                if isfinite(pairDistance) && pairDistance > eps && ...
+                        isfinite(currentViewHeight) && currentViewHeight > 0
+                    cameraState.Target = currentCamera.Target;
+                    cameraState.Position = currentCamera.Target + pairOffset.';
+                    cameraState.ViewAngle = rad2deg(2 * atan( ...
+                        currentViewHeight / (2 * pairDistance)));
+                    cameraState.ViewAngle = min(max( ...
+                        cameraState.ViewAngle, app.MinCameraViewAngle), ...
+                        app.MaxCameraViewAngle);
+                end
+            end
             app.applyCameraState(cameraState);
             runtime.LastAppliedPairId = plan.PairId;
             runtime.SuspendedPairId = "";
@@ -2427,6 +2448,10 @@ classdef ProjectionViewerApp < handle
             app.PairViewpointRuntime = runtime;
             drawnow limitrate
             app.scheduleCameraReconciliation();
+            app.applyAnaglyphRedEyeDefault();
+            if app.visibleAnaglyphLayerCount() == 2
+                app.updateAllSurfaceBlendAppearance();
+            end
             app.refreshAlignmentPairViewpointControls(false);
         end
 
@@ -5997,6 +6022,7 @@ classdef ProjectionViewerApp < handle
             if runtime.Active && runtime.Mode == "pair" && ...
                     runtime.TrackCamera
                 app.applyActivePairViewpoint(false);
+                app.updateControlsFromSelectedLayer();
             end
             app.refreshMotionStatus();
         end
@@ -6368,10 +6394,17 @@ classdef ProjectionViewerApp < handle
                         frames(1).ViewId, frames(2).ViewId);
                     app.refreshAlignmentActivePairControls();
                     if app.MotionRuntime.TrackCamera
-                        app.applyActivePairViewpoint(false);
+                        runtime = app.PairViewpointRuntime;
+                        pair = app.AlignmentPairController.currentPair();
+                        preserveViewport = ...
+                            strlength(runtime.LastAppliedPairId) > 0 && ...
+                            runtime.LastAppliedPairId ~= string(pair.PairId);
+                        app.applyActivePairViewpoint( ...
+                            false, preserveViewport);
                     end
                 end
                 app.reconcileTiledPresentationLayers(layerIndices);
+                app.applyAnaglyphRedEyeDefault();
                 app.updateAllSurfaceBlendAppearance();
             catch exception
                 runtime = app.MotionRuntime;
@@ -10369,15 +10402,40 @@ classdef ProjectionViewerApp < handle
                 app.AnaglyphOffChannelFloor);
         end
 
-        function alpha = previewFaceAlphaForLayer(app, alpha, layerIndex)
-            layer = app.Scene.layers(layerIndex);
-            if app.MotionRuntime.Active && app.MotionRuntime.Mode == "single"
+        function alpha = previewFaceAlphaForLayer(~, alpha, ~)
+        end
+
+        function applied = applyAnaglyphRedEyeDefault(app)
+            applied = false;
+            anaglyphLayers = app.visibleAnaglyphLayerIndices();
+            if numel(anaglyphLayers) ~= 2
                 return
             end
-            if lower(string(layer.BlendMode)) == "redblueanaglyph" && ...
-                    app.visibleAnaglyphLayerCount() > 1
-                alpha = min(alpha, app.AnaglyphPreviewFaceAlpha);
+            assignment = app.activeStereoEyeAssignment();
+            if ~isfield(assignment, "RedViewId") || ...
+                    strlength(string(assignment.RedViewId)) == 0
+                return
             end
+            try
+                redLayerIndex = ProjectionViewMetadata.indexForId( ...
+                    app.Scene, assignment.RedViewId);
+            catch
+                return
+            end
+            if ~ismember(redLayerIndex, anaglyphLayers)
+                return
+            end
+            layer = app.Scene.layers(redLayerIndex);
+            layer.Alpha = app.AnaglyphRedEyeDefaultAlpha;
+            app.Scene.layers(redLayerIndex) = layer;
+            app.SelectedLayerIndex = redLayerIndex;
+            app.setLayerSurfaceAlpha(redLayerIndex, layer.Alpha);
+            app.RenderedLayerAlphas(redLayerIndex) = layer.Alpha;
+            app.PendingAlphaMask(redLayerIndex) = false;
+            app.AlphaSlider.Value = layer.Alpha;
+            app.updateAlphaLabel(layer.Alpha);
+            app.Surface = app.primarySurfaceForLayer(redLayerIndex);
+            applied = true;
         end
 
         function tf = previewSurfaceIsVisible(~, isVisible, alpha)
@@ -10883,10 +10941,12 @@ classdef ProjectionViewerApp < handle
                 layer.BlendMode = string(blendMode);
                 app.Scene.layers(layerIndex) = layer;
             end
+            app.applyAnaglyphRedEyeDefault();
             app.updateAllSurfaceBlendAppearance();
             app.applyAnaglyphPresentationOffsetDelta( ...
                 oldPresentationOffsets);
             app.updateBlendMenuChecks();
+            app.updateControlsFromSelectedLayer();
         end
 
         function adjustAnaglyphStereoExaggeration(app, direction)
