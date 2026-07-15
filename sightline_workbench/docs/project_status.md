@@ -23,8 +23,8 @@ As of July 14, 2026:
   become backend radiometric inputs.
 - The latest grouped fresh-class repository suite passes 767/767 tests with
   zero failures and zero incomplete tests.
-- `docs/real_data_validation_followup_workpack.md` is the active top-priority
-  corrective queue. RD-2, RD-3, RD-1, and RD-4 are complete: the default network
+- `docs/real_data_validation_followup_workpack.md` is the completed RD corrective
+  queue. RD-2, RD-3, RD-1, and RD-4 are complete: the default network
   path is bounded and observable, active tiled presentations reconcile against the
   current camera before display, playback lookahead rejects stale requests,
   the main viewer owns one idempotent child/timer shutdown path, and implicit
@@ -303,6 +303,13 @@ native foundation is complete on macOS; D2 geometry and two-image procedural
 parity is the next independent CPU stage in the explicit dependency order.
 C0-C3 are complete. A7 research is complete; production time-varying
 application remains gated on physical local observability and stability.
+
+The first post-RD-7 real-data Surface Workbench and tiled-anaglyph findings are
+captured in `docs/real_data_surface_stereo_recovery_workplan.md`. That proposed
+corrective queue covers association scaling/progress/cancellation, truthful
+ECEF-to-local surface presentation, normal 3-D interaction, saved-MAT run
+inspection, transactional renderer ownership, and a presentation-only Rebuild
+viewport recovery. No implementation is yet claimed.
 
 S2 is complete. Its mandatory entry hardening, atomic application/reversion,
 immutable history, viewer integration, callback safeguards, and legacy
@@ -626,8 +633,11 @@ hardware-gated:
   multi-image viewer/alignment, MATLAB SDK, dense reconstruction, uncertainty,
   DEM registration, precision, mathematical-specification, CUDA, and C++
   roadmap; most MATLAB trees and D0 are complete.
-- `docs/real_data_validation_followup_workpack.md` — active top-priority
-  corrective queue and intake point for the current real-data findings.
+- `docs/real_data_validation_followup_workpack.md` — completed RD corrective
+  queue and historical intake point for the July 13 real-data findings.
+- `docs/real_data_surface_stereo_recovery_workplan.md` — proposed post-RD-7
+  corrective queue for dense association, ECEF/local 3-D review, saved-run
+  inspection, tiled anaglyph ownership, and viewport recovery.
 - `docs/matlab_sdk_audit.md` — completed inventory of current public/headless
   entry points, reuse candidates, and compatibility risks feeding the SDK plan.
 - `docs/viewer_development_plan.md` — architecture, historical viewer/backend
