@@ -6,6 +6,7 @@ classdef ProjectionSurface3DViewer < handle
         UIFigure matlab.ui.Figure
         GridLayout matlab.ui.container.GridLayout
         Axes matlab.ui.control.UIAxes
+        AxesToolbar
         ProductDropDown matlab.ui.control.DropDown
         ComparisonDropDown matlab.ui.control.DropDown
         ColorDropDown matlab.ui.control.DropDown
@@ -283,11 +284,7 @@ classdef ProjectionSurface3DViewer < handle
                 Tag="ProjectionSurface3DAxes");
             app.Axes.Layout.Row = 2;
             app.Axes.Layout.Column = [1 2];
-            app.Axes.Interactions = [rotateInteraction dataTipInteraction];
-            toolbar = axtoolbar(app.Axes, ...
-                {"rotate", "pan", "zoomin", "zoomout", ...
-                "restoreview", "datacursor"});
-            toolbar.Visible = "on";
+            app.configureAxesNavigation();
             grid(app.Axes, "on");
             view(app.Axes, 3);
 
@@ -329,7 +326,7 @@ classdef ProjectionSurface3DViewer < handle
             app.PrimaryHandles = gobjects(0);
             app.ComparisonHandles = gobjects(0);
             app.GlyphHandles = gobjects(0);
-            cla(app.Axes);
+            app.configureAxesNavigation();
             hold(app.Axes, "on");
             app.PrimaryHandles = app.renderPayload(app.CurrentPayload, false);
             if strlength(state.ComparisonProductId) > 0 && ...
@@ -364,6 +361,16 @@ classdef ProjectionSurface3DViewer < handle
                 app.CurrentPayload.DisplayPointCount, ...
                 app.CurrentPayload.FullPointCount, ...
                 app.CurrentPayload.Representation, state.DisplayFrame, colorStatus);
+        end
+
+        function configureAxesNavigation(app)
+            app.Axes.Interactions = [rotateInteraction dataTipInteraction];
+            if isempty(app.AxesToolbar) || ~isvalid(app.AxesToolbar)
+                app.AxesToolbar = axtoolbar(app.Axes, ...
+                    {"rotate", "pan", "zoomin", "zoomout", ...
+                    "restoreview", "datacursor"});
+            end
+            app.AxesToolbar.Visible = "on";
         end
 
         function handles = renderPayload(app, payload, comparison)

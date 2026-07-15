@@ -209,12 +209,24 @@ classdef ProjectionSurfaceWorkbenchWorkflowTest < matlab.unittest.TestCase
             expected = viewer.cameraState();
             testCase.verifyEmpty(initialObject.ButtonDownFcn);
 
+            viewer.setColorMode("worldZ");
+            viewer.setColorMode("HAE");
             viewer.setColorMode("uncertainty");
             viewer.setDecimationLimit(4);
             viewer.setComparison("raw-pairwise");
+            viewer.setColorMode("HAE");
             preserved = viewer.cameraState();
+            interactionTypes = string(arrayfun(@class, ...
+                axesHandle.Interactions, UniformOutput=false));
 
-            testCase.verifyGreaterThanOrEqual(expected.InteractionCount, 2);
+            testCase.verifyEqual(expected.InteractionCount, 2);
+            testCase.verifyEqual(preserved.InteractionCount, 2);
+            testCase.verifyTrue(any(contains( ...
+                interactionTypes, "RotateInteraction", IgnoreCase=true)));
+            testCase.verifyTrue(any(contains( ...
+                interactionTypes, "DataTipInteraction", IgnoreCase=true)));
+            testCase.verifyEqual(axesHandle.Toolbar.Visible, ...
+                matlab.lang.OnOffSwitchState.on);
             testCase.verifyEqual(preserved.Position, expected.Position, ...
                 AbsTol=1e-12);
             testCase.verifyEqual(preserved.Target, expected.Target, ...
