@@ -1,0 +1,273 @@
+function report = runPhaseATransportMatrix(options)
+%RUNPHASEATRANSPORTMATRIX Compare T0--T4 on controlled pinhole scenes.
+%
+% The matrix includes convergence, high-obliquity, camera-roll, slanted-plane,
+% and discontinuous-step controls. Slanted T4 receives analytic image slope;
+% real-data slope search remains deferred. Traceability: algo/main.tex
+% Secs. 6.2-6.5, Eqs. (63), (79)-(85), and Stage 2 in Sec. 14.3.
+
+arguments
+    options.Display (1, 1) logical = true
+end
+
+root = fileparts(fileparts(mfilename("fullpath")));
+oldPath = path;
+addpath(fullfile(root, "src"));
+cleanup = onCleanup(@() path(oldPath));
+
+names = ["horizontal-c0p5", "horizontal-c1", "horizontal-c3", ...
+    "horizontal-c5", "oblique75-c1", "oblique75-c5", ...
+    "moving-roll2", "along10", "along25", "along40", ...
+    "cross10", "cross25", "cross40"];
+obliquity = [55, 55, 55, 55, 75, 75, 55, 55, 55, 55, 55, 55, 55];
+convergence = [0.5, 1, 3, 5, 1, 5, 1, 1, 1, 1, 1, 1, 1];
+movingRoll = [0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0];
+alongSlope = [0, 0, 0, 0, 0, 0, 0, 10, 25, 40, 0, 0, 0];
+crossSlope = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 25, 40];
+
+cases = repmat(emptyTransportCase, numel(names) + 3, 1);
+for k = 1:numel(names)
+    renderer = SyntheticPinholeRenderer( ...
+        names(k), [96, 112], Supersample=2, PsfSigmaPixels=0.5, ...
+        TextureSeed=23, MeanObliquityDegrees=obliquity(k), ...
+        ConvergenceDegrees=convergence(k), ...
+        MovingRollDegrees=movingRoll(k), ...
+        AlongTrackSlopeDegrees=alongSlope(k), ...
+        CrossTrackSlopeDegrees=crossSlope(k));
+    p = [(renderer.ImageSize(2) + 1) / 2, ...
+        (renderer.ImageSize(1) + 1) / 2];
+    [z, slope, ~, valid] = PinholePlaneOracle.surfaceHeight( ...
+        renderer.ReferenceCamera, p, renderer.TrueHeightMetres, ...
+        renderer.SurfaceSlopeENU);
+    cases(k) = evaluateTransportCase( ...
+        names(k), "plane", renderer, p, z, slope, valid);
+end
+
+step = SyntheticPinholeRenderer( ...
+    "step50", [96, 112], SurfaceType="step", StepHeightMetres=50, ...
+    StepDirection="cross-track", Supersample=2, PsfSigmaPixels=0.5, ...
+    TextureSeed=29);
+[pl, zl, ph, zh] = stepSamples(step);
+wall = SyntheticPinholeRenderer( ...
+    "step50-wall", [96, 112], SurfaceType="step", StepHeightMetres=50, ...
+    StepDirection="along-track", Supersample=2, PsfSigmaPixels=0.5, ...
+    TextureSeed=29);
+pi = invalidStepSample(wall);
+n0 = numel(names);
+cases(n0 + 1) = evaluateTransportCase( ...
+    "step-low", "step", step, pl, zl, [0, 0], true);
+cases(n0 + 2) = evaluateTransportCase( ...
+    "step-high", "step", step, ph, zh, [0, 0], true);
+cases(n0 + 3) = evaluateTransportCase( ...
+    "step-wall-invalid", "step-invalid", wall, pi, NaN, [0, 0], false);
+
+channels = ["Spin2T0", "Spin2T1", "Spin2T2", "Spin2T3", "Spin2T4"];
+n = numel(cases);
+nc = numel(channels);
+error = nan(n, nc);
+rank = nan(n, nc);
+trueCost = nan(n, nc);
+curvature = nan(n, nc);
+validFraction = zeros(n, nc);
+for i = 1:n
+    for j = 1:nc
+        if cases(i).TruthValid
+            q = cases(i).Metrics.(channels(j));
+            error(i, j) = q.SelectedHeightErrorMetres;
+            rank(i, j) = q.TruthLabelRank;
+            trueCost(i, j) = q.CostAtTruthLabel;
+            curvature(i, j) = q.SelectedCurvaturePerMetreSquared;
+        end
+        validFraction(i, j) = mean( ...
+            cases(i).CostCurve.Valid.(channels(j)));
+    end
+end
+
+results = table(string({cases.Name}).', string({cases.SurfaceType}).', ...
+    [cases.TruthValid].', [cases.TruthHeightMetres].', ...
+    [cases.ObservabilityPixelsPerMetre].', [cases.BeltramiMagnitude].', ...
+    [cases.Dilation].', [cases.JacobianVariation].', ...
+    [cases.RenderSeconds].', [cases.CostSeconds].', ...
+    VariableNames=["Name", "SurfaceType", "TruthValid", ...
+    "TruthHeightMetres", "ObservabilityPixelsPerMetre", ...
+    "BeltramiMagnitude", "Dilation", "JacobianVariation", ...
+    "RenderSeconds", "CostSeconds"]);
+report = struct( ...
+    "Results", results, ...
+    "ChannelNames", channels, ...
+    "Cases", cases, ...
+    "SelectedHeightErrorMetres", error, ...
+    "TruthLabelRank", rank, ...
+    "CostAtTruthLabel", trueCost, ...
+    "SelectedCurvaturePerMetreSquared", curvature, ...
+    "ValidLabelFraction", validFraction, ...
+    "TotalSeconds", sum([cases.RenderSeconds]) + sum([cases.CostSeconds]));
+
+fprintf("Phase A T0--T4 transport matrix: %d cases\n", n);
+fprintf("  Sample values are [selected error m / truth rank]:\n");
+fprintf("  %-20s", "case");
+fprintf(" %17s", channels);
+fprintf("\n");
+for i = 1:n
+    fprintf("  %-20s", cases(i).Name);
+    for j = 1:nc
+        fprintf(" %8.2f/%-7.0f", error(i, j), rank(i, j));
+    end
+    fprintf("\n");
+end
+fprintf("  Step-wall valid-label fractions:");
+fprintf(" %.3f", validFraction(end, :));
+fprintf("\n");
+fprintf("  Runtime: %.3f s\n", report.TotalSeconds);
+
+if options.Display
+    showTransportCurves(report);
+end
+
+clear cleanup
+end
+
+function c = evaluateTransportCase(name, surfaceType, renderer, p, zt, ...
+        slope, truthValid)
+pairTimer = tic;
+pair = renderer.renderPair;
+renderSeconds = toc(pairTimer);
+geom = HeightSweepGeometry( ...
+    renderer.ReferenceCamera, renderer.MovingCamera);
+levels = 2 ^ renderer.BitDepth - 1;
+curve = HeightCostCurve(geom, ...
+    double(pair.ReferenceImage) ./ levels, ...
+    double(pair.MovingImage) ./ levels, ...
+    DerivativeSigma=1, IntegrationSigma=2, ...
+    ReferenceValid=pair.ReferenceValid, MovingValid=pair.MovingValid);
+
+if truthValid
+    [~, kappa, valid] = PinholePlaneOracle.heightDerivative( ...
+        renderer.ReferenceCamera, renderer.MovingCamera, p, zt);
+    labelStep = renderer.TargetMotionPerLabelPixels ./ kappa;
+    nr = floor(28 ./ labelStep);
+    z = zt + (-nr:nr) .* labelStep;
+    [a, va] = geom.warpJacobian(p, zt, DeltaPixel=0.25);
+    [~, ~, ~, mu, dil, vw] = HeightSweepGeometry.toWirtinger(a);
+    variation = transportJacobianVariation(geom, p, zt, ...
+        curve.Reference.IntegrationRadius);
+    truthValid = truthValid & valid & va & vw;
+else
+    kappa = NaN;
+    mu = NaN;
+    dil = NaN;
+    variation = NaN;
+    z = -28:3.5:28;
+end
+
+costTimer = tic;
+cost = curve.evaluate(p, z, MinimumSupportFraction=0.95, ...
+    SurfaceSlope=slope);
+costSeconds = toc(costTimer);
+if truthValid
+    metrics = HeightCostMetrics.analyze(cost, zt);
+else
+    metrics = struct;
+end
+c = struct( ...
+    "Name", name, "SurfaceType", surfaceType, ...
+    "SamplePixel", p, "TruthHeightMetres", zt, ...
+    "TruthValid", truthValid, ...
+    "SurfaceSlopeMetresPerPixel", slope, ...
+    "ObservabilityPixelsPerMetre", kappa, ...
+    "BeltramiMagnitude", abs(mu), "Dilation", dil, ...
+    "JacobianVariation", variation, ...
+    "ReferenceImage", pair.ReferenceImage, ...
+    "MovingImage", pair.MovingImage, ...
+    "ReferenceValid", pair.ReferenceValid, ...
+    "MovingValid", pair.MovingValid, ...
+    "HeightLabelsMetres", z, "CostCurve", cost, "Metrics", metrics, ...
+    "RenderSeconds", renderSeconds, "CostSeconds", costSeconds);
+end
+
+function variation = transportJacobianVariation(geom, p, z, radius)
+[ox, oy] = meshgrid(-radius:radius);
+pp = p + [ox(:), oy(:)];
+[a, valid] = geom.warpJacobian(pp, z, DeltaPixel=0.25);
+ac = a(ceil(size(a, 1) / 2), :, :);
+d = a - ac;
+d = reshape(d, size(d, 1), []);
+variation = max(vecnorm(d(valid, :), 2, 2), [], "omitmissing");
+end
+
+function [pl, zl, ph, zh] = stepSamples(renderer)
+pair = renderer.renderPair;
+[x, y] = meshgrid(1:renderer.ImageSize(2), 1:renderer.ImageSize(1));
+p = [x(:), y(:)];
+[~, z, valid] = PinholeStepOracle.intersect( ...
+    renderer.ReferenceCamera, p, renderer.TrueHeightMetres, ...
+    renderer.StepHeightMetres, renderer.StepDirectionENU, ...
+    renderer.StepPositionMetres);
+[w, ~, inside, visible] = PinholeStepOracle.correspondence( ...
+    renderer.ReferenceCamera, renderer.MovingCamera, p, ...
+    renderer.TrueHeightMetres, renderer.StepHeightMetres, ...
+    renderer.StepDirectionENU, PositionMetres=renderer.StepPositionMetres);
+margin = 9;
+k = ones(2 * margin + 1);
+safeR = conv2(double(pair.ReferenceValid), k, "same") == numel(k);
+safeM = conv2(double(pair.MovingValid), k, "same") == numel(k);
+safeMoving = interp2(double(safeM), w(:, 1), w(:, 2), "linear", 0) ...
+    >= 1 - 64 * eps;
+safe = valid & inside & visible & safeR(:) & safeMoving;
+center = [(renderer.ImageSize(2) + 1) / 2, ...
+    (renderer.ImageSize(1) + 1) / 2];
+low = safe & z == renderer.TrueHeightMetres;
+high = safe & z == renderer.TrueHeightMetres + renderer.StepHeightMetres;
+pl = closestPoint(p(low, :), center);
+ph = closestPoint(p(high, :), center);
+zl = renderer.TrueHeightMetres;
+zh = renderer.TrueHeightMetres + renderer.StepHeightMetres;
+end
+
+function pi = invalidStepSample(renderer)
+pair = renderer.renderPair;
+[x, y] = meshgrid(1:renderer.ImageSize(2), 1:renderer.ImageSize(1));
+p = [x(:), y(:)];
+center = [(renderer.ImageSize(2) + 1) / 2, ...
+    (renderer.ImageSize(1) + 1) / 2];
+pi = closestPoint(p(~pair.ReferenceValid(:), :), center);
+end
+
+function p = closestPoint(points, target)
+[~, k] = min(vecnorm(points - target, 2, 2));
+p = points(k, :);
+end
+
+function c = emptyTransportCase
+c = struct( ...
+    "Name", "", "SurfaceType", "", "SamplePixel", [NaN, NaN], ...
+    "TruthHeightMetres", NaN, "TruthValid", false, ...
+    "SurfaceSlopeMetresPerPixel", [0, 0], ...
+    "ObservabilityPixelsPerMetre", NaN, ...
+    "BeltramiMagnitude", NaN, "Dilation", NaN, ...
+    "JacobianVariation", NaN, ...
+    "ReferenceImage", uint16.empty, "MovingImage", uint16.empty, ...
+    "ReferenceValid", logical.empty, "MovingValid", logical.empty, ...
+    "HeightLabelsMetres", double.empty, "CostCurve", struct, ...
+    "Metrics", struct, "RenderSeconds", NaN, "CostSeconds", NaN);
+end
+
+function showTransportCurves(report)
+figure(Name="Phase A T0--T4 transport ablation");
+tiledlayout(4, 4);
+for i = 1:numel(report.Cases)
+    nexttile;
+    hold on;
+    for j = 1:numel(report.ChannelNames)
+        name = report.ChannelNames(j);
+        plot(report.Cases(i).HeightLabelsMetres, ...
+            report.Cases(i).CostCurve.Costs.(name), LineWidth=1);
+    end
+    if report.Cases(i).TruthValid
+        xline(report.Cases(i).TruthHeightMetres, "--k", "Truth");
+    end
+    grid on;
+    title(report.Cases(i).Name);
+end
+legend(report.ChannelNames, Location="eastoutside");
+end

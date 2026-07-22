@@ -1,0 +1,218 @@
+classdef Rpc00bHeightHarnessTest < matlab.unittest.TestCase
+    %RPC00BHEIGHTHARNESSTEST Public normal-label RPC00B smoke tests.
+
+    properties (SetAccess = private)
+        TemporaryFolder (1, 1) string
+        ReferenceFile (1, 1) string
+        MovingFile (1, 1) string
+        ReferenceTre (1, 1) struct
+        MovingTre (1, 1) struct
+        ReferenceMask (:, :) logical
+        MovingMask (:, :) logical
+    end
+
+    methods (TestClassSetup)
+        function addProjectFolders(testCase)
+            root = fileparts(fileparts(mfilename("fullpath")));
+            testCase.applyFixture(matlab.unittest.fixtures.PathFixture( ...
+                fullfile(root, "src")));
+            testCase.applyFixture(matlab.unittest.fixtures.PathFixture( ...
+                fullfile(root, "examples")));
+        end
+    end
+
+    methods (TestMethodSetup)
+        function createSyntheticRpcRasters(testCase)
+            fixture = matlab.unittest.fixtures.TemporaryFolderFixture;
+            testCase.applyFixture(fixture);
+            testCase.TemporaryFolder = string(fixture.Folder);
+            data = makeSyntheticRpcPair(testCase.TemporaryFolder);
+            testCase.ReferenceFile = data.ReferenceFile;
+            testCase.MovingFile = data.MovingFile;
+            testCase.ReferenceTre = data.ReferenceTre;
+            testCase.MovingTre = data.MovingTre;
+            testCase.ReferenceMask = data.ReferenceMask;
+            testCase.MovingMask = data.MovingMask;
+        end
+    end
+
+    methods (Test)
+        function testHeadlessHarnessReturnsSeparatedProducts(testCase)
+            report = runHarness(testCase, false, false);
+
+            testCase.verifyEqual(report.Input.ReferenceNativeSize, [40, 48]);
+            testCase.verifyEqual(report.Input.MovingNativeSize, [44, 54]);
+            testCase.verifyEqual(report.Input.ReferenceProcessedSize, [20, 24]);
+            testCase.verifyEqual(report.Input.MovingProcessedSize, [22, 27]);
+            testCase.verifyEqual(report.Settings.HeightRangeHAEMetres, ...
+                [900, 1000, 1100]);
+            testCase.verifyEqual(report.Settings.HeightLabelsHAEMetres, ...
+                900:25:1100, AbsTol=1e-12);
+            testCase.verifyEqual(report.LabelPolicy.LabelCount, 9);
+            testCase.verifyEqual(report.LabelPolicy.ExpectedLabelIndex, 5);
+            testCase.verifyLessThanOrEqual( ...
+                report.LabelPolicy.MaximumAdjacentMedianProjectedMotionPixels, ...
+                report.Settings.TargetProjectedMotionPixels);
+            testCase.verifyEqual(report.Settings.ElevationDatum, ...
+                "WGS84 ellipsoid HAE metres");
+            testCase.verifyEqual(report.RawZncc.WorldFrame, ...
+                "WGS84 longitude/latitude degrees and HAE metres");
+            testCase.verifyEqual(report.RawZncc.ElevationDatum, ...
+                "WGS84 ellipsoid HAE metres");
+            testCase.verifyTrue(any(report.RawZncc.Valid, "all"));
+            testCase.verifyTrue(any(report.FrozenSgm.Valid, "all"));
+            testCase.verifyGreaterThan( ...
+                report.LabelDiagnostics.SelectionFractions.RawZnccFraction(5), ...
+                0.5);
+            testCase.verifySize( ...
+                report.LabelDiagnostics.SelectionFractions, [9, 6]);
+            testCase.verifySize(report.CostCurves.Zncc, ...
+                [size(report.CostCurves.ReferencePixelXY, 1), 9]);
+            testCase.verifySize(report.RawZncc.CostVolume, [20, 24, 0]);
+            testCase.verifyFalse(isfield(report.FrozenSgm, "RawCost"));
+            testCase.verifyTrue(report.SummaryIsRedactionSafe);
+            testCase.verifyFalse(report.Summary.ContainsTrePayloadOrCoefficients);
+            testCase.verifyFalse(report.Summary.ContainsGeographicCoordinates);
+            testCase.verifyFalse(report.Summary.ContainsRasterPixels);
+            testCase.verifyNotEmpty(jsonencode(report.Summary));
+            testCase.verifyEmpty(fieldnames(report.Figures));
+            testCase.verifyLessThan( ...
+                max(report.Geometry.PerHeight.MaximumInverseResidualPixels), ...
+                1e-7);
+        end
+
+        function testThreadedAndSerialHarnessesAgree(testCase)
+            serial = runHarness(testCase, false, false);
+            threaded = runHarness(testCase, true, false);
+
+            testCase.verifyEqual(threaded.RawZncc.Valid, serial.RawZncc.Valid);
+            testCase.verifyEqual(threaded.RawZncc.LabelIndex, ...
+                serial.RawZncc.LabelIndex);
+            testCase.verifyEqual(threaded.RawZncc.BestCost, ...
+                serial.RawZncc.BestCost);
+            testCase.verifyEqual(threaded.FrozenSgm.HeightMetres, ...
+                serial.FrozenSgm.HeightMetres);
+        end
+
+        function testDefaultDisplayBuildsDiagnosticFigures(testCase)
+            report = runHarness(testCase, false, true);
+            testCase.addTeardown(@close, report.Figures.Inputs);
+            testCase.addTeardown(@close, report.Figures.Geometry);
+            testCase.addTeardown(@close, report.Figures.Results);
+            testCase.addTeardown(@close, report.Figures.Alignment);
+
+            testCase.verifyTrue(isgraphics(report.Figures.Inputs, "figure"));
+            testCase.verifyTrue(isgraphics(report.Figures.Geometry, "figure"));
+            testCase.verifyTrue(isgraphics(report.Figures.Results, "figure"));
+            testCase.verifyTrue(isgraphics(report.Figures.Alignment, "figure"));
+        end
+
+        function testCoarserProjectedMotionUsesFewerLabels(testCase)
+            fine = runHarnessAtTarget(testCase, 0.5);
+            coarse = runHarnessAtTarget(testCase, 1);
+
+            testCase.verifyGreaterThan( ...
+                fine.LabelPolicy.LabelCount, coarse.LabelPolicy.LabelCount);
+            testCase.verifyTrue(any( ...
+                coarse.Settings.HeightLabelsHAEMetres == 1000));
+        end
+
+        function testMultibandInputRequiresExplicitBand(testCase)
+            rgbFile = fullfile(testCase.TemporaryFolder, "rgb.tif");
+            writeRgbFixture(rgbFile);
+
+            call = @() runRpc00bHeightTest( ...
+                ReferenceImage=rgbFile, ...
+                MovingImage=testCase.MovingFile, ...
+                ReferenceTre=testCase.ReferenceTre, ...
+                MovingTre=testCase.MovingTre, ...
+                HeightRangeHAEMetres=[900, 1000, 1100], ...
+                Display=false, UseParallel=false);
+
+            testCase.verifyError(call, "runRpc00bHeightTest:BandRequired");
+        end
+    end
+end
+
+function report = runHarness(testCase, useParallel, display)
+report = runHarnessAtTarget(testCase, 0.5, useParallel, display);
+end
+
+function report = runHarnessAtTarget(testCase, target, useParallel, display)
+arguments
+    testCase
+    target (1, 1) double
+    useParallel (1, 1) logical = false
+    display (1, 1) logical = false
+end
+report = runRpc00bHeightTest( ...
+    ReferenceImage=testCase.ReferenceFile, ...
+    MovingImage=testCase.MovingFile, ...
+    ReferenceTre=testCase.ReferenceTre, ...
+    MovingTre=testCase.MovingTre, ...
+    HeightRangeHAEMetres=[900, 1000, 1100], ...
+    TargetProjectedMotionPixels=target, ...
+    ReferenceMask=testCase.ReferenceMask, ...
+    MovingMask=testCase.MovingMask, ...
+    DownsampleFactor=2, Display=display, ...
+    UseParallel=useParallel, NumWorkers=2, ...
+    MaximumPendingTiles=2, TileSize=[10, 12], LabelBlockSize=3, ...
+    GeometryGridSize=[3, 3]);
+end
+
+function data = makeSyntheticRpcPair(folder)
+referenceSize = [40, 48];
+movingSize = [44, 54];
+referenceTre = affineRpc(referenceSize, 0);
+movingTre = affineRpc(movingSize, 0.25);
+reference = renderTexture(referenceSize, referenceTre);
+moving = renderTexture(movingSize, movingTre);
+referenceMask = true(referenceSize);
+movingMask = true(movingSize);
+referenceMask(1:3, :) = false;
+movingMask(:, (end - 2):end) = false;
+referenceFile = fullfile(folder, "reference.tif");
+movingFile = fullfile(folder, "moving.tif");
+imwrite(reference, referenceFile);
+imwrite(moving, movingFile);
+data = struct( ...
+    "ReferenceFile", string(referenceFile), ...
+    "MovingFile", string(movingFile), ...
+    "ReferenceTre", referenceTre, "MovingTre", movingTre, ...
+    "ReferenceMask", referenceMask, "MovingMask", movingMask);
+end
+
+function m = affineRpc(imageSize, heightCoefficient)
+m = struct( ...
+    "SUCCESS", true, "ERR_BIAS", -1, "ERR_RAND", -1, ...
+    "LINE_OFF", (imageSize(1) - 1) ./ 2, ...
+    "SAMP_OFF", (imageSize(2) - 1) ./ 2, ...
+    "LAT_OFF", 40, "LONG_OFF", -105, "HEIGHT_OFF", 1000, ...
+    "LINE_SCALE", (imageSize(1) - 1) ./ 2, ...
+    "SAMP_SCALE", (imageSize(2) - 1) ./ 2, ...
+    "LAT_SCALE", 0.01, "LONG_SCALE", 0.01, "HEIGHT_SCALE", 200, ...
+    "LINE_NUM_COEF", zeros(1, 20), ...
+    "LINE_DEN_COEF", [1, zeros(1, 19)], ...
+    "SAMP_NUM_COEF", zeros(1, 20), ...
+    "SAMP_DEN_COEF", [1, zeros(1, 19)]);
+m.LINE_NUM_COEF(3) = 1;
+m.SAMP_NUM_COEF(2) = 1;
+m.SAMP_NUM_COEF(4) = heightCoefficient;
+end
+
+function image = renderTexture(imageSize, m)
+[y, x] = ndgrid(1:imageSize(1), 1:imageSize(2));
+l = ((x - 1) - m.SAMP_OFF) ./ m.SAMP_SCALE;
+p = ((y - 1) - m.LINE_OFF) ./ m.LINE_SCALE;
+texture = 0.5 + 0.18 .* sin(13 .* l + 4 .* p) ...
+    + 0.14 .* cos(7 .* p - 3 .* l) ...
+    + 0.10 .* sin(19 .* l .* p + 2 .* l);
+texture = min(max(texture, 0), 1);
+image = uint16(round(1023 .* texture));
+end
+
+function writeRgbFixture(file)
+[y, x] = ndgrid(1:40, 1:48);
+base = uint16(mod(17 .* x + 13 .* y, 1024));
+imwrite(cat(3, base, base, base), file);
+end

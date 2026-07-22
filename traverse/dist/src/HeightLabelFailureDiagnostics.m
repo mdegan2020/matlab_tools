@@ -1,0 +1,176 @@
+classdef HeightLabelFailureDiagnostics
+    %HEIGHTLABELFAILUREDIAGNOSTICS Assess predeclared search warnings.
+    %
+    % The operational warnings use only raw-cost confidence, discrete-label
+    % status, and exact camera-trajectory geometry. Synthetic truth is used
+    % only to score their recall and precision. It never changes a label,
+    % match, or validity decision.
+    %
+    % Traceability: algo/main.tex Secs. 10.4--10.5 and 14.6,
+    % Eqs. (121)--(125); long-range workplan P1 exit gate.
+
+    methods (Static)
+        function result = assess(scene, mode, target, z, raw, final, ...
+                oracle, truth, geometry, calibrator, options)
+            %ASSESS Score confidence, bounds, density, and geometry warnings.
+
+            arguments
+                scene (1, 1) string
+                mode (1, 1) string
+                target (1, 1) double
+                z (1, :) double {mustBeFinite}
+                raw (1, 1) struct
+                final (1, 1) struct
+                oracle (1, 1) struct
+                truth (1, 1) struct
+                geometry (1, 1) struct
+                calibrator (1, 1) HeightConfidenceCalibrator
+                options.BadPixelThresholdPixels (1, 1) double ...
+                    {mustBeFinite, mustBePositive} = 0.5
+                options.LowConfidenceSigmaPixels (1, 1) double ...
+                    {mustBeFinite, mustBePositive} = 0.5
+                options.MaximumQuantizationErrorPixels (1, 1) double ...
+                    {mustBeFinite, mustBePositive} = 0.25
+                options.HighTrajectoryCurvatureQuantile (1, 1) double ...
+                    {mustBeFinite, mustBeGreaterThanOrEqual( ...
+                    options.HighTrajectoryCurvatureQuantile, 0), ...
+                    mustBeLessThanOrEqual( ...
+                    options.HighTrajectoryCurvatureQuantile, 1)} = 2 / 3
+            end
+
+            dz = median(diff(z));
+            obs = double(geometry.ObservabilityPixelsPerMetre);
+            curvatureStep = double(raw.LocalCurvaturePerMetreSquared) ...
+                .* dz .^ 2;
+            prediction = calibrator.predict(double(raw.CostMargin), ...
+                curvatureStep, obs);
+
+            base = logical(truth.Valid);
+            finalValid = base & logical(final.Valid) ...
+                & isfinite(final.CorrespondenceXY(:, :, 1)) ...
+                & isfinite(final.CorrespondenceXY(:, :, 2));
+            epe = nan(size(base));
+            dx = final.CorrespondenceXY(:, :, 1) ...
+                - truth.CorrespondenceXY(:, :, 1);
+            dy = final.CorrespondenceXY(:, :, 2) ...
+                - truth.CorrespondenceXY(:, :, 2);
+            epe(finalValid) = hypot(dx(finalValid), dy(finalValid));
+            bad = finalValid & epe > options.BadPixelThresholdPixels;
+            failure = base & (~finalValid | bad);
+
+            outputInvalid = base & ~finalValid;
+            lowConfidence = base & prediction.Valid ...
+                & prediction.SigmaPixels > options.LowConfidenceSigmaPixels;
+            confidenceInvalid = base & ~prediction.Valid;
+            boundaryWinner = finalValid & (final.LabelIndex == 1 ...
+                | final.LabelIndex == numel(z));
+            localQuantization = 0.5 .* obs .* dz;
+            densityWarning = base & isfinite(localQuantization) ...
+                & localQuantization ...
+                > options.MaximumQuantizationErrorPixels;
+            tc = double(geometry.TrajectoryCurvature);
+            curvatureThreshold = HeightLabelFailureDiagnostics.percentile( ...
+                tc(base & isfinite(tc)), ...
+                100 .* options.HighTrajectoryCurvatureQuantile);
+            highCurvature = base & isfinite(tc) & tc >= curvatureThreshold;
+
+            signal = cat(3, outputInvalid, lowConfidence, ...
+                confidenceInvalid, boundaryWinner, densityWarning, ...
+                highCurvature);
+            name = ["invalid-output", "low-confidence", ...
+                "confidence-invalid", "boundary-winner", ...
+                "local-label-density", "high-trajectory-curvature"];
+            signal(:, :, end + 1) = any(signal, 3);
+            name(end + 1) = "any-warning";
+
+            outside = base & (truth.HeightMetres < z(1) ...
+                | truth.HeightMetres > z(end));
+            oracleValid = base & logical(oracle.Valid) ...
+                & isfinite(oracle.CorrespondenceXY(:, :, 1)) ...
+                & isfinite(oracle.CorrespondenceXY(:, :, 2));
+            odx = oracle.CorrespondenceXY(:, :, 1) ...
+                - truth.CorrespondenceXY(:, :, 1);
+            ody = oracle.CorrespondenceXY(:, :, 2) ...
+                - truth.CorrespondenceXY(:, :, 2);
+            oracleEpe = nan(size(base));
+            oracleEpe(oracleValid) = hypot(odx(oracleValid), ody(oracleValid));
+            oracleBad = base & ~outside ...
+                & (~oracleValid ...
+                | oracleEpe > options.BadPixelThresholdPixels);
+
+            n = numel(name);
+            rows = cell(n, 20);
+            for k = 1:n
+                q = signal(:, :, k) & base;
+                rows(k, :) = {scene, mode, target, numel(z), name(k), ...
+                    nnz(base), nnz(q), nnz(q) ./ max(nnz(base), 1), ...
+                    nnz(failure), ...
+                    HeightLabelFailureDiagnostics.recall(q, failure), ...
+                    HeightLabelFailureDiagnostics.precision(q, failure), ...
+                    nnz(bad), HeightLabelFailureDiagnostics.recall(q, bad), ...
+                    HeightLabelFailureDiagnostics.precision(q, bad), ...
+                    HeightLabelFailureDiagnostics.rmse(epe(q & finalValid)), ...
+                    HeightLabelFailureDiagnostics.rmse( ...
+                    epe(~q & finalValid)), nnz(outside), ...
+                    HeightLabelFailureDiagnostics.recall(q, outside), ...
+                    nnz(oracleBad), ...
+                    HeightLabelFailureDiagnostics.recall(q, oracleBad)};
+            end
+            result = cell2table(rows, VariableNames=["Scene", ...
+                "LabelMode", "TargetProjectedMotionPixels", "LabelCount", ...
+                "Signal", "TruthPixelCount", "FlaggedPixelCount", ...
+                "FlaggedFraction", "FailurePixelCount", "FailureRecall", ...
+                "FailurePrecision", "BadPixelCount", "BadPixelRecall", ...
+                "BadPixelPrecision", "FlaggedEpeRmsePixels", ...
+                "UnflaggedEpeRmsePixels", "OutsideBoundsPixelCount", ...
+                "OutsideBoundsRecall", "OracleBadPixelCount", ...
+                "OracleBadRecall"]);
+            result.ConfidenceCoverage = repmat( ...
+                nnz(base & prediction.Valid) ./ max(nnz(base), 1), n, 1);
+            result.CurvatureThreshold = repmat(curvatureThreshold, n, 1);
+            result.MaximumLocalQuantizationPixels = repmat( ...
+                max(localQuantization(base), [], "omitmissing"), n, 1);
+        end
+    end
+
+    methods (Static, Access = private)
+        function value = recall(flag, truth)
+            count = nnz(truth);
+            if count == 0
+                value = NaN;
+            else
+                value = nnz(flag & truth) ./ count;
+            end
+        end
+
+        function value = precision(flag, truth)
+            count = nnz(flag);
+            if count == 0
+                value = NaN;
+            else
+                value = nnz(flag & truth) ./ count;
+            end
+        end
+
+        function value = rmse(x)
+            x = x(isfinite(x));
+            if isempty(x)
+                value = NaN;
+            else
+                value = sqrt(mean(x .^ 2));
+            end
+        end
+
+        function value = percentile(x, q)
+            x = sort(x(isfinite(x)));
+            if isempty(x)
+                value = NaN;
+                return
+            end
+            position = 1 + (numel(x) - 1) .* q ./ 100;
+            lo = floor(position);
+            hi = ceil(position);
+            value = x(lo) + (position - lo) .* (x(hi) - x(lo));
+        end
+    end
+end
