@@ -1,0 +1,4 @@
+MATLAB RSM Reference Implementation
+Revision: 1.0
+Generated: 2026-07-21
+Target MATLAB: R2022b or newer

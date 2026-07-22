@@ -1,0 +1,355 @@
+tre,order_hint,field_or_group,width,kind,format,count_or_condition,mapping_status,note
+RSMIDA,1,IID,,,,,exact_name,Common linkage metadata
+RSMIDA,2,EDITION,,,,,exact_name,Common linkage metadata
+RSMIDA,3,ISID,,,,,exact_name,Common linkage metadata
+RSMIDA,4,SID,,,,,exact_name,Common linkage metadata
+RSMIDA,5,STID,,,,,exact_name,Common linkage metadata
+RSMIDA,6,YEAR,,,,,exact_name,Parsed from YYYYMMDDhhmmss
+RSMIDA,7,MONTH,,,,,exact_name,Parsed from YYYYMMDDhhmmss
+RSMIDA,8,DAY,,,,,exact_name,Parsed from YYYYMMDDhhmmss
+RSMIDA,9,HOUR,,,,,exact_name,Parsed from YYYYMMDDhhmmss
+RSMIDA,10,MINUTE,,,,,exact_name,Parsed from YYYYMMDDhhmmss
+RSMIDA,11,SECOND,,,,,exact_name,Parsed from YYYYMMDDhhmmss
+RSMIDA,12,NRG,,,,,exact_name,Full significant image size
+RSMIDA,13,NCG,,,,,exact_name,Full significant image size
+RSMIDA,14,TRG,,,,,exact_name,Reference image coordinate
+RSMIDA,15,TCG,,,,,exact_name,Reference image coordinate
+RSMIDA,16,GRNDD,,,,,exact_name,G/H ground-domain branch
+RSMIDA,17,XUOR,,,,,exact_name,Reference ground origin
+RSMIDA,18,YUOR,,,,,exact_name,Reference ground origin
+RSMIDA,19,ZUOR,,,,,exact_name,Reference ground origin
+RSMIDA,20,XUXR,,,,,exact_name,Replace when a non-identity local frame is used
+RSMIDA,21,XUYR,,,,,exact_name,Replace when a non-identity local frame is used
+RSMIDA,22,XUZR,,,,,exact_name,Replace when a non-identity local frame is used
+RSMIDA,23,YUXR,,,,,exact_name,Replace when a non-identity local frame is used
+RSMIDA,24,YUYR,,,,,exact_name,Replace when a non-identity local frame is used
+RSMIDA,25,YUZR,,,,,exact_name,Replace when a non-identity local frame is used
+RSMIDA,26,ZUXR,,,,,exact_name,Replace when a non-identity local frame is used
+RSMIDA,27,ZUYR,,,,,exact_name,Replace when a non-identity local frame is used
+RSMIDA,28,ZUZR,,,,,exact_name,Replace when a non-identity local frame is used
+RSMIDA,29,V1X,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,30,V1Y,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,31,V1Z,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,32,V2X,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,33,V2Y,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,34,V2Z,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,35,V3X,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,36,V3Y,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,37,V3Z,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,38,V4X,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,39,V4Y,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,40,V4Z,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,41,V5X,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,42,V5Y,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,43,V5Z,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,44,V6X,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,45,V6Y,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,46,V6Z,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,47,V7X,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,48,V7Y,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,49,V7Z,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,50,V8X,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,51,V8Y,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,52,V8Z,,,,,exact_name,Eight domain vertices in profile traversal
+RSMIDA,53,MIN_ROW,,,,,semantic_group,Bind to profile-specific optional fields
+RSMIDA,54,MAX_ROW,,,,,semantic_group,Bind to profile-specific optional fields
+RSMIDA,55,MIN_COL,,,,,semantic_group,Bind to profile-specific optional fields
+RSMIDA,56,MAX_COL,,,,,semantic_group,Bind to profile-specific optional fields
+RSMIDA,57,GROUND_FRAME,,,,,semantic_group,Bind to profile-specific optional fields
+RSMIDA,58,HEIGHT_DATUM,,,,,semantic_group,Bind to profile-specific optional fields
+RSMIDA,59,PIXEL_ORIGIN,,,,,semantic_group,Bind to profile-specific optional fields
+RSMPIA,60,IID,,,,,exact_name,
+RSMPIA,61,EDITION,,,,,exact_name,
+RSMPIA,62,R0,,,,,exact_name,Constant one for one section
+RSMPIA,63,RX,,,,,exact_name,Constant one for one section
+RSMPIA,64,RY,,,,,exact_name,Constant one for one section
+RSMPIA,65,RZ,,,,,exact_name,Constant one for one section
+RSMPIA,66,RXX,,,,,exact_name,Constant one for one section
+RSMPIA,67,RXY,,,,,exact_name,Constant one for one section
+RSMPIA,68,RXZ,,,,,exact_name,Constant one for one section
+RSMPIA,69,RYY,,,,,exact_name,Constant one for one section
+RSMPIA,70,RYZ,,,,,exact_name,Constant one for one section
+RSMPIA,71,RZZ,,,,,exact_name,Constant one for one section
+RSMPIA,72,C0,,,,,exact_name,Constant one for one section
+RSMPIA,73,CX,,,,,exact_name,Constant one for one section
+RSMPIA,74,CY,,,,,exact_name,Constant one for one section
+RSMPIA,75,CZ,,,,,exact_name,Constant one for one section
+RSMPIA,76,CXX,,,,,exact_name,Constant one for one section
+RSMPIA,77,CXY,,,,,exact_name,Constant one for one section
+RSMPIA,78,CXZ,,,,,exact_name,Constant one for one section
+RSMPIA,79,CYY,,,,,exact_name,Constant one for one section
+RSMPIA,80,CYZ,,,,,exact_name,Constant one for one section
+RSMPIA,81,CZZ,,,,,exact_name,Constant one for one section
+RSMPIA,82,RNIS,,,,,exact_name,
+RSMPIA,83,CNIS,,,,,exact_name,
+RSMPIA,84,TNIS,,,,,exact_name,
+RSMPIA,85,RSSIZ,,,,,exact_name,
+RSMPIA,86,CSSIZ,,,,,exact_name,
+RSMPIA,87,ROW_ORIGIN,,,,,semantic_group,Profile branch and shared normalization
+RSMPIA,88,COL_ORIGIN,,,,,semantic_group,Profile branch and shared normalization
+RSMPIA,89,X_OFF,,,,,semantic_group,Profile branch and shared normalization
+RSMPIA,90,Y_OFF,,,,,semantic_group,Profile branch and shared normalization
+RSMPIA,91,Z_OFF,,,,,semantic_group,Profile branch and shared normalization
+RSMPIA,92,X_SCALE,,,,,semantic_group,Profile branch and shared normalization
+RSMPIA,93,Y_SCALE,,,,,semantic_group,Profile branch and shared normalization
+RSMPIA,94,Z_SCALE,,,,,semantic_group,Profile branch and shared normalization
+RSMPCA,95,IID,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,96,EDITION,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,97,RSN,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,98,CSN,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,99,RFEP,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,100,CFEP,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,101,RNRMO,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,102,CNRMO,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,103,XNRMO,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,104,YNRMO,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,105,ZNRMO,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,106,RNRMSF,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,107,CNRMSF,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,108,XNRMSF,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,109,YNRMSF,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,110,ZNRMSF,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,111,RNPWRX,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,112,RNPWRY,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,113,RNPWRZ,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,114,RNTRMS,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,115,RNPCF,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,116,RDPWRX,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,117,RDPWRY,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,118,RDPWRZ,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,119,RDTRMS,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,120,RDPCF,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,121,CNPWRX,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,122,CNPWRY,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,123,CNPWRZ,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,124,CNTRMS,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,125,CNPCF,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,126,CDPWRX,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,127,CDPWRY,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,128,CDPWRZ,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,129,CDTRMS,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,130,CDPCF,,,,,exact_name,Coefficient arrays use rsmexp traversal
+RSMPCA,131,COEFF_ORDER,,,,,diagnostic,Not serialized unless profile defines an order descriptor
+RSMGIA,132,IID,,,,,common,
+RSMGIA,133,EDITION,,,,,common,
+RSMGIA,134,NUM_GRID_SECTIONS,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,135,SECTION_ID,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,136,G1_ORIGIN,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,137,G2_ORIGIN,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,138,H_ORIGIN,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,139,DG1,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,140,DG2,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,141,DH,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,142,NG1,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,143,NG2,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,144,NH,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,145,INTERPOLATION,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,146,NODE_ORDER,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,147,DATA_TRE,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,148,DATA_PARTS,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,149,GROUND_FRAME,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGIA,150,HEIGHT_DATUM,,,,,profile_required,Exact names/order/widths are controlled-extension revision dependent
+RSMGGA,151,IID,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,152,EDITION,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,153,SECTION_ID,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,154,PART_INDEX,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,155,PART_COUNT,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,156,NODE_COUNT,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,157,NODE_G1,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,158,NODE_G2,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,159,NODE_H,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,160,NODE_ROW,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,161,NODE_COL,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,162,NODE_VALID,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,163,NODE_ORDER,,,,,profile_required,Partition without splitting a node tuple
+RSMGGA,164,VALUE_TYPE,,,,,profile_required,Partition without splitting a node tuple
+RSMAPA,165,IID,,,,,profile_required,Physical six-state parameterization
+RSMAPA,166,EDITION,,,,,profile_required,Physical six-state parameterization
+RSMAPA,167,VARIANT,,,,,profile_required,Physical six-state parameterization
+RSMAPA,168,AP_SET_ID,,,,,profile_required,Physical six-state parameterization
+RSMAPA,169,AP_TYPE,,,,,profile_required,Physical six-state parameterization
+RSMAPA,170,NPAR,,,,,profile_required,Physical six-state parameterization
+RSMAPA,171,PARAM_ID,,,,,profile_required,Physical six-state parameterization
+RSMAPA,172,PARAM_UNIT,,,,,profile_required,Physical six-state parameterization
+RSMAPA,173,PARAM_SCALE,,,,,profile_required,Physical six-state parameterization
+RSMAPA,174,PARAM_ASSOC,,,,,profile_required,Physical six-state parameterization
+RSMAPA,175,ROW_MODEL,,,,,profile_required,Physical six-state parameterization
+RSMAPA,176,COL_MODEL,,,,,profile_required,Physical six-state parameterization
+RSMAPA,177,POW_X,,,,,profile_required,Physical six-state parameterization
+RSMAPA,178,POW_Y,,,,,profile_required,Physical six-state parameterization
+RSMAPA,179,POW_Z,,,,,profile_required,Physical six-state parameterization
+RSMAPA,180,NTERM,,,,,profile_required,Physical six-state parameterization
+RSMAPA,181,EXP,,,,,profile_required,Physical six-state parameterization
+RSMAPA,182,ROW_COEFF,,,,,profile_required,Physical six-state parameterization
+RSMAPA,183,COL_COEFF,,,,,profile_required,Physical six-state parameterization
+RSMAPA,184,SOURCE_MAP,,,,,profile_required,Physical six-state parameterization
+RSMAPA,185,COV,,,,,profile_required,Physical six-state parameterization
+RSMAPB,186,IID,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,187,EDITION,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,188,VARIANT,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,189,AP_SET_ID,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,190,AP_TYPE,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,191,APBASE,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,192,NPAR,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,193,NBASIS,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,194,PARAM_ID,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,195,PARAM_UNIT,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,196,PARAM_SCALE,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,197,PARAM_ASSOC,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,198,ROW_MODEL,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,199,COL_MODEL,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,200,POW_X,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,201,POW_Y,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,202,POW_Z,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,203,NTERM,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,204,EXP,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,205,ROW_COEFF,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,206,COL_COEFF,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,207,AEL,,,,,profile_required,Covariance-weighted SVD basis
+RSMAPB,208,COV,,,,,profile_required,Covariance-weighted SVD basis
+RSMECA,209,IID,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,210,EDITION,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,211,TID,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,212,INCLIC,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,213,INCLUC,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,214,NPAR,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,215,NPARO,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,216,IGN,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,217,CVDATE,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,218,XUOL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,219,YUOL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,220,ZUOL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,221,XUXL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,222,XUYL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,223,XUZL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,224,YUXL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,225,YUYL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,226,YUZL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,227,ZUXL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,228,ZUYL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,229,ZUZL,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,230,NUMOPG,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,231,ERRCVG,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,232,TCDF,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,233,NCSEG,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,234,MAP,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,235,PARAM_ID,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,236,PARAM_UNIT,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,237,ROW_COEFF,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,238,COL_COEFF,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,239,EXP,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECA,240,UNMODELED_INCLUDED,,,,,exact_or_group,Conditional loops require the locked profile
+RSMECB,241,IID,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,242,EDITION,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,243,TID,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,244,INCLIC,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,245,INCLUC,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,246,NPARO,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,247,IGN,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,248,CVDATE,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,249,NPAR,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,250,APTYP,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,251,LOCTYP,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,252,NSFX,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,253,NSFY,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,254,NSFZ,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,255,NOFFX,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,256,NOFFY,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,257,NOFFZ,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,258,XUOL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,259,YUOL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,260,ZUOL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,261,XUXL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,262,XUYL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,263,XUZL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,264,YUXL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,265,YUYL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,266,YUZL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,267,ZUXL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,268,ZUYL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,269,ZUZL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,270,APBASE,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,271,NBASIS,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,272,AEL,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,273,NISAP,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,274,NISAPR,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,275,NISAPC,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,276,XPWRR,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,277,YPWRR,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,278,ZPWRR,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,279,XPWRC,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,280,YPWRC,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,281,ZPWRC,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,282,ROW_COEFF,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,283,COL_COEFF,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,284,EXP,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,285,NUMOPG,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,286,ERRCVG,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,287,TCDF,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,288,ACSMC,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,289,NCSEG,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,290,MAP,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECB,291,UNMODELED_INCLUDED,,,,,exact_or_group,Correlation and unmodeled branches default absent
+RSMECA/RSMECB,292,CORSEG,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,293,TAUSEG,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,294,AC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,295,ALPC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,296,BETC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,297,TC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,298,URR,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,299,URC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,300,UCC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,301,UNCSR,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,302,UCORSR,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,303,UTAUSR,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,304,UNCSC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,305,UCORSC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,306,UTAUSC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,307,UACSMC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,308,UACR,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,309,UALPCR,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,310,UBETCR,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,311,UTCR,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,312,UACC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,313,UALPCC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,314,UBETCC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMECA/RSMECB,315,UTCC,,,,,profile_required,Not populated without independent correlation or unmodeled-error information
+RSMDCA,316,IID,,,,,profile_required,Direct covariance sample representation
+RSMDCA,317,EDITION,,,,,profile_required,Direct covariance sample representation
+RSMDCA,318,VARIANT,,,,,profile_required,Direct covariance sample representation
+RSMDCA,319,MODEL_TYPE,,,,,profile_required,Direct covariance sample representation
+RSMDCA,320,NSAMPLE,,,,,profile_required,Direct covariance sample representation
+RSMDCA,321,GROUND,,,,,profile_required,Direct covariance sample representation
+RSMDCA,322,ROW_VAR,,,,,profile_required,Direct covariance sample representation
+RSMDCA,323,ROW_COL_COV,,,,,profile_required,Direct covariance sample representation
+RSMDCA,324,COL_VAR,,,,,profile_required,Direct covariance sample representation
+RSMDCA,325,CORR_GROUP_COUNT,,,,,profile_required,Direct covariance sample representation
+RSMDCA,326,UNMODELED_INCLUDED,,,,,profile_required,Direct covariance sample representation
+RSMDCB,327,IID,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,328,EDITION,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,329,VARIANT,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,330,MODEL_TYPE,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,331,X_OFF,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,332,Y_OFF,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,333,Z_OFF,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,334,X_SCALE,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,335,Y_SCALE,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,336,Z_SCALE,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,337,POW_X,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,338,POW_Y,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,339,POW_Z,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,340,NTERM,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,341,EXP,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,342,ROW_VAR_COEFF,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,343,ROW_COL_COV_COEFF,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,344,COL_VAR_COEFF,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,345,CORR_GROUP_COUNT,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCB,346,UNMODELED_INCLUDED,,,,,profile_required,Evaluation eigen-clips 2-by-2 covariance to PSD
+RSMDCA/RSMDCB,347,CORR_FUNCTION_ID,,,,,profile_required,Populate only from independently quantified information
+RSMDCA/RSMDCB,348,CORR_PARAM_COUNT,,,,,profile_required,Populate only from independently quantified information
+RSMDCA/RSMDCB,349,CORR_PARAM,,,,,profile_required,Populate only from independently quantified information
+RSMDCA/RSMDCB,350,REFERENCE_LINE,,,,,profile_required,Populate only from independently quantified information
+RSMDCA/RSMDCB,351,REFERENCE_TIME,,,,,profile_required,Populate only from independently quantified information
+RSMDCA/RSMDCB,352,RANDOM_ROW_VAR,,,,,profile_required,Populate only from independently quantified information
+RSMDCA/RSMDCB,353,RANDOM_ROW_COL_COV,,,,,profile_required,Populate only from independently quantified information
+RSMDCA/RSMDCB,354,RANDOM_COL_VAR,,,,,profile_required,Populate only from independently quantified information
