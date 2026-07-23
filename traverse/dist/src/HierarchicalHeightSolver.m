@@ -1665,9 +1665,11 @@ classdef HierarchicalHeightSolver
 end
 
 function mustBeHierarchyCamera(camera)
-if ~(isa(camera, "PinholeCamera") || isa(camera, "Rpc00bCamera"))
+if ~(isa(camera, "PinholeCamera") || isa(camera, "Rpc00bCamera") ...
+        || isa(camera, "RpcImageCorrectionCamera") ...
+        || isa(camera, "RpcImageWindowCamera"))
     error("HierarchicalHeightSolver:UnsupportedCamera", ...
-        "Camera must be a PinholeCamera or Rpc00bCamera.");
+        "Camera must implement a supported hierarchy camera contract.");
 end
 end
 

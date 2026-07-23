@@ -115,9 +115,11 @@ classdef PyramidLevelCamera
 end
 
 function mustBeSupportedBaseCamera(camera)
-if ~(isa(camera, "PinholeCamera") || isa(camera, "Rpc00bCamera"))
+if ~(isa(camera, "PinholeCamera") || isa(camera, "Rpc00bCamera") ...
+        || isa(camera, "RpcImageCorrectionCamera") ...
+        || isa(camera, "RpcImageWindowCamera"))
     error("PyramidLevelCamera:UnsupportedBaseCamera", ...
-        "Base camera must be a PinholeCamera or Rpc00bCamera.");
+        "Base camera must implement a supported project camera contract.");
 end
 end
 

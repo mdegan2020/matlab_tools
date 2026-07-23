@@ -8,19 +8,28 @@ production RPC workflow. The three supplied HAE values are range/geometry
 anchors `[minimum,expected,maximum]`, not the only executed planes. The harness
 measures RPC `||dw/dz||`, generates a normal projected-motion label grid, and
 retains the expected height exactly. It preserves each RPC00B TRE in its
-original full-resolution coordinates, optionally antialiases and downsamples
-both images by the same scalar integer factor, and reports raw ZNCC, guarded
-sublabel, and frozen physical-height SGM results separately.
+original full-resolution coordinates. The recovery build optionally estimates
+a symmetric global RPC-3 image correction from capped overview features, runs
+the RPC-aware height hierarchy, and selects a native reference ROI. It reports
+raw ZNCC, guarded sublabel, and physical-height SGM results separately.
+Every direct and hierarchical figure, its interpretation, and the minimum
+plain-text evidence to bring back from a private system are documented in
+`docs/rpc00b_diagnostic_guide.md`.
 
 The two raster files must each contain the complete pixel grid described by its
-TRE. Phase B0 does not implement crop/ROI origins or NITF segment mosaicking.
+TRE. `ReferenceROI=[yStart,yEnd,xStart,xEnd]` may restrict dense processing,
+but those bounds are always inclusive one-based locations in the original 1x
+reference raster. Reuse the exact same four numbers at every downsampling
+factor. Phase B0 does not implement NITF segment mosaicking.
 It accepts a single-image-segment NITF or another complete `uint16` raster such
 as TIFF. It deliberately rejects a multi-segment NITF. Do not crop a raster and
 reuse its full-image TRE; that requires the deferred window-coordinate adapter.
 
 Image Processing Toolbox is required for `nitfread`, `nitfinfo`, and
 antialiased `imresize`. Parallel Computing Toolbox is required by the current
-threaded path. The implementation opens only `parpool("threads")`.
+threaded path. Computer Vision Toolbox is required only when
+`CoarseAdjustment="symmetric-feature"`. The implementation opens only
+`parpool("threads")`.
 
 ## Prepare local-only inputs
 
@@ -61,6 +70,10 @@ report = runRpc00bHeightTest( ...
     TargetProjectedMotionPixels=0.5, ...
     ReferenceBand=1, MovingBand=1, ...
     DownsampleFactor=8, ...
+    ExecutionMode="hierarchical", ...
+    OverviewDownsampleFactor=24, ...
+    CoarseAdjustment="symmetric-feature", ...
+    FeatureDownsampleFactor=24, MaximumFeatures=250, ...
     NumWorkers=14, Display=true);
 ```
 
@@ -76,6 +89,16 @@ Omit `NumWorkers` to use every worker in the active thread pool. Set
 figures only; it does not redirect terminal output or mutate workspace display
 settings. `TargetProjectedMotionPixels=0.5` is the frozen P1 fine-grid default;
 larger values reduce labels and runtime but increase height quantization.
+The explicit factor-24 overview is an exact multiple of terminal factor 8. If
+`OverviewDownsampleFactor=0` (the default), the harness chooses a value near 24
+that is an integer multiple and at least two times the terminal factor.
+
+To isolate causes, rerun with either:
+
+```matlab
+CoarseAdjustment="none"          % hierarchy without feature correction
+ExecutionMode="direct"           % original global normal-label sweep
+```
 
 ## Inspect geometry before matching output
 
@@ -88,7 +111,8 @@ report.Geometry.AdjacentMotionMedianPixels
 report.Geometry.AdjacentMotionP95Pixels
 report.Geometry.MedianDirectionChangeDegrees
 report.LabelPolicy
-report.Warnings
+report.CoarseAdjustment
+report.Diagnostics
 ```
 
 Before interpreting a height map, confirm:
@@ -103,6 +127,8 @@ Before interpreting a height map, confirm:
   the requested target and the label count/cost-volume estimate are practical;
 - trajectory direction change is plausible for the pushbroom geometry; and
 - the image masks and band selections match the intended data.
+- feature residual falls materially without a very small/ill-conditioned
+  inlier set; an along-trajectory parameter may remain coupled to height.
 
 An RPC convention, datum, raster/TRE extent, or inversion problem invalidates
 the matching result regardless of its visual smoothness.
@@ -110,11 +136,12 @@ the matching result regardless of its visual smoothness.
 ## Inspect the three separate results
 
 ```matlab
-report.CostCurves
 report.RawZncc
 report.Sublabel
 report.FrozenSgm
-report.LabelDiagnostics.SelectionFractions
+report.Overview
+report.FinePlan
+report.Fine.Warnings
 report.Alignment
 report.Timing
 report.Memory
@@ -122,8 +149,11 @@ report.Memory
 
 Interpretation:
 
-- `RawZncc` is the unregularized algorithm output on the complete generated
-  height grid. It is the first matching evidence to inspect.
+- In hierarchical mode, `Overview` is the scene-wide exact common-grid sweep,
+  while `RawZncc`, `Sublabel`, and `FrozenSgm` alias the final adaptive products
+  at the requested terminal factor. `FinePlan.FinalTilePlan` records every
+  local height vector.
+- `RawZncc` is unregularized and remains the first matching evidence to inspect.
 - `Sublabel` is a guarded local parabola and is valid only for suitable
   interior-label winners with finite neighbors and positive curvature.
 - `FrozenSgm` is the unchanged regularized control. It is not raw matching
@@ -131,7 +161,9 @@ Interpretation:
 - A large boundary-winner fraction suggests an inadequate height range, a
   radiometric/occlusion failure, or camera bias; it is not evidence that the
   boundary height is correct.
-- Representative `CostCurves.Zncc` should be inspected before trusting SGM.
+- Direct mode retains representative `CostCurves.Zncc`; hierarchical mode
+  instead retains overview evidence, local raw margins, boundary warnings, and
+  expansion maps before SGM.
 - The geometry figure shows only the three anchor-plane warps; the cost curves,
   label-use plot, and height products use every generated label.
 - In the alignment viewer, agreement is gray; reference-only structure is
@@ -150,18 +182,16 @@ writelines(jsonencode(summary), ...
     "D:\local_rpc_test\rpc00b_summary.json")
 writetable(summary.GeometryPerHeight, ...
     "D:\local_rpc_test\rpc00b_geometry.csv")
-writetable(summary.SelectionFractions, ...
-    "D:\local_rpc_test\rpc00b_labels.csv")
 writetable(summary.Timing, ...
     "D:\local_rpc_test\rpc00b_timing.csv", WriteRowNames=true)
 exportgraphics(report.Figures.Inputs, ...
     "D:\local_rpc_test\rpc00b_inputs.png", Resolution=150)
-exportgraphics(report.Figures.Geometry, ...
-    "D:\local_rpc_test\rpc00b_geometry_evidence.png", Resolution=150)
 exportgraphics(report.Figures.Results, ...
     "D:\local_rpc_test\rpc00b_results.png", Resolution=150)
 exportgraphics(report.Figures.Alignment, ...
     "D:\local_rpc_test\rpc00b_alignment.png", Resolution=150)
+exportgraphics(report.Figures.Adjustment, ...
+    "D:\local_rpc_test\rpc00b_adjustment.png", Resolution=150)
 ```
 
 Review filenames and screenshots for sensitive content before moving them from
@@ -170,11 +200,30 @@ geographic metadata.
 
 ## Escalation sequence
 
-If the coarse geometry is plausible, decrease `DownsampleFactor` in steps and
-repeat. Factor `1` processes the entire full-resolution raster; Phase B0 has no
-safe ROI/crop transform. Do not attempt a cropped factor-1 shortcut. If the
-full scene is too expensive, record that as an R1 computational result and use
-it to prioritize the planned hierarchical/tiled production solver.
+If the 8x adjusted hierarchy is plausible, choose one native 1x ROI around
+buildings and repeat the identical detector footprint at 8x, 4x, 2x, and 1x:
+
+```matlab
+roi = [yStart,yEnd,xStart,xEnd];  % measure once in the native reference
+report = runRpc00bHeightTest( ...
+    ReferenceImage="D:\local_rpc_test\reference.ntf", ...
+    MovingImage="D:\local_rpc_test\moving.ntf", ...
+    ReferenceTre="D:\local_rpc_test\reference_rpc00b.txt", ...
+    MovingTre="D:\local_rpc_test\moving_rpc00b.txt", ...
+    HeightRangeHAEMetres=[100,150,225], ...
+    ReferenceBand=1, MovingBand=1, ReferenceROI=roi, ...
+    DownsampleFactor=1, ExecutionMode="hierarchical", ...
+    OverviewDownsampleFactor=24, ...
+    CoarseAdjustment="symmetric-feature", ...
+    FeatureDownsampleFactor=24, MaximumFeatures=250, ...
+    NumWorkers=14, Display=true);
+```
+
+For a 1k-by-1k or 2k-by-2k native ROI, factor 1 evaluates only that reference
+footprint while retaining the full moving raster for projected support. Compare
+the same building roof and wall edges in raw, refined, and SGM maps to judge
+block-like versus melted geometry. The feature correction still uses full-image
+overviews, so it remains global and identical across ROI resolution runs.
 
 Classify a failure as one or more of:
 
